@@ -95,7 +95,8 @@ The default encrypted vault lives under `$XDG_DATA_HOME/passflick/vault.passvaul
 - [Project contract](PROJECT.md)
 - [Source integration](docs/sources.md)
 - [Security model](docs/security.md)
-- [Development queue and acceptance gates](docs/queue.md)
+- [Development queue](docs/queue.md)
+- [Target-host acceptance plan](docs/acceptance.md)
 
 ## License
 
