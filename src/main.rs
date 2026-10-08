@@ -77,6 +77,10 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
             no_extra_args(&mut args)?;
             discover_browser_profiles();
         }
+        Some("demo") => {
+            no_extra_args(&mut args)?;
+            run_demo_picker(trace.clone())?;
+        }
         Some("backup") => {
             no_extra_args(&mut args)?;
             backup_encrypted_vault()?;
@@ -112,6 +116,40 @@ fn run_picker(trace: startup::StartupTrace) -> eframe::Result {
     trace.mark("picker-entry");
     let (records, notice) = load_picker_records(&trace);
     trace.mark("records-loaded");
+    launch_picker(trace, records, notice)
+}
+
+fn demo_records() -> Vec<Credential> {
+    // Deliberately fictional entries only. Demo never touches real vault/keyrings.
+    vec![
+        Credential::new(
+            Source::Edge, "DEMO · Example", "https://demo.example.test",
+            "alice@example.test", "synthetic-demo-password-alpha", 0,
+        ),
+        Credential::new(
+            Source::Chrome, "DEMO · Example", "https://demo.example.test",
+            "alice@example.test", "synthetic-demo-password-alpha", 0,
+        ),
+        Credential::new(
+            Source::Firefox, "DEMO · Example", "https://demo.example.test",
+            "alice@example.test", "synthetic-demo-password-beta", 0,
+        ),
+        Credential::new(
+            Source::Apple, "DEMO · Another", "https://other.example.test",
+            "bob@example.test", "synthetic-demo-password-gamma", 0,
+        ),
+    ]
+}
+
+fn run_demo_picker(trace: startup::StartupTrace) -> eframe::Result {
+    launch_picker(trace, demo_records(), None)
+}
+
+fn launch_picker(
+    trace: startup::StartupTrace,
+    records: Vec<Credential>,
+    notice: Option<String>,
+) -> eframe::Result {
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Glow,
         viewport: egui::ViewportBuilder::default()
@@ -390,9 +428,27 @@ fn print_help() {
     println!("  passflick status            Display vault/keyring status");
     println!("  passflick sources           Show per-source counts and refresh age");
     println!("  passflick discover          Find local browser profiles, no secret access");
+    println!("  passflick demo              Open picker with synthetic test credentials");
     println!("  passflick backup            Create an encrypted vault backup");
     println!();
     println!("  import accepts optional --allow-shrink for intentional large deletions");
     println!("Sources: edge, chrome, firefox, apple");
     println!("Picker: Enter password; Shift+Enter username; Escape close.");
+}
+
+#[cfg(test)]
+mod demo_tests {
+    use super::*;
+
+    #[test]
+    fn demo_is_purely_synthetic_and_observes_duplicate_folding() {
+        let entries = demo_records();
+        assert_eq!(entries.len(), 4);
+        assert_eq!(search::rank_credentials(&entries, "").len(), 3);
+        for record in entries {
+            assert!(record.url.ends_with(".example.test"));
+            assert!(record.username.ends_with("@example.test"));
+            assert!(record.password().starts_with("synthetic-demo-password-"));
+        }
+    }
 }
