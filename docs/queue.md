@@ -22,7 +22,8 @@
 - [x] Add non-secret local browser profile discovery (`passflick discover`)
 - [ ] Evaluate authorized read-only browser credential adapters
 - [x] Add bounds to import and vault parsing, private filesystem permissions, write locking, and encrypted backups
-- [ ] More security review: symlink races, keyring lifecycle, clipboard history, import edge cases, backup restoration
+- [x] Authenticated encrypted restore with pre-restore safety backup
+- [ ] More security review: symlink races, keyring lifecycle, clipboard history, import edge cases
 - [ ] Keyboard latency profiling, release packaging, and MVP acceptance
 
 Initial code is **experimental** until the security and target-host validation gates pass.
