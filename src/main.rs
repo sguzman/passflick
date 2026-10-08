@@ -10,6 +10,7 @@ mod search;
 mod session;
 mod startup;
 mod vault;
+mod write_lock;
 
 use std::error::Error;
 use std::fs;
@@ -328,6 +329,10 @@ fn import_csv(source: Source, path: &Path, allow_shrink: bool) -> Result<(), Box
     };
     let time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let imported = r#import::parse_csv(&bytes, source, time)?;
+    // Keep the advisory lock across read-modify-write. Otherwise two concurrent
+    // source imports can overwrite each other's snapshots despite atomic saves.
+    let write_path = paths::vault_path()?;
+    let _guard = write_lock::acquire(&write_path)?;
     let (vault_path, mut vault) = open_unlocked_vault()?;
     r#import::validate_snapshot_refresh(vault.records(), source, imported.len(), allow_shrink)?;
     let count = r#import::replace_snapshot(vault.records_mut(), source, imported);
