@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "A fast read-only password projection for Linux"
 repository = "https://github.com/sguzman/passflick"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 
 [dependencies]
 argon2 = "0.6"
