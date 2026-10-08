@@ -114,6 +114,9 @@ impl Vault {
     pub fn save(&mut self, path: &Path) -> Result<(), VaultError> {
         self.header.rotate_nonce()?;
         let encoded = self.encode()?;
+        if encoded.len() as u64 > MAX_VAULT_BYTES {
+            return Err(VaultError::TooLarge);
+        }
         write_atomic(path, &encoded, false)?;
         Ok(())
     }
@@ -121,6 +124,9 @@ impl Vault {
     fn save_new(&mut self, path: &Path) -> Result<(), VaultError> {
         self.header.rotate_nonce()?;
         let encoded = self.encode()?;
+        if encoded.len() as u64 > MAX_VAULT_BYTES {
+            return Err(VaultError::TooLarge);
+        }
         write_atomic(path, &encoded, true)
     }
 
