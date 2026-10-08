@@ -18,6 +18,12 @@ pub enum ImportError {
     InvalidRow { row: usize, reason: &'static str },
     #[error("CSV contains no credentials; previous snapshot is unchanged")]
     Empty,
+    #[error("suspicious {source} snapshot shrink: {existing} saved vs {incoming} imported; repeat with --allow-shrink if intentional")]
+    SuspiciousShrink {
+        source: Source,
+        existing: usize,
+        incoming: usize,
+    },
 }
 
 fn normalize_header(value: &str) -> String {
@@ -121,6 +127,25 @@ pub fn parse_csv(
         return Err(ImportError::Empty);
     }
     Ok(result)
+}
+
+/// Reject unexpectedly partial exports before any existing source records are removed.
+/// Some legitimate password cleanups shrink a source dramatically; callers must opt in.
+pub fn validate_snapshot_refresh(
+    records: &[Credential],
+    source: Source,
+    incoming: usize,
+    allow_shrink: bool,
+) -> Result<(), ImportError> {
+    let existing = records.iter().filter(|record| record.source == source).count();
+    if !allow_shrink && existing >= 10 && incoming < existing / 2 {
+        return Err(ImportError::SuspiciousShrink {
+            source,
+            existing,
+            incoming,
+        });
+    }
+    Ok(())
 }
 
 pub fn replace_snapshot(
@@ -227,6 +252,28 @@ mod tests {
         let data = "\u{feff}Name,URL,Username,Password\nExample,https://example.test,alice,\"first\nsecond\"\n";
         let records = parse_csv(data.as_bytes(), Source::Chrome, 0).unwrap();
         assert_eq!(records[0].password(), "first\nsecond");
+    }
+
+    #[test]
+    fn unusually_small_snapshots_require_explicit_confirmation() {
+        let existing: Vec<Credential> = (0..100)
+            .map(|index| {
+                Credential::new(
+                    Source::Edge,
+                    "Example",
+                    format!("https://{index}.example.test"),
+                    "person",
+                    "synthetic-test",
+                    1,
+                )
+            })
+            .collect();
+        assert!(matches!(
+            validate_snapshot_refresh(&existing, Source::Edge, 2, false),
+            Err(ImportError::SuspiciousShrink { .. })
+        ));
+        assert!(validate_snapshot_refresh(&existing, Source::Edge, 2, true).is_ok());
+        assert!(validate_snapshot_refresh(&existing, Source::Firefox, 1, false).is_ok());
     }
 
     #[test]
