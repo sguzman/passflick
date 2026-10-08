@@ -445,10 +445,10 @@ fn open_unlocked_vault() -> Result<(PathBuf, Vault), Box<dyn Error>> {
 }
 
 fn load_vault_key(path: &Path) -> Result<Option<vault::VaultKey>, Box<dyn Error>> {
-    if session::is_manually_locked(&path)? {
+    if session::is_manually_locked(path)? {
         return Ok(None);
     }
-    if let Some(key) = session::load(&path)? {
+    if let Some(key) = session::load(path)? {
         return Ok(Some(key));
     }
     let key = match desktop_keyring::load(path) {
