@@ -1,11 +1,11 @@
 use crate::clipboard::copy_sensitive;
 use crate::model::Credential;
-use crate::{paths, session};
-use crate::vault::Vault;
-use zeroize::Zeroizing;
 use crate::search::{display_label_with_sources, rank_credentials};
 use crate::startup::StartupTrace;
+use crate::vault::Vault;
+use crate::{paths, session};
 use eframe::egui;
+use zeroize::Zeroizing;
 
 pub struct PickerApp {
     records: Vec<Credential>,
@@ -73,7 +73,8 @@ impl PickerApp {
         let vault = match result {
             Ok(vault) => vault,
             Err(()) => {
-                self.error = Some("Unlock failed. Check passphrase and vault integrity.".to_owned());
+                self.error =
+                    Some("Unlock failed. Check passphrase and vault integrity.".to_owned());
                 return;
             }
         };
