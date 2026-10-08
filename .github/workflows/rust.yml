@@ -23,19 +23,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwayland-dev libxkbcommon-dev libx11-dev libx11-xcb-dev libxcursor-dev libxi-dev libxrandr-dev libgl1-mesa-dev
-      - name: Format working tree for validation
-        run: cargo fmt --all
+      - name: Check committed formatting
+        run: cargo fmt --all -- --check
       - name: Test
-        run: cargo test --all-targets
-      - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
-      - name: Require committed rustfmt formatting
-        if: always()
-        run: git diff --exit-code -- src/
-      - name: Emit resolved Cargo lockfile for reproducible release
-        if: success() && github.ref == 'refs/heads/main'
+        run: cargo test --locked --all-targets
+      - name: CLI smoke checks
         run: |
-          echo 'PASSFLICK_LOCK_BEGIN'
-          cat Cargo.lock
-          echo 'PASSFLICK_LOCK_END'
+          cargo run --locked --quiet -- --help | grep -F 'Shift+Enter'
+          cargo run --locked --quiet -- --version
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
 
