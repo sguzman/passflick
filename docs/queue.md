@@ -6,6 +6,8 @@
 - [x] Multi-source credential schema and CSV parsing
 - [x] Encrypted vault and session-unlock design adapted from OTPick
 - [x] One-shot keyboard picker with Enter/Shift+Enter
+- [x] Synthetic demo picker that never opens a real vault
+- [x] Commit Cargo.lock and enforce locked builds in CI
 - [ ] Confirm the newest changes pass Rust formatting, build, tests, and CI on Linux
 - [ ] Perform target-host verification with synthetic credentials on EndeavourOS/Hyprland
 - [ ] Test actual Edge, Chrome, Firefox, and Apple export variants
