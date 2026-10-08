@@ -255,7 +255,10 @@ fn list_source_status() -> Result<(), Box<dyn Error>> {
     let (_, vault) = open_unlocked_vault()?;
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     for source in [Source::Edge, Source::Chrome, Source::Firefox, Source::Apple] {
-        let matching = vault.records().iter().filter(|record| record.source == source);
+        let matching = vault
+            .records()
+            .iter()
+            .filter(|record| record.source == source);
         let count = matching.clone().count();
         let latest = matching.map(|record| record.imported_at).max();
         let age = match latest {
