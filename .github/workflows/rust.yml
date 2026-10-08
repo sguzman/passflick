@@ -26,6 +26,6 @@ jobs:
         run: cargo test --all-targets
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
-      - name: Show formatting changes for source cleanup
+      - name: Require committed rustfmt formatting
         if: always()
-        run: git diff -- src/
+        run: git diff --exit-code -- src/
