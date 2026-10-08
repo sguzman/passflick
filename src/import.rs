@@ -230,6 +230,58 @@ mod tests {
     }
 
     #[test]
+    fn encrypted_multi_source_refresh_survives_reopen() {
+        use crate::vault::Vault;
+        use std::fs;
+
+        let mut random = [0_u8; 8];
+        getrandom::fill(&mut random).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "passflick-source-refresh-{:016x}",
+            u64::from_le_bytes(random)
+        ));
+        let path = dir.join("vault.passvault");
+
+        let mut vault = Vault::create(&path, b"fixture-only-test-passphrase").unwrap();
+        let edge = parse_csv(
+            b"name,url,username,password\nEdge,https://example.test,person,old-password\n",
+            Source::Edge,
+            1,
+        )
+        .unwrap();
+        replace_snapshot(vault.records_mut(), Source::Edge, edge);
+        let firefox = parse_csv(
+            b"url,username,password\nhttps://mozilla.example.test,person,firefox-password\n",
+            Source::Firefox,
+            2,
+        )
+        .unwrap();
+        replace_snapshot(vault.records_mut(), Source::Firefox, firefox);
+        vault.save(&path).unwrap();
+
+        let replacement = parse_csv(
+            b"name,url,username,password\nEdge,https://example.test,person,new-password\n",
+            Source::Edge,
+            3,
+        )
+        .unwrap();
+        replace_snapshot(vault.records_mut(), Source::Edge, replacement);
+        vault.save(&path).unwrap();
+        drop(vault);
+
+        let reopened = Vault::unlock(&path, b"fixture-only-test-passphrase").unwrap();
+        assert_eq!(reopened.records().len(), 2);
+        assert!(reopened.records().iter().any(|record| {
+            record.source == Source::Edge && record.password() == "new-password"
+        }));
+        assert!(reopened.records().iter().any(|record| {
+            record.source == Source::Firefox && record.password() == "firefox-password"
+        }));
+        assert!(!reopened.records().iter().any(|record| record.password() == "old-password"));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn different_passwords_remain_distinct() {
         let data = b"name,url,username,password\nA,https://example.test,me,one\nA,https://example.test,me,two\n";
         assert_eq!(parse_csv(data, Source::Edge, 10).unwrap().len(), 2);
