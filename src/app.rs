@@ -144,7 +144,10 @@ impl eframe::App for PickerApp {
                     .take(8)
                 {
                     if ui
-                        .selectable_label(row == self.selected, display_label_with_sources(&self.records, index))
+                        .selectable_label(
+                            row == self.selected,
+                            display_label_with_sources(&self.records, index),
+                        )
                         .clicked()
                     {
                         self.selected = row;
