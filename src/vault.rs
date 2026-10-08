@@ -287,7 +287,7 @@ fn fill_random(bytes: &mut [u8]) -> Result<(), VaultError> {
     getrandom::fill(bytes).map_err(|error| VaultError::Random(error.to_string()))
 }
 
-fn read_private_vault(path: &Path) -> Result<Vec<u8>, VaultError> {
+pub(crate) fn read_private_vault(path: &Path) -> Result<Vec<u8>, VaultError> {
     // O_NOFOLLOW prevents a vault-path symlink from redirecting reads to another file.
     let file = OpenOptions::new()
         .read(true)
