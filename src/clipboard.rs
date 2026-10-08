@@ -17,13 +17,14 @@ pub enum ClipboardError {
 
 /// Preserve every byte of a password, including intentional trailing newlines.
 /// OTPick can safely trim a generated TOTP code; Passflick cannot.
+fn wl_copy_command() -> Command {
+    let mut command = Command::new("wl-copy");
+    command.args(["--type", "text/plain;charset=utf-8", "--sensitive"]);
+    command
+}
+
 pub fn copy_sensitive(text: &str) -> Result<(), ClipboardError> {
-    let mut child = Command::new("wl-copy")
-        .args([
-            "--type",
-            "text/plain;charset=utf-8",
-            "--sensitive",
-        ])
+    let mut child = wl_copy_command()
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -42,4 +43,17 @@ pub fn copy_sensitive(text: &str) -> Result<(), ClipboardError> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clipboard_command_never_trims_password_newlines() {
+        let command = wl_copy_command();
+        let args: Vec<_> = command.get_args().collect();
+        assert!(!args.contains(&std::ffi::OsStr::new("--trim-newline")));
+        assert!(args.contains(&std::ffi::OsStr::new("--sensitive")));
+    }
 }
