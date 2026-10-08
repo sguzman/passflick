@@ -17,18 +17,37 @@ pub struct PickerApp {
 }
 
 impl PickerApp {
-    pub fn new(cc: &eframe::CreationContext<'_>, records: Vec<Credential>,
-               notice: Option<String>, startup_trace: StartupTrace) -> Self {
+    pub fn new(
+        cc: &eframe::CreationContext<'_>,
+        records: Vec<Credential>,
+        notice: Option<String>,
+        startup_trace: StartupTrace,
+    ) -> Self {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
         let mut style = (*cc.egui_ctx.style_of(egui::Theme::Dark)).clone();
-        style.text_styles.insert(egui::TextStyle::Body, egui::FontId::proportional(18.0));
-        style.text_styles.insert(egui::TextStyle::Button, egui::FontId::proportional(18.0));
-        style.text_styles.insert(egui::TextStyle::Small, egui::FontId::proportional(15.0));
+        style
+            .text_styles
+            .insert(egui::TextStyle::Body, egui::FontId::proportional(18.0));
+        style
+            .text_styles
+            .insert(egui::TextStyle::Button, egui::FontId::proportional(18.0));
+        style
+            .text_styles
+            .insert(egui::TextStyle::Small, egui::FontId::proportional(15.0));
         cc.egui_ctx.set_style_of(egui::Theme::Dark, style);
         startup_trace.mark("egui-app-created");
         let ranked = rank_credentials(&records, "");
-        Self { records, query: String::new(), ranked, selected: 0, focused: false,
-               notice, error: None, startup_trace, first_frame_traced: false }
+        Self {
+            records,
+            query: String::new(),
+            ranked,
+            selected: 0,
+            focused: false,
+            notice,
+            error: None,
+            startup_trace,
+            first_frame_traced: false,
+        }
     }
 
     fn refresh(&mut self) {
@@ -37,7 +56,10 @@ impl PickerApp {
     }
 
     fn move_selection(&mut self, delta: isize) {
-        if self.ranked.is_empty() { self.selected = 0; return; }
+        if self.ranked.is_empty() {
+            self.selected = 0;
+            return;
+        }
         let last = self.ranked.len() - 1;
         self.selected = if delta.is_negative() {
             self.selected.saturating_sub(delta.unsigned_abs())
@@ -47,9 +69,15 @@ impl PickerApp {
     }
 
     fn copy_selected(&mut self, ctx: &egui::Context, username: bool) {
-        let Some(&index) = self.ranked.get(self.selected) else { return; };
+        let Some(&index) = self.ranked.get(self.selected) else {
+            return;
+        };
         let record = &self.records[index];
-        let text = if username { record.username.as_str() } else { record.password() };
+        let text = if username {
+            record.username.as_str()
+        } else {
+            record.password()
+        };
         if text.is_empty() {
             self.error = Some("Selected credential has no username to copy.".to_owned());
             return;
@@ -72,14 +100,20 @@ impl eframe::App for PickerApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
         }
-        if ctx.input(|input| input.key_pressed(egui::Key::ArrowUp)) { self.move_selection(-1); }
-        if ctx.input(|input| input.key_pressed(egui::Key::ArrowDown)) { self.move_selection(1); }
+        if ctx.input(|input| input.key_pressed(egui::Key::ArrowUp)) {
+            self.move_selection(-1);
+        }
+        if ctx.input(|input| input.key_pressed(egui::Key::ArrowDown)) {
+            self.move_selection(1);
+        }
 
         egui::CentralPanel::default().show(ui, |ui| {
             ui.add_space(10.0);
-            let response = ui.add(egui::TextEdit::singleline(&mut self.query)
-                .desired_width(f32::INFINITY)
-                .hint_text("Search passwords..."));
+            let response = ui.add(
+                egui::TextEdit::singleline(&mut self.query)
+                    .desired_width(f32::INFINITY)
+                    .hint_text("Search passwords..."),
+            );
             if !self.focused {
                 response.request_focus();
                 self.focused = true;
@@ -113,8 +147,11 @@ impl eframe::App for PickerApp {
                 ui.label(format!("Copy failed: {error}"));
             }
             ui.add_space(6.0);
-            ui.label(egui::RichText::new("Enter: password  ·  Shift+Enter: username  ·  Esc: close")
-                .size(12.0).weak());
+            ui.label(
+                egui::RichText::new("Enter: password  ·  Shift+Enter: username  ·  Esc: close")
+                    .size(12.0)
+                    .weak(),
+            );
         });
 
         let enter = ctx.input(|input| input.key_pressed(egui::Key::Enter));

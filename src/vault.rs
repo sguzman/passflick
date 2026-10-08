@@ -351,7 +351,6 @@ pub enum VaultError {
     Json(#[from] serde_json::Error),
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -370,8 +369,12 @@ mod tests {
             header,
             key,
             records: vec![Credential::new(
-                Source::Edge, "Example", "https://example.test",
-                "alice@example.test", "strong sample value", 1234,
+                Source::Edge,
+                "Example",
+                "https://example.test",
+                "alice@example.test",
+                "strong sample value",
+                1234,
             )],
         }
     }
@@ -382,7 +385,11 @@ mod tests {
         original.header.rotate_nonce().unwrap();
         let bytes = original.encode().unwrap();
         for sensitive in ["alice@example.test", "strong sample value"] {
-            assert!(!bytes.windows(sensitive.len()).any(|w| w == sensitive.as_bytes()));
+            assert!(
+                !bytes
+                    .windows(sensitive.len())
+                    .any(|w| w == sensitive.as_bytes())
+            );
         }
         let header = Header::parse(&bytes).unwrap();
         let key = derive_key(b"correct horse battery staple", &header).unwrap();
@@ -398,7 +405,10 @@ mod tests {
         let bytes = original.encode().unwrap();
         let header = Header::parse(&bytes).unwrap();
         let wrong_key = derive_key(b"wrong", &header).unwrap();
-        assert!(matches!(Vault::decode(bytes, header, wrong_key), Err(VaultError::Decrypt)));
+        assert!(matches!(
+            Vault::decode(bytes, header, wrong_key),
+            Err(VaultError::Decrypt)
+        ));
     }
 
     #[test]
@@ -409,6 +419,9 @@ mod tests {
         bytes[12] ^= 1;
         let header = Header::parse(&bytes).unwrap();
         let key = derive_key(b"passphrase", &header).unwrap();
-        assert!(matches!(Vault::decode(bytes, header, key), Err(VaultError::Decrypt)));
+        assert!(matches!(
+            Vault::decode(bytes, header, key),
+            Err(VaultError::Decrypt)
+        ));
     }
 }

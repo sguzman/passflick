@@ -15,7 +15,10 @@ impl StartupTrace {
 
     pub fn mark(&self, label: &str) {
         if let Some(start) = self.start {
-            eprintln!("passflick-startup {label} {}us", start.elapsed().as_micros());
+            eprintln!(
+                "passflick-startup {label} {}us",
+                start.elapsed().as_micros()
+            );
         }
     }
 }

@@ -35,18 +35,42 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
     match args.next().as_deref() {
         Some("-h" | "--help" | "help") => print_help(),
         Some("-V" | "--version") => println!("passflick {}", env!("CARGO_PKG_VERSION")),
-        Some("init") => { no_extra_args(&mut args)?; init_vault()?; }
-        Some("unlock") => { no_extra_args(&mut args)?; unlock_vault()?; }
-        Some("lock") => { no_extra_args(&mut args)?; lock_vault()?; }
+        Some("init") => {
+            no_extra_args(&mut args)?;
+            init_vault()?;
+        }
+        Some("unlock") => {
+            no_extra_args(&mut args)?;
+            unlock_vault()?;
+        }
+        Some("lock") => {
+            no_extra_args(&mut args)?;
+            lock_vault()?;
+        }
         Some("keyring") => match args.next().as_deref() {
-            Some("enable") => { no_extra_args(&mut args)?; enable_keyring()?; }
-            Some("disable") => { no_extra_args(&mut args)?; disable_keyring()?; }
+            Some("enable") => {
+                no_extra_args(&mut args)?;
+                enable_keyring()?;
+            }
+            Some("disable") => {
+                no_extra_args(&mut args)?;
+                disable_keyring()?;
+            }
             _ => return Err("keyring requires enable or disable".into()),
         },
-        Some("status") => { no_extra_args(&mut args)?; status()?; }
-        Some("list") => { no_extra_args(&mut args)?; list_credentials()?; }
+        Some("status") => {
+            no_extra_args(&mut args)?;
+            status()?;
+        }
+        Some("list") => {
+            no_extra_args(&mut args)?;
+            list_credentials()?;
+        }
         Some("import") => {
-            let source: Source = args.next().ok_or("import requires SOURCE and FILE")?.parse()?;
+            let source: Source = args
+                .next()
+                .ok_or("import requires SOURCE and FILE")?
+                .parse()?;
             let input_path = args.next().ok_or("import requires a CSV file path")?;
             no_extra_args(&mut args)?;
             import_csv(source, Path::new(&input_path))?;
@@ -58,7 +82,9 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
 }
 
 fn no_extra_args(args: &mut impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
-    if args.next().is_some() { return Err("unexpected additional argument".into()); }
+    if args.next().is_some() {
+        return Err("unexpected additional argument".into());
+    }
     Ok(())
 }
 
@@ -81,9 +107,7 @@ fn run_picker(trace: startup::StartupTrace) -> eframe::Result {
     eframe::run_native(
         "Passflick",
         options,
-        Box::new(move |cc| {
-            Ok(Box::new(PickerApp::new(cc, records, notice, trace.clone())))
-        }),
+        Box::new(move |cc| Ok(Box::new(PickerApp::new(cc, records, notice, trace.clone())))),
     )
 }
 
@@ -93,21 +117,36 @@ fn load_picker_records(trace: &startup::StartupTrace) -> (Vec<Credential>, Optio
         Err(error) => return (Vec::new(), Some(error.to_string())),
     };
     if !path.exists() {
-        return (Vec::new(), Some("No vault. Run passflick init once.".to_owned()));
+        return (
+            Vec::new(),
+            Some("No vault. Run passflick init once.".to_owned()),
+        );
     }
     trace.mark("vault-path-ready");
     let key = match load_vault_key(&path) {
         Ok(Some(key)) => key,
-        Ok(None) => return (Vec::new(), Some(
-            "Vault locked. Run passflick unlock, or enable keyring integration.".to_owned())),
+        Ok(None) => {
+            return (
+                Vec::new(),
+                Some(
+                    "Vault locked. Run passflick unlock, or enable keyring integration.".to_owned(),
+                ),
+            );
+        }
         Err(error) => return (Vec::new(), Some(error.to_string())),
     };
     trace.mark("session-key-loaded");
     match Vault::open_with_key(&path, key) {
-        Ok(vault) => { trace.mark("vault-decrypted"); (vault.into_records(), None) }
+        Ok(vault) => {
+            trace.mark("vault-decrypted");
+            (vault.into_records(), None)
+        }
         Err(error) => {
             let _ = session::clear();
-            (Vec::new(), Some(format!("{error}. Session key cleared; unlock again.")))
+            (
+                Vec::new(),
+                Some(format!("{error}. Session key cleared; unlock again.")),
+            )
         }
     }
 }
@@ -115,9 +154,13 @@ fn load_picker_records(trace: &startup::StartupTrace) -> (Vec<Credential>, Optio
 fn init_vault() -> Result<(), Box<dyn Error>> {
     let path = paths::vault_path()?;
     let first = Zeroizing::new(rpassword::prompt_password("New Passflick passphrase: ")?);
-    if first.is_empty() { return Err("passphrase cannot be empty".into()); }
+    if first.is_empty() {
+        return Err("passphrase cannot be empty".into());
+    }
     let confirm = Zeroizing::new(rpassword::prompt_password("Confirm passphrase: ")?);
-    if first.as_str() != confirm.as_str() { return Err("passphrases do not match".into()); }
+    if first.as_str() != confirm.as_str() {
+        return Err("passphrases do not match".into());
+    }
     let vault = Vault::create(&path, first.as_bytes())?;
     session::store(vault.key())?;
     println!("Initialized and unlocked {}.", path.display());
@@ -204,21 +247,32 @@ fn import_csv(source: Source, path: &Path) -> Result<(), Box<dyn Error>> {
     let (vault_path, mut vault) = open_unlocked_vault()?;
     let count = r#import::replace_snapshot(vault.records_mut(), source, imported);
     vault.save(&vault_path)?;
-    println!("Imported {count} {} credential(s) into encrypted projection.", source);
+    println!(
+        "Imported {count} {} credential(s) into encrypted projection.",
+        source
+    );
     println!("Remove the plaintext export securely from its original location.");
     Ok(())
 }
 
 fn open_unlocked_vault() -> Result<(PathBuf, Vault), Box<dyn Error>> {
     let path = paths::vault_path()?;
-    let key = load_vault_key(&path)?.ok_or_else(|| io::Error::new(
-        io::ErrorKind::PermissionDenied, "vault locked; run passflick unlock"))?;
+    let key = load_vault_key(&path)?.ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "vault locked; run passflick unlock",
+        )
+    })?;
     Ok((path.clone(), Vault::open_with_key(&path, key)?))
 }
 
 fn load_vault_key(path: &Path) -> Result<Option<vault::VaultKey>, Box<dyn Error>> {
-    if let Some(key) = session::load()? { return Ok(Some(key)); }
-    if session::is_manually_locked()? { return Ok(None); }
+    if let Some(key) = session::load()? {
+        return Ok(Some(key));
+    }
+    if session::is_manually_locked()? {
+        return Ok(None);
+    }
     let key = match desktop_keyring::load(path) {
         Ok(Some(key)) => key,
         Ok(None) | Err(_) => return Ok(None),
