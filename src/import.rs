@@ -20,7 +20,8 @@ pub enum ImportError {
 }
 
 fn normalize_header(value: &str) -> String {
-    value.trim_start_matches('\u{feff}')
+    value
+        .trim_start_matches('\u{feff}')
         .trim()
         .to_ascii_lowercase()
         .chars()
@@ -29,7 +30,9 @@ fn normalize_header(value: &str) -> String {
 }
 
 fn column(headers: &[String], candidates: &[&str]) -> Option<usize> {
-    headers.iter().position(|h| candidates.contains(&h.as_str()))
+    headers
+        .iter()
+        .position(|h| candidates.contains(&h.as_str()))
 }
 
 /// Parse the entire input, including every row, before permitting a snapshot replacement.
@@ -46,11 +49,24 @@ pub fn parse_csv(
 
     let mut reader = csv::ReaderBuilder::new().from_reader(content);
     let headers: Vec<String> = reader.headers()?.iter().map(normalize_header).collect();
-    let password = column(&headers, &["password", "pass", "passwd"])
-        .ok_or(ImportError::MissingPassword)?;
-    let url = column(&headers, &["url", "website", "origin", "hostname", "websiteurl", "loginuri"]);
+    let password =
+        column(&headers, &["password", "pass", "passwd"]).ok_or(ImportError::MissingPassword)?;
+    let url = column(
+        &headers,
+        &[
+            "url",
+            "website",
+            "origin",
+            "hostname",
+            "websiteurl",
+            "loginuri",
+        ],
+    );
     let title = column(&headers, &["name", "title", "sitename"]);
-    let username = column(&headers, &["username", "user", "login", "account", "userid"]);
+    let username = column(
+        &headers,
+        &["username", "user", "login", "account", "userid"],
+    );
     if url.is_none() && title.is_none() {
         return Err(ImportError::MissingSite);
     }
@@ -88,7 +104,12 @@ pub fn parse_csv(
         }
         // Deliberately preserve ALL password characters, including whitespace.
         result.push(Credential::new(
-            source, site_name, site_url, login, secret, imported_at,
+            source,
+            site_name,
+            site_url,
+            login,
+            secret,
+            imported_at,
         ));
     }
     if result.is_empty() {
@@ -114,29 +135,46 @@ mod tests {
 
     #[test]
     fn edge_csv_preserves_password_whitespace() {
-        let data = b"name,url,username,password\nExample,https://example.test,alice,\"  hE!llo \"\n";
+        let data =
+            b"name,url,username,password\nExample,https://example.test,alice,\"  hE!llo \"\n";
         let items = parse_csv(data, Source::Edge, 10).unwrap();
         assert_eq!(items[0].password(), "  hE!llo ");
     }
 
     #[test]
     fn firefox_export() {
-        let data = b"url,username,password,httpRealm,formActionOrigin\nhttps://example.test,bob,pazz,,\n";
+        let data =
+            b"url,username,password,httpRealm,formActionOrigin\nhttps://example.test,bob,pazz,,\n";
         let items = parse_csv(data, Source::Firefox, 10).unwrap();
         assert_eq!(items[0].username, "bob");
     }
 
     #[test]
     fn apple_export() {
-        let data = b"Title,URL,Username,Password,Notes\nPortal,https://example.test,me,secret,note\n";
+        let data =
+            b"Title,URL,Username,Password,Notes\nPortal,https://example.test,me,secret,note\n";
         assert_eq!(parse_csv(data, Source::Apple, 10).unwrap().len(), 1);
     }
 
     #[test]
     fn malformed_export_is_rejected_before_snapshot_mutation() {
         let mut existing = vec![
-            Credential::new(Source::Edge, "Primary", "https://example.test", "me", "old", 1),
-            Credential::new(Source::Apple, "Other", "https://apple.example.test", "me", "apple", 1),
+            Credential::new(
+                Source::Edge,
+                "Primary",
+                "https://example.test",
+                "me",
+                "old",
+                1,
+            ),
+            Credential::new(
+                Source::Apple,
+                "Other",
+                "https://apple.example.test",
+                "me",
+                "apple",
+                1,
+            ),
         ];
         let incomplete = b"name,url,username,password\nValid,https://one.example.test,me,good\nMissing,https://two.example.test,me,\n";
         assert!(matches!(
@@ -159,8 +197,12 @@ mod tests {
 
     #[test]
     fn rejects_uneven_column_count() {
-        let bad = b"url,username,password\nhttps://example.test,user,valid\nhttps://example.test,user\n";
-        assert!(matches!(parse_csv(bad, Source::Edge, 1), Err(ImportError::Csv(_))));
+        let bad =
+            b"url,username,password\nhttps://example.test,user,valid\nhttps://example.test,user\n";
+        assert!(matches!(
+            parse_csv(bad, Source::Edge, 1),
+            Err(ImportError::Csv(_))
+        ));
     }
 
     #[test]
