@@ -6,6 +6,7 @@ mod discovery;
 mod r#import;
 mod model;
 mod paths;
+mod process_security;
 mod search;
 mod session;
 mod startup;
@@ -34,6 +35,7 @@ fn main() {
 }
 
 fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
+    process_security::protect_process()?;
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
         Some("-h" | "--help" | "help") => print_help(),
