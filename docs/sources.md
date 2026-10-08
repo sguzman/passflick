@@ -13,7 +13,7 @@ All four are exposed through `passflick import SOURCE FILE`, with the aliases `e
 
 ## Snapshot rules
 
-1. Validate every row before replacing anything in the encrypted vault. Partial files, empty exports, and unexpected columns fail closed.
+1. Validate every row before replacing anything in the encrypted vault. Incomplete rows, empty exports, and unexpected columns fail closed. A suspiciously large source shrink also requires explicit `--allow-shrink` confirmation.
 2. Replacing one source's snapshot cannot remove records from any other source.
 3. Credentials with different secret values remain separate entries even when they have the same website and username.
 4. Entries with the same website, username, and password may be grouped for display. Original records remain intact.
