@@ -87,4 +87,4 @@ CSV exports are the reliable baseline. Opt-in, read-only native source adapters 
 
 ## License
 
-MIT OR Apache-2.0.
+MIT.
