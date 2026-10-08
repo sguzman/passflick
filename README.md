@@ -63,10 +63,12 @@ Check local projection freshness without revealing passwords:
 
 ```sh
 passflick sources
+passflick discover
 passflick status
+passflick backup
 ```
 
-Imported secrets are stored only in the local encrypted vault. The ordinary picker never contacts a network service.
+Imported secrets are stored only in the local encrypted vault. The ordinary picker never contacts a network service. `passflick backup` creates a private, encrypted, no-overwrite snapshot beside the vault, under `backups/`.
 
 ## How the projection works
 
@@ -76,7 +78,7 @@ The default encrypted vault lives under `$XDG_DATA_HOME/passflick/vault.passvaul
 
 ## Browser integration
 
-CSV exports are the reliable baseline. Opt-in, read-only native source adapters are a future goal, especially for Edge and Chromium on Linux. Direct browser credential retrieval is not implemented and must respect browser and operating-system access controls. Apple Passwords remains an export-based source on Linux. See [Source integration](docs/sources.md) for details.
+`passflick discover` already detects local Edge/Chrome/Chromium/Firefox profile candidates by filename only; it does not read credentials or unlock a browser store. CSV exports are the reliable baseline. Opt-in, read-only native source adapters are a future goal, especially for Edge and Chromium on Linux. Direct browser credential retrieval is not implemented and must respect browser and operating-system access controls. Apple Passwords remains an export-based source on Linux. See [Source integration](docs/sources.md) for details.
 
 ## Project documentation
 
