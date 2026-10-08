@@ -91,10 +91,18 @@ impl Credential {
             format!("{}  ·  {}  ·  {}", self.title(), self.username, self.source)
         }
     }
+    /// Key borrows the original secret rather than creating another plaintext
+    /// password allocation. A missing URL uses a labelled-site identity instead.
+    pub fn identity_key(&self) -> (bool, &str, &str, &str) {
+        if self.url.is_empty() {
+            (false, &self.label, &self.username, self.password())
+        } else {
+            (true, &self.url, &self.username, self.password())
+        }
+    }
+
     pub fn same_identity_and_secret(&self, other: &Self) -> bool {
-        self.url == other.url
-            && self.username == other.username
-            && self.password() == other.password()
+        self.identity_key() == other.identity_key()
     }
 }
 #[cfg(test)]
@@ -131,6 +139,22 @@ mod tests {
             0,
         );
         assert!(!upper.same_identity_and_secret(&lower));
+    }
+
+    #[test]
+    fn title_only_entries_from_different_sites_do_not_merge() {
+        let a = Credential::new(Source::Apple, "Example A", "", "me", "shared", 1);
+        let b = Credential::new(Source::Firefox, "Example B", "", "me", "shared", 1);
+        assert!(!a.same_identity_and_secret(&b));
+        let c = Credential::new(Source::Firefox, "Example A", "", "me", "shared", 1);
+        assert!(a.same_identity_and_secret(&c));
+    }
+
+    #[test]
+    fn url_identity_does_not_merge_with_title_only_identity() {
+        let url = Credential::new(Source::Edge, "Example", "https://example.test", "me", "shared", 1);
+        let title = Credential::new(Source::Apple, "https://example.test", "", "me", "shared", 1);
+        assert!(!url.same_identity_and_secret(&title));
     }
 
     #[test]
