@@ -30,9 +30,7 @@ pub fn rank_credentials(records: &[Credential], query: &str) -> Vec<usize> {
     let mut seen = HashSet::new();
     ranked
         .into_iter()
-        .filter_map(|(index, _)| {
-            seen.insert(records[index].identity_key()).then_some(index)
-        })
+        .filter_map(|(index, _)| seen.insert(records[index].identity_key()).then_some(index))
         .collect()
 }
 
