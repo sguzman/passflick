@@ -1,4 +1,5 @@
 use crate::model::{Credential, Source};
+use std::collections::HashMap;
 
 /// A defensive limit for a single explicit export snapshot.
 pub const MAX_IMPORT_BYTES: usize = 32 * 1024 * 1024;
@@ -72,6 +73,9 @@ pub fn parse_csv(
     }
 
     let mut result: Vec<Credential> = Vec::new();
+    // Index only the non-secret identity fields. Never duplicate plaintext passwords
+    // into the deduplication index, and avoid quadratic scanning of entire exports.
+    let mut seen: HashMap<(String, String, String), Vec<usize>> = HashMap::new();
     for (index, row) in reader.records().enumerate() {
         let row_number = index + 2; // Header is the first line for ordinary CSV exports.
         let row = row?;
@@ -94,14 +98,15 @@ pub fn parse_csv(
             });
         }
 
-        if result.iter().any(|record| {
-            record.url == site_url
-                && record.label == site_name
-                && record.username == login
-                && record.password() == secret
+        let identity = (site_name.to_owned(), site_url.to_owned(), login.to_owned());
+        if seen.get(&identity).is_some_and(|indices| {
+            indices
+                .iter()
+                .any(|&record_index| result[record_index].password() == secret)
         }) {
             continue;
         }
+        seen.entry(identity).or_default().push(result.len());
         // Deliberately preserve ALL password characters, including whitespace.
         result.push(Credential::new(
             source,
