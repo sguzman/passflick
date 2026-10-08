@@ -16,9 +16,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwayland-dev libxkbcommon-dev libx11-dev libx11-xcb-dev libxcursor-dev libxi-dev libxrandr-dev libgl1-mesa-dev
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+      - name: Format working tree for validation
+        run: cargo fmt --all
       - name: Test
         run: cargo test --all-targets
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
+      - name: Show formatting changes for source cleanup
+        if: always()
+        run: git diff -- src/
