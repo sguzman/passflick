@@ -4,7 +4,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::vault::{VaultError, read_private_vault};
+use crate::vault::{Vault, VaultError, VaultKey, read_private_vault};
 
 /// Create an encrypted backup without ever serializing or exposing plaintext.
 /// Fail rather than overwrite any existing backup, including symlinks.
@@ -53,11 +53,77 @@ pub fn create(vault_path: &Path) -> Result<PathBuf, VaultError> {
     Ok(destination)
 }
 
+/// Restore a verified backup from this vault's encryption lineage.
+/// The caller must hold the exclusive vault write lock. Before any replacement,
+/// preserve the current encrypted vault as a fresh backup. The source snapshot
+/// must decrypt under the current vault's key; no passphrase/key migration occurs.
+pub fn restore_into(
+    vault_path: &Path,
+    snapshot: &Path,
+    live: &mut Vault,
+) -> Result<PathBuf, VaultError> {
+    if fs::canonicalize(vault_path)? == fs::canonicalize(snapshot)? {
+        return Err(VaultError::InvalidPath(snapshot.to_path_buf()));
+    }
+
+    let mut key_bytes = [0_u8; 32];
+    key_bytes.copy_from_slice(live.key().as_bytes());
+    let validated = Vault::open_with_key(snapshot, VaultKey::from_bytes(key_bytes))?;
+
+    // A restore can only become destructive after this encrypted safety backup
+    // completes; if backup creation fails, the live vault is left unchanged.
+    let safety_snapshot = create(vault_path)?;
+    let previous = std::mem::replace(live.records_mut(), validated.into_records());
+    if let Err(error) = live.save(vault_path) {
+        *live.records_mut() = previous;
+        return Err(error);
+    }
+    Ok(safety_snapshot)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::model::{Credential, Source};
     use crate::vault::Vault;
+
+    #[test]
+    fn restore_round_trip_and_failure_leave_protected_snapshots() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-restore-test-{:016x}",
+            u64::from_le_bytes(entropy),
+        ));
+        let path = root.join("vault.passvault");
+        let mut vault = Vault::create(&path, b"synthetic-key-for-restore").unwrap();
+        vault.records_mut().push(Credential::new(
+            Source::Edge, "Before", "https://before.example.test", "alice", "before-secret", 1,
+        ));
+        vault.save(&path).unwrap();
+        let saved = create(&path).unwrap();
+
+        vault.records_mut().push(Credential::new(
+            Source::Firefox, "After", "https://after.example.test", "bob", "after-secret", 2,
+        ));
+        vault.save(&path).unwrap();
+        let safety = restore_into(&path, &saved, &mut vault).unwrap();
+        assert!(safety.exists());
+        let reopened = Vault::unlock(&path, b"synthetic-key-for-restore").unwrap();
+        assert_eq!(reopened.records().len(), 1);
+        assert_eq!(reopened.records()[0].password(), "before-secret");
+
+        let mut saved_bytes = fs::read(&saved).unwrap();
+        let final_byte = saved_bytes.last_mut().unwrap();
+        *final_byte ^= 1;
+        let broken = root.join("corrupt.passvault");
+        fs::write(&broken, saved_bytes).unwrap();
+        fs::set_permissions(&broken, fs::Permissions::from_mode(0o600)).unwrap();
+        let live_before = fs::read(&path).unwrap();
+        assert!(restore_into(&path, &broken, &mut vault).is_err());
+        assert_eq!(fs::read(&path).unwrap(), live_before);
+        fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn backup_is_byte_exact_and_privately_permissioned() {
