@@ -1,5 +1,5 @@
 use crate::model::{Credential, Source};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// A defensive limit for a single explicit export snapshot.
 pub const MAX_IMPORT_BYTES: usize = 32 * 1024 * 1024;
@@ -14,6 +14,10 @@ pub enum ImportError {
     MissingPassword,
     #[error("CSV has neither URL nor title column")]
     MissingSite,
+    #[error("CSV contains duplicate normalized column names; previous snapshot is unchanged")]
+    DuplicateColumn,
+    #[error("CSV resembles a {detected} export, but a different source was selected")]
+    WrongSource { detected: &'static str },
     #[error("CSV record {row} is incomplete: {reason}; previous snapshot is unchanged")]
     InvalidRow { row: usize, reason: &'static str },
     #[error("CSV contains no credentials; previous snapshot is unchanged")]
@@ -58,6 +62,24 @@ pub fn parse_csv(
 
     let mut reader = csv::ReaderBuilder::new().from_reader(content);
     let headers: Vec<String> = reader.headers()?.iter().map(normalize_header).collect();
+    let mut unique = HashSet::new();
+    if headers.iter().any(|header| !unique.insert(header.as_str())) {
+        return Err(ImportError::DuplicateColumn);
+    }
+    // Some provider exports have a recognizable signature. Avoid accidentally
+    // replacing Edge's snapshot with a Firefox or Apple CSV mislabelled as Edge.
+    // Edge and Chrome headers can be identical, so this is a guard, not proof.
+    let looks_firefox = headers.iter().any(|header| {
+        matches!(header.as_str(), "httprealm" | "formactionorigin" | "guid")
+    });
+    let looks_apple = headers.iter().any(|header| header == "title")
+        && headers.iter().any(|header| header == "notes");
+    if looks_firefox && source != Source::Firefox {
+        return Err(ImportError::WrongSource { detected: "Firefox" });
+    }
+    if looks_apple && source != Source::Apple {
+        return Err(ImportError::WrongSource { detected: "Apple Passwords" });
+    }
     let password =
         column(&headers, &["password", "pass", "passwd"]).ok_or(ImportError::MissingPassword)?;
     let url = column(
@@ -341,6 +363,31 @@ mod tests {
                 .any(|record| record.password() == "old-password")
         );
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn duplicate_password_columns_fail_instead_of_guessing() {
+        let data = b"url,username,password,Password\nhttps://example.test,user,first,second\n";
+        assert!(matches!(
+            parse_csv(data, Source::Edge, 0),
+            Err(ImportError::DuplicateColumn)
+        ));
+    }
+
+    #[test]
+    fn rejects_obvious_cross_provider_source_mismatch() {
+        let firefox = b"url,username,password,httpRealm\nhttps://example.test,user,pass,\n";
+        assert!(matches!(
+            parse_csv(firefox, Source::Edge, 0),
+            Err(ImportError::WrongSource { .. })
+        ));
+        let apple = b"Title,URL,Username,Password,Notes\nExample,https://example.test,user,pass,\n";
+        assert!(matches!(
+            parse_csv(apple, Source::Chrome, 0),
+            Err(ImportError::WrongSource { .. })
+        ));
+        assert_eq!(parse_csv(apple, Source::Apple, 0).unwrap().len(), 1);
+        assert_eq!(parse_csv(firefox, Source::Firefox, 0).unwrap().len(), 1);
     }
 
     #[test]
