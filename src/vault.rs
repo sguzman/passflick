@@ -472,7 +472,8 @@ mod tests {
         let mut entropy = [0_u8; 8];
         fill_random(&mut entropy).unwrap();
         let dir = std::env::temp_dir().join(format!(
-            "passflick-vault-roundtrip-{:016x}", u64::from_le_bytes(entropy)
+            "passflick-vault-roundtrip-{:016x}",
+            u64::from_le_bytes(entropy)
         ));
         let path = dir.join("vault.passvault");
         let mut vault = test_vault(b"test-only-passphrase");
@@ -504,7 +505,8 @@ mod tests {
         let mut entropy = [0_u8; 8];
         fill_random(&mut entropy).unwrap();
         let dir = std::env::temp_dir().join(format!(
-            "passflick-unsafe-dir-{:016x}", u64::from_le_bytes(entropy)
+            "passflick-unsafe-dir-{:016x}",
+            u64::from_le_bytes(entropy)
         ));
         fs::create_dir(&dir).unwrap();
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
