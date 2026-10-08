@@ -11,7 +11,7 @@ mod vault;
 
 use std::error::Error;
 use std::fs;
-use std::io;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -238,10 +238,22 @@ fn list_credentials() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn read_import_bytes(reader: impl Read) -> io::Result<Zeroizing<Vec<u8>>> {
+    // Bound memory consumption even for untrusted pipes that never end.
+    let mut input = Zeroizing::new(Vec::new());
+    reader
+        .take((r#import::MAX_IMPORT_BYTES + 1) as u64)
+        .read_to_end(&mut input)?;
+    Ok(input)
+}
+
 fn import_csv(source: Source, path: &Path) -> Result<(), Box<dyn Error>> {
-    // Import bytes never enter arguments or logs. Files should be deleted by the user
-    // from their export location; the encrypted vault stores only parsed credentials.
-    let bytes = Zeroizing::new(fs::read(path)?);
+    // "-" permits a transient stdin stream without a persistent plaintext CSV file.
+    let bytes = if path == Path::new("-") {
+        read_import_bytes(io::stdin().lock())?
+    } else {
+        read_import_bytes(fs::File::open(path)?)?
+    };
     let time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let imported = r#import::parse_csv(&bytes, source, time)?;
     let (vault_path, mut vault) = open_unlocked_vault()?;
@@ -251,7 +263,9 @@ fn import_csv(source: Source, path: &Path) -> Result<(), Box<dyn Error>> {
         "Imported {count} {} credential(s) into encrypted projection.",
         source
     );
-    println!("Remove the plaintext export securely from its original location.");
+    if path != Path::new("-") {
+        println!("Remove the plaintext export from its original location.");
+    }
     Ok(())
 }
 
@@ -290,7 +304,7 @@ fn print_help() {
     println!("  passflick lock              Lock for login session");
     println!("  passflick keyring enable    Enable desktop keyring integration");
     println!("  passflick keyring disable   Remove desktop keyring copy");
-    println!("  passflick import SOURCE CSV Replace source projection from CSV");
+    println!("  passflick import SOURCE CSV|- Replace source projection from CSV or stdin");
     println!("  passflick list              Show labels only (never passwords)");
     println!("  passflick status            Display vault/keyring status");
     println!();
