@@ -236,6 +236,17 @@ impl Header {
         let iterations = u32::from_le_bytes(bytes[16..20].try_into().expect("fixed header slice"));
         let parallelism = u32::from_le_bytes(bytes[20..24].try_into().expect("fixed header slice"));
 
+        // Reject forged resource parameters before invoking Argon2. The header is
+        // authenticated only after key derivation, so its cost must be bounded here.
+        // The test KDF uses 8 KiB. Production defaults use 64 MiB.
+        if !(8..=256 * 1024).contains(&memory_kib)
+            || !(1..=10).contains(&iterations)
+            || !(1..=8).contains(&parallelism)
+            || memory_kib < 8 * parallelism
+        {
+            return Err(VaultError::InvalidHeader);
+        }
+
         let mut salt = [0_u8; SALT_LEN];
         salt.copy_from_slice(&bytes[24..40]);
         let mut nonce = [0_u8; NONCE_LEN];
@@ -325,7 +336,7 @@ pub enum VaultError {
     InvalidPath(PathBuf),
     #[error("vault is truncated")]
     Truncated,
-    #[error("not an Passflick vault")]
+    #[error("not a Passflick vault")]
     BadMagic,
     #[error("unsupported vault format version {0}")]
     UnsupportedFormat(u16),
@@ -396,6 +407,23 @@ mod tests {
         let reopened = Vault::decode(bytes, header, key).unwrap();
         assert_eq!(reopened.records().len(), 1);
         assert_eq!(reopened.records()[0].password(), "strong sample value");
+    }
+
+    #[test]
+    fn malicious_kdf_costs_are_rejected_before_allocation() {
+        let mut original = test_vault(b"passphrase");
+        original.header.rotate_nonce().unwrap();
+        let mut bytes = original.encode().unwrap();
+        bytes[12..16].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(matches!(Header::parse(&bytes), Err(VaultError::InvalidHeader)));
+
+        bytes[12..16].copy_from_slice(&DEFAULT_KDF.memory_kib.to_le_bytes());
+        bytes[16..20].copy_from_slice(&u32::MAX.to_le_bytes());
+        assert!(matches!(Header::parse(&bytes), Err(VaultError::InvalidHeader)));
+
+        bytes[16..20].copy_from_slice(&DEFAULT_KDF.iterations.to_le_bytes());
+        bytes[20..24].copy_from_slice(&0_u32.to_le_bytes());
+        assert!(matches!(Header::parse(&bytes), Err(VaultError::InvalidHeader)));
     }
 
     #[test]
