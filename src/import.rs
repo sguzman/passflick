@@ -18,7 +18,9 @@ pub enum ImportError {
     InvalidRow { row: usize, reason: &'static str },
     #[error("CSV contains no credentials; previous snapshot is unchanged")]
     Empty,
-    #[error("suspicious {source} snapshot shrink: {existing} saved vs {incoming} imported; repeat with --allow-shrink if intentional")]
+    #[error(
+        "suspicious {source} snapshot shrink: {existing} saved vs {incoming} imported; repeat with --allow-shrink if intentional"
+    )]
     SuspiciousShrink {
         source: Source,
         existing: usize,
@@ -137,7 +139,10 @@ pub fn validate_snapshot_refresh(
     incoming: usize,
     allow_shrink: bool,
 ) -> Result<(), ImportError> {
-    let existing = records.iter().filter(|record| record.source == source).count();
+    let existing = records
+        .iter()
+        .filter(|record| record.source == source)
+        .count();
     if !allow_shrink && existing >= 10 && incoming.saturating_mul(2) < existing {
         return Err(ImportError::SuspiciousShrink {
             source,
