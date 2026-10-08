@@ -8,8 +8,8 @@
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [ ] Confirm the newest changes pass Rust formatting, build, tests, and CI on Linux
-- [ ] Perform target-host verification with synthetic credentials on EndeavourOS/Hyprland
+- [x] Locked Linux CI: build, 34 tests, CLI smoke checks, formatting, and strict Clippy
+- [ ] Complete [synthetic target-host acceptance](acceptance.md) on EndeavourOS/Hyprland
 - [ ] Test actual Edge, Chrome, Firefox, and Apple export variants
 - [ ] Confirm clipboard exit behavior and source import refresh
 
