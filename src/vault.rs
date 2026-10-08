@@ -1,5 +1,5 @@
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
@@ -21,6 +21,7 @@ const HEADER_LEN: usize = 64;
 const SALT_LEN: usize = 16;
 const NONCE_LEN: usize = 24;
 const KEY_LEN: usize = 32;
+const MAX_VAULT_BYTES: u64 = 64 * 1024 * 1024;
 
 const DEFAULT_KDF: KdfParams = KdfParams {
     memory_kib: 64 * 1024,
@@ -78,14 +79,14 @@ impl Vault {
     }
 
     pub fn unlock(path: &Path, passphrase: &[u8]) -> Result<Self, VaultError> {
-        let bytes = fs::read(path)?;
+        let bytes = read_private_vault(path)?;
         let header = Header::parse(&bytes)?;
         let key = derive_key(passphrase, &header)?;
         Self::decode(bytes, header, key)
     }
 
     pub fn open_with_key(path: &Path, key: VaultKey) -> Result<Self, VaultError> {
-        let bytes = fs::read(path)?;
+        let bytes = read_private_vault(path)?;
         let header = Header::parse(&bytes)?;
         Self::decode(bytes, header, key)
     }
@@ -286,6 +287,26 @@ fn fill_random(bytes: &mut [u8]) -> Result<(), VaultError> {
     getrandom::fill(bytes).map_err(|error| VaultError::Random(error.to_string()))
 }
 
+fn read_private_vault(path: &Path) -> Result<Vec<u8>, VaultError> {
+    // O_NOFOLLOW prevents a vault-path symlink from redirecting reads to another file.
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || metadata.permissions().mode() & 0o077 != 0 {
+        return Err(VaultError::UnsafeFile);
+    }
+
+    // Reject a huge or corrupt vault without allocating an unbounded buffer.
+    let mut bytes = Vec::new();
+    file.take(MAX_VAULT_BYTES + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_VAULT_BYTES {
+        return Err(VaultError::TooLarge);
+    }
+    Ok(bytes)
+}
+
 fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), VaultError> {
     let parent = path
         .parent()
@@ -295,6 +316,11 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), VaultError> {
         let mut builder = fs::DirBuilder::new();
         builder.recursive(true).mode(0o700);
         builder.create(parent)?;
+    }
+
+    let parent_metadata = fs::symlink_metadata(parent)?;
+    if !parent_metadata.is_dir() || parent_metadata.permissions().mode() & 0o077 != 0 {
+        return Err(VaultError::UnsafeDirectory);
     }
 
     let mut suffix = [0_u8; 8];
@@ -346,6 +372,12 @@ pub enum VaultError {
     UnsupportedKdf(u8),
     #[error("invalid vault header")]
     InvalidHeader,
+    #[error("vault file must be a private regular file, not a symlink or shared file")]
+    UnsafeFile,
+    #[error("vault directory must be private and must not be a symlink")]
+    UnsafeDirectory,
+    #[error("vault exceeds 64 MiB safety limit")]
+    TooLarge,
     #[error("Argon2 key derivation failed: {0}")]
     Kdf(String),
     #[error("system randomness failed: {0}")]
@@ -424,6 +456,27 @@ mod tests {
         bytes[16..20].copy_from_slice(&DEFAULT_KDF.iterations.to_le_bytes());
         bytes[20..24].copy_from_slice(&0_u32.to_le_bytes());
         assert!(matches!(Header::parse(&bytes), Err(VaultError::InvalidHeader)));
+    }
+
+    #[test]
+    fn private_vault_reader_rejects_symlinks_and_shared_files() {
+        use std::os::unix::fs::symlink;
+        let mut entropy = [0_u8; 8];
+        fill_random(&mut entropy).unwrap();
+        let temp = std::env::temp_dir().join(format!(
+            "passflick-security-test-{:016x}", u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&temp).unwrap();
+        let file = temp.join("real-vault");
+        fs::write(&file, b"example").unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(matches!(read_private_vault(&file), Err(VaultError::UnsafeFile)));
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(read_private_vault(&file).unwrap(), b"example");
+        let link = temp.join("vault-link");
+        symlink(&file, &link).unwrap();
+        assert!(read_private_vault(&link).is_err());
+        fs::remove_dir_all(&temp).unwrap();
     }
 
     #[test]
