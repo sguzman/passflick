@@ -1,45 +1,89 @@
 # Passflick
 
-**Fast password retrieval, without moving your password manager.**
+**A password picker, not another password manager.**
 
-Passflick is a local, keyboard-first password picker for Linux. It presents a unified, searchable projection of credentials originally managed by Microsoft Edge, Chromium/Chrome, Firefox, and Apple Passwords. The original password stores remain authoritative; Passflick does not create or modify credentials in them.
+Passflick gives Linux users a single, encrypted, searchable view of credentials saved elsewhere: Microsoft Edge, Chrome/Chromium, Firefox, and Apple Passwords. Your original password managers stay in charge. Passflick is an intentionally small, keyboard-driven companion to [OTPick](https://github.com/sguzman/otpick) and Glyphflick.
 
-The ordinary interaction is intentionally tiny:
+`summon → search → copy → gone`
 
-`summon → search → Enter to copy password or Shift+Enter to copy username → exit`
+## Daily use
 
-Passflick is a companion to [OTPick](https://github.com/sguzman/otpick) and [Glyphflick](https://github.com/sguzman/glyphflick), not a replacement for either.
+Launch `passflick` from your compositor shortcut. Typing immediately searches account names, websites, URLs, and usernames. The top match is selected.
 
-## Interaction
+| Key | Action |
+| --- | --- |
+| Enter | Copy selected password and exit |
+| Shift+Enter | Copy selected username and exit |
+| Up / Down | Select a credential |
+| Escape | Exit without copying |
 
-- Type immediately to search sites, domains, usernames, and labels.
-- Up/Down changes the selection; the top result is selected automatically.
-- **Enter** copies the selected password and closes the picker.
-- **Shift+Enter** copies the selected username and closes the picker.
-- Escape exits without copying anything.
-- Passwords are not displayed while browsing matches.
+There is no persistent tray app, no browser dependency for ordinary lookups, and no need to reveal a password on screen. Opening Passflick twice for a password and username is expected to be fast enough that a multi-action window is unnecessary.
 
-One launch performs at most one clipboard operation. Invoking it twice to retrieve a username and password is a feature, not a problem.
+## Getting started
 
-## Data and unlock model
+Passflick is currently a **pre-release Rust application** targeting Linux/Wayland, with Hyprland as the primary desktop. Its functional workflow is being validated; real credentials should not be imported before target-host acceptance and further security testing.
 
-Passflick maintains a local, encrypted **projection** assembled from external credential sources. A record keeps its source, original site/username identity, and snapshot provenance. Identical records may be grouped in the picker; conflicting credentials stay distinct rather than overwriting each other. A newer import from a source supersedes that source's older snapshot after successful validation, without deleting records from other sources.
+Build:
 
-The vault uses passphrase-based encryption at rest. Repeated launches in the same login session should use a cached key, as OTPick does, so the normal picker path never needs to repeat password-based key derivation. Optional desktop-keyring integration can make login-session unlock seamless. Passflick's key and vault are **separate from OTPick's**.
+```sh
+cargo build --release
+```
 
-## Sources
+Set up your own encrypted vault:
 
-The first ingestion path is an explicit **CSV export/import** for Edge, Chrome/Chromium, Firefox, and Apple Passwords. Export files are plaintext and must be handled accordingly. Passflick must not upload, retain, or log imported plaintext files.
+```sh
+passflick init
+passflick keyring enable
+```
 
-The later direction is opt-in, read-only local source adapters where browser-supported mechanisms and operating-system permissions make them safe and dependable. No browser decryption bypasses, stealth collection, or silent uploads.
+The optional desktop-keyring command stores Passflick's derived vault key in your desktop Secret Service, allowing a session to unlock without repeating an application-specific passphrase on every invocation. The fallback remains `passflick unlock`, and `passflick lock` explicitly locks the application for the current session. Passflick does not share OTPick's vault key.
 
-## Platform and status
+### Importing existing credentials
 
-Passflick targets Rust, Linux, Wayland, and keyboard-driven compositors such as Hyprland. The picker should be an overlay rather than a tiled work window.
+Export passwords from your existing password manager, then import the resulting CSV snapshot:
 
-**Status: initial development.** This repository is being bootstrapped; do not treat its initial code as an audited password manager or import real credentials until the import and vault paths have been exercised on the target host.
+```sh
+passflick import edge /path/to/edge-export.csv
+passflick import chrome /path/to/chrome-export.csv
+passflick import firefox /path/to/firefox-export.csv
+passflick import apple /path/to/apple-export.csv
+```
 
-For the architectural contract see [PROJECT.md](PROJECT.md); for planned work see [docs/queue.md](docs/queue.md); for the threat model see [docs/security.md](docs/security.md).
+The source name identifies which snapshot is updated. A successful Edge import replaces only the previous Edge projection, not the Firefox, Chrome, or Apple records. The parser rejects malformed or empty snapshots rather than quietly wiping existing records.
+
+For import pipelines that produce CSV on stdout without writing a file:
+
+```sh
+some-trusted-export-command | passflick import edge -
+```
+
+The `-` argument means stdin. Do not send credentials from unknown commands or untrusted exporters. **All password-manager CSV exports are plaintext**; move them out of shared/synced directories and remove them after verified import. Ordinary deletion cannot guarantee forensic erasure from every disk or backup.
+
+Check local projection freshness without revealing passwords:
+
+```sh
+passflick sources
+passflick status
+```
+
+Imported secrets are stored only in the local encrypted vault. The ordinary picker never contacts a network service.
+
+## How the projection works
+
+Passflick keeps source provenance and import timestamps. Source priority is Edge, then Chrome, Firefox, and Apple. Exact matching credentials from multiple sources can appear as one result. Different passwords for the same site or username remain separately selectable. No operation modifies the original password managers.
+
+The default encrypted vault lives under `$XDG_DATA_HOME/passflick/vault.passvault` (normally `~/.local/share/passflick/vault.passvault`). `PASSFLICK_VAULT` overrides the file path. The vault uses Argon2id, XChaCha20-Poly1305, and a Linux session-keyring hot path. Clipboard copies use `wl-copy` with a sensitive hint, although clipboard history isolation cannot be guaranteed across all environments.
+
+## Browser integration
+
+CSV exports are the reliable baseline. Opt-in, read-only native source adapters are a future goal, especially for Edge and Chromium on Linux. Direct browser credential retrieval is not implemented and must respect browser and operating-system access controls. Apple Passwords remains an export-based source on Linux. See [Source integration](docs/sources.md) for details.
+
+## Project documentation
+
+- [Project contract](PROJECT.md)
+- [Source integration](docs/sources.md)
+- [Security model](docs/security.md)
+- [Development queue and acceptance gates](docs/queue.md)
 
 ## License
 
