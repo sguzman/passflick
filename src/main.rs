@@ -229,7 +229,7 @@ fn load_picker_records(trace: &startup::StartupTrace) -> (Vec<Credential>, Optio
             (vault.into_records(), None, false)
         }
         Err(error) => {
-            let _ = session::clear();
+            let _ = session::clear(&path);
             (
                 Vec::new(),
                 Some(format!("{error}. Session key cleared; unlock again.")),
@@ -250,7 +250,7 @@ fn init_vault() -> Result<(), Box<dyn Error>> {
         return Err("passphrases do not match".into());
     }
     let vault = Vault::create(&path, first.as_bytes())?;
-    session::store(vault.key())?;
+    session::store(&path, vault.key())?;
     println!("Initialized and unlocked {}.", path.display());
     Ok(())
 }
@@ -262,34 +262,35 @@ fn unlock_vault() -> Result<(), Box<dyn Error>> {
     if let Ok(Some(key)) = desktop_keyring::load(&path)
         && let Ok(vault) = Vault::open_with_key(&path, key)
     {
-        session::store(vault.key())?;
+        session::store(&path, vault.key())?;
         println!("Unlocked from desktop keyring for this login session.");
         return Ok(());
     }
     let passphrase = Zeroizing::new(rpassword::prompt_password("Passflick passphrase: ")?);
     let vault = Vault::unlock(&path, passphrase.as_bytes())?;
-    session::store(vault.key())?;
+    session::store(&path, vault.key())?;
     println!("Unlocked for this login session.");
     Ok(())
 }
 
 fn lock_vault() -> Result<(), Box<dyn Error>> {
+    let path = paths::vault_path()?;
     // Set the explicit lock marker first. A failure to clear the cached key
     // must not inadvertently enable desktop-keyring auto-rehydration.
-    session::mark_locked()?;
-    session::clear()?;
+    session::mark_locked(&path)?;
+    session::clear(&path)?;
     println!("Locked for this login session.");
     Ok(())
 }
 
 fn enable_keyring() -> Result<(), Box<dyn Error>> {
     let path = paths::vault_path()?;
-    let vault = match session::load()? {
+    let vault = match session::load(&path)? {
         Some(key) => Vault::open_with_key(&path, key)?,
         None => {
             let passphrase = Zeroizing::new(rpassword::prompt_password("Passflick passphrase: ")?);
             let vault = Vault::unlock(&path, passphrase.as_bytes())?;
-            session::store(vault.key())?;
+            session::store(&path, vault.key())?;
             vault
         }
     };
@@ -312,8 +313,8 @@ fn status() -> Result<(), Box<dyn Error>> {
     let path = paths::vault_path()?;
     println!("Vault: {}", path.display());
     println!("Exists: {}", path.exists());
-    println!("Session unlocked: {}", session::load()?.is_some());
-    println!("Manual lock: {}", session::is_manually_locked()?);
+    println!("Session unlocked: {}", session::load(&path)?.is_some());
+    println!("Manual lock: {}", session::is_manually_locked(&path)?);
     match desktop_keyring::exists(&path) {
         Ok(enabled) => println!("Desktop keyring: {enabled}"),
         Err(error) => println!("Desktop keyring: unavailable ({error})"),
@@ -444,17 +445,17 @@ fn open_unlocked_vault() -> Result<(PathBuf, Vault), Box<dyn Error>> {
 }
 
 fn load_vault_key(path: &Path) -> Result<Option<vault::VaultKey>, Box<dyn Error>> {
-    if session::is_manually_locked()? {
+    if session::is_manually_locked(&path)? {
         return Ok(None);
     }
-    if let Some(key) = session::load()? {
+    if let Some(key) = session::load(&path)? {
         return Ok(Some(key));
     }
     let key = match desktop_keyring::load(path) {
         Ok(Some(key)) => key,
         Ok(None) | Err(_) => return Ok(None),
     };
-    session::store(&key)?;
+    session::store(path, &key)?;
     Ok(Some(key))
 }
 
