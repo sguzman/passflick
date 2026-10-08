@@ -183,7 +183,8 @@ fn init_vault() -> Result<(), Box<dyn Error>> {
 
 fn unlock_vault() -> Result<(), Box<dyn Error>> {
     let path = paths::vault_path()?;
-    session::clear_manual_lock()?;
+    // Never lift an explicit lock until valid key material has been verified.
+    // session::store clears the lock marker only after a successful unlock.
     if let Ok(Some(key)) = desktop_keyring::load(&path)
         && let Ok(vault) = Vault::open_with_key(&path, key)
     {
@@ -199,8 +200,10 @@ fn unlock_vault() -> Result<(), Box<dyn Error>> {
 }
 
 fn lock_vault() -> Result<(), Box<dyn Error>> {
-    session::clear()?;
+    // Set the explicit lock marker first. A failure to clear the cached key
+    // must not inadvertently enable desktop-keyring auto-rehydration.
     session::mark_locked()?;
+    session::clear()?;
     println!("Locked for this login session.");
     Ok(())
 }
@@ -334,11 +337,11 @@ fn open_unlocked_vault() -> Result<(PathBuf, Vault), Box<dyn Error>> {
 }
 
 fn load_vault_key(path: &Path) -> Result<Option<vault::VaultKey>, Box<dyn Error>> {
-    if let Some(key) = session::load()? {
-        return Ok(Some(key));
-    }
     if session::is_manually_locked()? {
         return Ok(None);
+    }
+    if let Some(key) = session::load()? {
+        return Ok(Some(key));
     }
     let key = match desktop_keyring::load(path) {
         Ok(Some(key)) => key,
