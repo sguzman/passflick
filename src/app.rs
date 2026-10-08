@@ -1,6 +1,6 @@
 use crate::clipboard::copy_sensitive;
 use crate::model::Credential;
-use crate::search::rank_credentials;
+use crate::search::{display_label_with_sources, rank_credentials};
 use crate::startup::StartupTrace;
 use eframe::egui;
 
@@ -144,7 +144,7 @@ impl eframe::App for PickerApp {
                     .take(8)
                 {
                     if ui
-                        .selectable_label(row == self.selected, self.records[index].display_label())
+                        .selectable_label(row == self.selected, display_label_with_sources(&self.records, index))
                         .clicked()
                     {
                         self.selected = row;
