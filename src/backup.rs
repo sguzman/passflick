@@ -4,7 +4,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::vault::{read_private_vault, VaultError};
+use crate::vault::{VaultError, read_private_vault};
 
 /// Create an encrypted backup without ever serializing or exposing plaintext.
 /// Fail rather than overwrite any existing backup, including symlinks.
@@ -56,15 +56,16 @@ pub fn create(vault_path: &Path) -> Result<PathBuf, VaultError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vault::Vault;
     use crate::model::{Credential, Source};
+    use crate::vault::Vault;
 
     #[test]
     fn backup_is_byte_exact_and_privately_permissioned() {
         let mut entropy = [0_u8; 8];
         getrandom::fill(&mut entropy).unwrap();
         let root = std::env::temp_dir().join(format!(
-            "passflick-backup-test-{:016x}", u64::from_le_bytes(entropy)
+            "passflick-backup-test-{:016x}",
+            u64::from_le_bytes(entropy)
         ));
         let vault_path = root.join("vault.passvault");
         let mut vault = Vault::create(&vault_path, b"synthetic-backup-key").unwrap();
@@ -78,9 +79,22 @@ mod tests {
         ));
         vault.save(&vault_path).unwrap();
         let destination = create(&vault_path).unwrap();
-        assert_eq!(fs::read(&vault_path).unwrap(), fs::read(&destination).unwrap());
-        assert_eq!(fs::metadata(&destination).unwrap().permissions().mode() & 0o077, 0);
-        assert_eq!(fs::metadata(destination.parent().unwrap()).unwrap().permissions().mode() & 0o077, 0);
+        assert_eq!(
+            fs::read(&vault_path).unwrap(),
+            fs::read(&destination).unwrap()
+        );
+        assert_eq!(
+            fs::metadata(&destination).unwrap().permissions().mode() & 0o077,
+            0
+        );
+        assert_eq!(
+            fs::metadata(destination.parent().unwrap())
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o077,
+            0
+        );
         assert_ne!(create(&vault_path).unwrap(), destination);
         fs::remove_dir_all(&root).unwrap();
     }
