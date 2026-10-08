@@ -459,6 +459,53 @@ mod tests {
     }
 
     #[test]
+    fn vault_persists_with_private_permissions_and_atomic_replacement() {
+        let mut entropy = [0_u8; 8];
+        fill_random(&mut entropy).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "passflick-vault-roundtrip-{:016x}", u64::from_le_bytes(entropy)
+        ));
+        let path = dir.join("vault.passvault");
+        let mut vault = test_vault(b"test-only-passphrase");
+        vault.save(&path).unwrap();
+
+        assert_eq!(fs::metadata(&dir).unwrap().permissions().mode() & 0o077, 0);
+        assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o077, 0);
+        let key = derive_key(b"test-only-passphrase", &vault.header).unwrap();
+        let opened = Vault::open_with_key(&path, key).unwrap();
+        assert_eq!(opened.records().len(), 1);
+
+        vault.records_mut().push(Credential::new(
+            Source::Firefox,
+            "Second",
+            "https://second.example.test",
+            "user",
+            "private-second-test-value",
+            42,
+        ));
+        vault.save(&path).unwrap();
+        let key = derive_key(b"test-only-passphrase", &vault.header).unwrap();
+        let reopened = Vault::open_with_key(&path, key).unwrap();
+        assert_eq!(reopened.records().len(), 2);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn vault_refuses_to_save_into_shared_directory() {
+        let mut entropy = [0_u8; 8];
+        fill_random(&mut entropy).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "passflick-unsafe-dir-{:016x}", u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&dir).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
+        let mut vault = test_vault(b"test-only-passphrase");
+        let outcome = vault.save(&dir.join("vault.passvault"));
+        assert!(matches!(outcome, Err(VaultError::UnsafeDirectory)));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn private_vault_reader_rejects_symlinks_and_shared_files() {
         use std::os::unix::fs::symlink;
         let mut entropy = [0_u8; 8];
