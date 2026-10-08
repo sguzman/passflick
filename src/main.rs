@@ -170,12 +170,12 @@ fn init_vault() -> Result<(), Box<dyn Error>> {
 fn unlock_vault() -> Result<(), Box<dyn Error>> {
     let path = paths::vault_path()?;
     session::clear_manual_lock()?;
-    if let Ok(Some(key)) = desktop_keyring::load(&path) {
-        if let Ok(vault) = Vault::open_with_key(&path, key) {
-            session::store(vault.key())?;
-            println!("Unlocked from desktop keyring for this login session.");
-            return Ok(());
-        }
+    if let Ok(Some(key)) = desktop_keyring::load(&path)
+        && let Ok(vault) = Vault::open_with_key(&path, key)
+    {
+        session::store(vault.key())?;
+        println!("Unlocked from desktop keyring for this login session.");
+        return Ok(());
     }
     let passphrase = Zeroizing::new(rpassword::prompt_password("Passflick passphrase: ")?);
     let vault = Vault::unlock(&path, passphrase.as_bytes())?;
