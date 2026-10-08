@@ -541,7 +541,7 @@ mod tests {
         ));
         let path = dir.join("vault.passvault");
         let mut vault = test_vault(b"test-only-passphrase");
-        vault.save(&path).unwrap();
+        vault.save_new(&path).unwrap();
 
         assert_eq!(fs::metadata(&dir).unwrap().permissions().mode() & 0o077, 0);
         assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o077, 0);
