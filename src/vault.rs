@@ -509,7 +509,8 @@ mod tests {
         let mut entropy = [0_u8; 8];
         fill_random(&mut entropy).unwrap();
         let dir = std::env::temp_dir().join(format!(
-            "passflick-no-clobber-test-{:016x}", u64::from_le_bytes(entropy)
+            "passflick-no-clobber-test-{:016x}",
+            u64::from_le_bytes(entropy)
         ));
         fs::create_dir(&dir).unwrap();
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
