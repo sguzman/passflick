@@ -76,8 +76,13 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
                 .ok_or("import requires SOURCE and FILE")?
                 .parse()?;
             let input_path = args.next().ok_or("import requires a CSV file path")?;
+            let allow_shrink = match args.next().as_deref() {
+                None => false,
+                Some("--allow-shrink") => true,
+                Some(other) => return Err(format!("unknown import option: {other}").into()),
+            };
             no_extra_args(&mut args)?;
-            import_csv(source, Path::new(&input_path))?;
+            import_csv(source, Path::new(&input_path), allow_shrink)?;
         }
         Some(other) => return Err(format!("unknown command: {other}").into()),
         None => run_picker(trace.clone())?,
@@ -281,7 +286,7 @@ fn list_source_status() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn import_csv(source: Source, path: &Path) -> Result<(), Box<dyn Error>> {
+fn import_csv(source: Source, path: &Path, allow_shrink: bool) -> Result<(), Box<dyn Error>> {
     // "-" permits a transient stdin stream without a persistent plaintext CSV file.
     let bytes = if path == Path::new("-") {
         read_import_bytes(io::stdin().lock())?
@@ -291,6 +296,7 @@ fn import_csv(source: Source, path: &Path) -> Result<(), Box<dyn Error>> {
     let time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let imported = r#import::parse_csv(&bytes, source, time)?;
     let (vault_path, mut vault) = open_unlocked_vault()?;
+    r#import::validate_snapshot_refresh(vault.records(), source, imported.len(), allow_shrink)?;
     let count = r#import::replace_snapshot(vault.records_mut(), source, imported);
     vault.save(&vault_path)?;
     println!(
@@ -343,6 +349,7 @@ fn print_help() {
     println!("  passflick status            Display vault/keyring status");
     println!("  passflick sources           Show per-source counts and refresh age");
     println!();
+    println!("  import accepts optional --allow-shrink for intentional large deletions");
     println!("Sources: edge, chrome, firefox, apple");
     println!("Picker: Enter password; Shift+Enter username; Escape close.");
 }
