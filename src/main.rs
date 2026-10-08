@@ -66,6 +66,10 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
             no_extra_args(&mut args)?;
             list_credentials()?;
         }
+        Some("sources") => {
+            no_extra_args(&mut args)?;
+            list_source_status()?;
+        }
         Some("import") => {
             let source: Source = args
                 .next()
@@ -247,6 +251,33 @@ fn read_import_bytes(reader: impl Read) -> io::Result<Zeroizing<Vec<u8>>> {
     Ok(input)
 }
 
+fn list_source_status() -> Result<(), Box<dyn Error>> {
+    let (_, vault) = open_unlocked_vault()?;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    for source in [Source::Edge, Source::Chrome, Source::Firefox, Source::Apple] {
+        let matching = vault.records().iter().filter(|record| record.source == source);
+        let count = matching.clone().count();
+        let latest = matching.map(|record| record.imported_at).max();
+        let age = match latest {
+            None => "never imported".to_owned(),
+            Some(0) => "import age unknown".to_owned(),
+            Some(time) if time > now => "future timestamp".to_owned(),
+            Some(time) => {
+                let elapsed = now - time;
+                if elapsed < 3_600 {
+                    format!("refreshed {} minutes ago", elapsed / 60)
+                } else if elapsed < 86_400 {
+                    format!("refreshed {} hours ago", elapsed / 3_600)
+                } else {
+                    format!("refreshed {} days ago", elapsed / 86_400)
+                }
+            }
+        };
+        println!("{source}: {count} credentials ({age})");
+    }
+    Ok(())
+}
+
 fn import_csv(source: Source, path: &Path) -> Result<(), Box<dyn Error>> {
     // "-" permits a transient stdin stream without a persistent plaintext CSV file.
     let bytes = if path == Path::new("-") {
@@ -307,6 +338,7 @@ fn print_help() {
     println!("  passflick import SOURCE CSV|- Replace source projection from CSV or stdin");
     println!("  passflick list              Show labels only (never passwords)");
     println!("  passflick status            Display vault/keyring status");
+    println!("  passflick sources           Show per-source counts and refresh age");
     println!();
     println!("Sources: edge, chrome, firefox, apple");
     println!("Picker: Enter password; Shift+Enter username; Escape close.");
