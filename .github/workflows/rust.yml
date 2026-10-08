@@ -32,3 +32,10 @@ jobs:
       - name: Require committed rustfmt formatting
         if: always()
         run: git diff --exit-code -- src/
+      - name: Emit resolved Cargo lockfile for reproducible release
+        if: success() && github.ref == 'refs/heads/main'
+        run: |
+          echo 'PASSFLICK_LOCK_BEGIN'
+          cat Cargo.lock
+          echo 'PASSFLICK_LOCK_END'
+
