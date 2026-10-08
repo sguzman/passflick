@@ -324,7 +324,12 @@ mod tests {
         assert!(reopened.records().iter().any(|record| {
             record.source == Source::Firefox && record.password() == "firefox-password"
         }));
-        assert!(!reopened.records().iter().any(|record| record.password() == "old-password"));
+        assert!(
+            !reopened
+                .records()
+                .iter()
+                .any(|record| record.password() == "old-password")
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 
