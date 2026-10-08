@@ -86,7 +86,9 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
             backup_encrypted_vault()?;
         }
         Some("restore") => {
-            let snapshot = args.next().ok_or("restore requires a backup file and --confirm")?;
+            let snapshot = args
+                .next()
+                .ok_or("restore requires a backup file and --confirm")?;
             if args.next().as_deref() != Some("--confirm") {
                 return Err("restore requires explicit --confirm".into());
             }
