@@ -46,7 +46,7 @@ passflick init
 passflick keyring enable
 ```
 
-The optional desktop-keyring command stores Passflick's derived vault key in your desktop Secret Service, allowing a session to unlock without repeating an application-specific passphrase on every invocation. The fallback remains `passflick unlock`, and `passflick lock` explicitly locks the application for the current session. Passflick does not share OTPick's vault key.
+When the vault is locked, opening the picker displays a masked passphrase field and unlocks it for the login session. The optional desktop-keyring command stores Passflick's derived vault key in your desktop Secret Service, allowing subsequent launches to unlock without re-entering it. The CLI fallback remains `passflick unlock`, and `passflick lock` explicitly locks the application for the current session. Passflick does not share OTPick's vault key.
 
 ### Importing existing credentials
 
