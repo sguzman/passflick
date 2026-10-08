@@ -63,8 +63,12 @@ pub struct Vault {
 
 impl Vault {
     pub fn create(path: &Path, passphrase: &[u8]) -> Result<Self, VaultError> {
-        if path.exists() {
-            return Err(VaultError::AlreadyExists(path.to_path_buf()));
+        // symlink_metadata also recognizes dangling symlinks. Never overwrite a
+        // previous vault or user-selected path while initializing.
+        match fs::symlink_metadata(path) {
+            Ok(_) => return Err(VaultError::AlreadyExists(path.to_path_buf())),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
         }
 
         let header = Header::random(DEFAULT_KDF)?;
@@ -74,7 +78,7 @@ impl Vault {
             key,
             records: Vec::new(),
         };
-        vault.save(path)?;
+        vault.save_new(path)?;
         Ok(vault)
     }
 
@@ -110,8 +114,14 @@ impl Vault {
     pub fn save(&mut self, path: &Path) -> Result<(), VaultError> {
         self.header.rotate_nonce()?;
         let encoded = self.encode()?;
-        write_atomic(path, &encoded)?;
+        write_atomic(path, &encoded, false)?;
         Ok(())
+    }
+
+    fn save_new(&mut self, path: &Path) -> Result<(), VaultError> {
+        self.header.rotate_nonce()?;
+        let encoded = self.encode()?;
+        write_atomic(path, &encoded, true)
     }
 
     fn decode(bytes: Vec<u8>, header: Header, key: VaultKey) -> Result<Self, VaultError> {
@@ -307,7 +317,7 @@ pub(crate) fn read_private_vault(path: &Path) -> Result<Vec<u8>, VaultError> {
     Ok(bytes)
 }
 
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), VaultError> {
+fn write_atomic(path: &Path, bytes: &[u8], create_only: bool) -> Result<(), VaultError> {
     let parent = path
         .parent()
         .ok_or_else(|| VaultError::InvalidPath(path.to_path_buf()))?;
@@ -341,8 +351,28 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), VaultError> {
         file.sync_all()?;
         drop(file);
 
-        fs::rename(&temp_path, path)?;
-        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+        if create_only {
+            // hard_link is atomic and fails if the target already exists, unlike
+            // rename. Both paths are in the same private vault directory.
+            match fs::hard_link(&temp_path, path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    return Err(VaultError::AlreadyExists(path.to_path_buf()));
+                }
+                Err(error) => return Err(error.into()),
+            }
+            fs::remove_file(&temp_path)?;
+        } else {
+            // Existing target paths must already be private regular files.
+            match fs::symlink_metadata(path) {
+                Ok(meta) if !meta.is_file() || meta.permissions().mode() & 0o077 != 0 => {
+                    return Err(VaultError::UnsafeFile);
+                }
+                Ok(_) => {}
+                Err(error) => return Err(error.into()),
+            }
+            fs::rename(&temp_path, path)?;
+        }
         File::open(parent)?.sync_all()?;
         Ok(())
     })();
@@ -465,6 +495,34 @@ mod tests {
             Header::parse(&bytes),
             Err(VaultError::InvalidHeader)
         ));
+    }
+
+    #[test]
+    fn init_refuses_existing_vault_and_dangling_symlink() {
+        use std::os::unix::fs::symlink;
+        let mut entropy = [0_u8; 8];
+        fill_random(&mut entropy).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "passflick-no-clobber-test-{:016x}", u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&dir).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+        let path = dir.join("vault.passvault");
+        Vault::create(&path, b"test-one").unwrap();
+        let original = fs::read(&path).unwrap();
+        assert!(matches!(
+            Vault::create(&path, b"test-two"),
+            Err(VaultError::AlreadyExists(_))
+        ));
+        assert_eq!(fs::read(&path).unwrap(), original);
+
+        let dangling = dir.join("unresolved-link");
+        symlink(dir.join("missing"), &dangling).unwrap();
+        assert!(matches!(
+            Vault::create(&dangling, b"test-three"),
+            Err(VaultError::AlreadyExists(_))
+        ));
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
