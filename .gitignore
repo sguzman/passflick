@@ -1,0 +1,10 @@
+/target
+/.direnv
+*.csv
+*.tsv
+*.passvault
+*.passvault.*
+.env
+secrets/
+exports/
+imports/
