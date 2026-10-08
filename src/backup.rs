@@ -98,13 +98,23 @@ mod tests {
         let path = root.join("vault.passvault");
         let mut vault = Vault::create(&path, b"synthetic-key-for-restore").unwrap();
         vault.records_mut().push(Credential::new(
-            Source::Edge, "Before", "https://before.example.test", "alice", "before-secret", 1,
+            Source::Edge,
+            "Before",
+            "https://before.example.test",
+            "alice",
+            "before-secret",
+            1,
         ));
         vault.save(&path).unwrap();
         let saved = create(&path).unwrap();
 
         vault.records_mut().push(Credential::new(
-            Source::Firefox, "After", "https://after.example.test", "bob", "after-secret", 2,
+            Source::Firefox,
+            "After",
+            "https://after.example.test",
+            "bob",
+            "after-secret",
+            2,
         ));
         vault.save(&path).unwrap();
         let safety = restore_into(&path, &saved, &mut vault).unwrap();
