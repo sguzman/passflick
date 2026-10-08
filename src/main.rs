@@ -114,9 +114,9 @@ fn no_extra_args(args: &mut impl Iterator<Item = String>) -> Result<(), Box<dyn 
 
 fn run_picker(trace: startup::StartupTrace) -> eframe::Result {
     trace.mark("picker-entry");
-    let (records, notice) = load_picker_records(&trace);
+    let (records, notice, locked) = load_picker_records(&trace);
     trace.mark("records-loaded");
-    launch_picker(trace, records, notice)
+    launch_picker(trace, records, notice, locked)
 }
 
 fn demo_records() -> Vec<Credential> {
@@ -158,13 +158,14 @@ fn demo_records() -> Vec<Credential> {
 }
 
 fn run_demo_picker(trace: startup::StartupTrace) -> eframe::Result {
-    launch_picker(trace, demo_records(), None)
+    launch_picker(trace, demo_records(), None, false)
 }
 
 fn launch_picker(
     trace: startup::StartupTrace,
     records: Vec<Credential>,
     notice: Option<String>,
+    locked: bool,
 ) -> eframe::Result {
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Glow,
@@ -181,19 +182,20 @@ fn launch_picker(
     eframe::run_native(
         "Passflick",
         options,
-        Box::new(move |cc| Ok(Box::new(PickerApp::new(cc, records, notice, trace.clone())))),
+        Box::new(move |cc| Ok(Box::new(PickerApp::new(cc, records, notice, locked, trace.clone())))),
     )
 }
 
-fn load_picker_records(trace: &startup::StartupTrace) -> (Vec<Credential>, Option<String>) {
+fn load_picker_records(trace: &startup::StartupTrace) -> (Vec<Credential>, Option<String>, bool) {
     let path = match paths::vault_path() {
         Ok(path) => path,
-        Err(error) => return (Vec::new(), Some(error.to_string())),
+        Err(error) => return (Vec::new(), Some(error.to_string()), false),
     };
     if !path.exists() {
         return (
             Vec::new(),
             Some("No vault. Run passflick init once.".to_owned()),
+            false,
         );
     }
     trace.mark("vault-path-ready");
@@ -202,9 +204,8 @@ fn load_picker_records(trace: &startup::StartupTrace) -> (Vec<Credential>, Optio
         Ok(None) => {
             return (
                 Vec::new(),
-                Some(
-                    "Vault locked. Run passflick unlock, or enable keyring integration.".to_owned(),
-                ),
+                None,
+                true,
             );
         }
         Err(error) => return (Vec::new(), Some(error.to_string())),
@@ -213,13 +214,14 @@ fn load_picker_records(trace: &startup::StartupTrace) -> (Vec<Credential>, Optio
     match Vault::open_with_key(&path, key) {
         Ok(vault) => {
             trace.mark("vault-decrypted");
-            (vault.into_records(), None)
+            (vault.into_records(), None, false)
         }
         Err(error) => {
             let _ = session::clear();
             (
                 Vec::new(),
                 Some(format!("{error}. Session key cleared; unlock again.")),
+                true,
             )
         }
     }
