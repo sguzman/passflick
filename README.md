@@ -49,7 +49,7 @@ passflick import firefox /path/to/firefox-export.csv
 passflick import apple /path/to/apple-export.csv
 ```
 
-The source name identifies which snapshot is updated. A successful Edge import replaces only the previous Edge projection, not the Firefox, Chrome, or Apple records. The parser rejects malformed or empty snapshots rather than quietly wiping existing records.
+The source name identifies which snapshot is updated. A successful Edge import replaces only the previous Edge projection, not the Firefox, Chrome, or Apple records. The parser rejects malformed or empty snapshots rather than quietly wiping existing records. If a refreshed source suddenly contains fewer than half its former credentials (with at least ten previously stored), the import refuses the reduction by default. An intentional large cleanup can be imported using the final flag `--allow-shrink`.
 
 For import pipelines that produce CSV on stdout without writing a file:
 
