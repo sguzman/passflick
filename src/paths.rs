@@ -22,12 +22,3 @@ pub fn vault_path() -> Result<PathBuf, PathError> {
     Ok(data_home.join("passflick/vault.passvault"))
 }
 
-pub fn backup_dir() -> Result<PathBuf, PathError> {
-    if let Some(path) = env::var_os("PASSFLICK_BACKUP_DIR") {
-        return Ok(PathBuf::from(path));
-    }
-
-    let vault = vault_path()?;
-    let parent = vault.parent().ok_or(PathError::MissingHome)?;
-    Ok(parent.join("backups"))
-}
