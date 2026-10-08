@@ -15,6 +15,7 @@ Use the project's existing `passflick demo` command. It does not access the real
 - Shift+Enter copies the selected synthetic username exactly and exits.
 - Escape exits without modifying the current clipboard.
 - A second invocation can retrieve the other field without session unlock.
+- If the session key is absent, the picker presents a masked vault unlock field; a correct passphrase unlocks for the session, an incorrect one never exposes records, and Escape closes without copying.
 - Test focus, resize behavior, and keyboard repeat using the real compositor and application class.
 
 Record startup latency from process entry to first visible, focused frame. No numerical performance guarantee is asserted until it has been measured.
