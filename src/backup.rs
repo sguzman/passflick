@@ -40,16 +40,28 @@ pub fn create(vault_path: &Path) -> Result<PathBuf, VaultError> {
         timestamp.subsec_nanos(),
         u64::from_le_bytes(entropy),
     );
-    let destination = directory.join(basename);
-    let mut output = OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .mode(0o600)
-        .open(&destination)?;
-    output.write_all(&bytes)?;
-    output.sync_all()?;
-    drop(output);
-    File::open(&directory)?.sync_all()?;
+    let destination = directory.join(&basename);
+    let temporary = directory.join(format!(".{basename}.tmp"));
+    let result = (|| -> Result<(), VaultError> {
+        let mut output = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .mode(0o600)
+            .open(&temporary)?;
+        output.write_all(&bytes)?;
+        output.sync_all()?;
+        drop(output);
+        // Publish only a complete, synced encrypted file. A hard link fails
+        // instead of overwriting another backup with the same name.
+        fs::hard_link(&temporary, &destination)?;
+        fs::remove_file(&temporary)?;
+        File::open(&directory)?.sync_all()?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result?;
     Ok(destination)
 }
 
@@ -172,6 +184,9 @@ mod tests {
             0
         );
         assert_ne!(create(&vault_path).unwrap(), destination);
+        assert!(fs::read_dir(destination.parent().unwrap())
+            .unwrap()
+            .all(|entry| !entry.unwrap().file_name().to_string_lossy().ends_with(".tmp")));
         fs::remove_dir_all(&root).unwrap();
     }
 }
