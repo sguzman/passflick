@@ -184,9 +184,15 @@ mod tests {
             0
         );
         assert_ne!(create(&vault_path).unwrap(), destination);
-        assert!(fs::read_dir(destination.parent().unwrap())
-            .unwrap()
-            .all(|entry| !entry.unwrap().file_name().to_string_lossy().ends_with(".tmp")));
+        assert!(
+            fs::read_dir(destination.parent().unwrap())
+                .unwrap()
+                .all(|entry| !entry
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .ends_with(".tmp"))
+        );
         fs::remove_dir_all(&root).unwrap();
     }
 }
