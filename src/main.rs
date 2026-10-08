@@ -342,8 +342,12 @@ fn discover_browser_profiles() {
 }
 
 fn backup_encrypted_vault() -> Result<(), Box<dyn Error>> {
+    let path = paths::vault_path()?;
+    // Coordinate with writers so a backup always represents a stable,
+    // authenticated vault snapshot rather than racing a source refresh.
+    let _guard = write_lock::acquire(&path)?;
     // Demand a successful decrypt before preserving a vault snapshot.
-    let (path, _) = open_unlocked_vault()?;
+    let (_, _) = open_unlocked_vault()?;
     let destination = backup::create(&path)?;
     println!("Created encrypted backup at {}", destination.display());
     Ok(())
