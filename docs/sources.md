@@ -1,6 +1,6 @@
 # Credential source integration
 
-The initial Passflick ingestion contract is a **user-authorized, local CSV snapshot**. The application never modifies browser stores, uses browser-login automation, or accesses a cloud password account.
+The initial Passflick ingestion contract is a **user-authorized, local CSV snapshot**. `passflick discover` checks for potential local browser credential profiles using filenames only; discovery never reads credential contents or decrypts a browser store. The application never modifies browser stores, uses browser-login automation, or accesses a cloud password account.
 
 | Source | Primary role | Current ingestion |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ All four are exposed through `passflick import SOURCE FILE`, with the aliases `e
 4. Entries with the same website, username, and password may be grouped for display. Original records remain intact.
 5. Keep source and import timestamp. A missing or old snapshot is not represented as live browser state.
 
-Plaintext CSV files are a transient exchange format and should be deleted after their import is verified. The stdin interface (`passflick import edge -`) permits trusted exporters to stream a snapshot directly.
+Source import updates are serialized through a private lock file, preventing concurrent source refreshes from accidentally overwriting each other. Plaintext CSV files are a transient exchange format and should be deleted after their import is verified. The stdin interface (`passflick import edge -`) permits trusted exporters to stream a snapshot directly.
 
 ## Native integration research
 
