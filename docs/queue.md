@@ -4,11 +4,12 @@
 
 - [x] Identity, architecture, and interaction contract
 - [x] Multi-source credential schema and CSV parsing
-- [x] Encrypted vault and session-unlock design adapted from OTPick
+- [x] Encrypted vault, masked in-window unlock, and session-key caching adapted from OTPick
+- [x] Per-vault session-key/explicit-lock isolation for safe independent testing
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Locked Linux CI: build, 34 tests, CLI smoke checks, formatting, and strict Clippy
+- [x] Locked Linux CI: build, 38 tests, CLI smoke checks, formatting, and strict Clippy
 - [ ] Complete [synthetic target-host acceptance](acceptance.md) on EndeavourOS/Hyprland
 - [ ] Test actual Edge, Chrome, Firefox, and Apple export variants
 - [ ] Confirm clipboard exit behavior and source import refresh
@@ -23,6 +24,8 @@
 - [ ] Evaluate authorized read-only browser credential adapters
 - [x] Add bounds to import and vault parsing, private filesystem permissions, write locking, and encrypted backups
 - [x] Authenticated encrypted restore with pre-restore safety backup
+- [x] Atomically published backups with no overwrite and safe temporary-file cleanup
+- [x] Provider-signature and duplicate-header checks for CSV import snapshots
 - [ ] More security review: symlink races, keyring lifecycle, clipboard history, import edge cases
 - [ ] Keyboard latency profiling, release packaging, and MVP acceptance
 
