@@ -1,0 +1,49 @@
+name: Linux Snapshot
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: snapshot-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: false
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev libxkbcommon-dev libx11-dev libx11-xcb-dev libxcursor-dev libxi-dev libxrandr-dev libgl1-mesa-dev
+      - name: Build locked optimized executable
+        run: cargo build --locked --release
+      - name: Assemble pre-release Linux package
+        run: |
+          set -euo pipefail
+          install -Dm755 target/release/passflick package/passflick
+          install -Dm644 README.md package/README.md
+          install -Dm644 LICENSE package/LICENSE
+          mkdir -p package/docs
+          cp docs/acceptance.md docs/hyprland.md docs/security.md package/docs/
+          tar -czf passflick-linux-x86_64-pre-release.tar.gz -C package .
+          sha256sum passflick-linux-x86_64-pre-release.tar.gz > SHA256SUMS
+          test -s passflick-linux-x86_64-pre-release.tar.gz
+          test -s SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: passflick-linux-x86_64-pre-release
+          path: |
+            passflick-linux-x86_64-pre-release.tar.gz
+            SHA256SUMS
+          retention-days: 14
+          if-no-files-found: error
