@@ -25,9 +25,9 @@ fn chromium_profiles(
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
         if name != "Default"
-            && !name
-                .strip_prefix("Profile ")
-                .is_some_and(|suffix| !suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_digit()))
+            && !name.strip_prefix("Profile ").is_some_and(|suffix| {
+                !suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_digit())
+            })
         {
             continue;
         }
@@ -49,10 +49,7 @@ fn firefox_profiles(output: &mut Vec<ProfileCandidate>, root: &Path) {
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.is_dir()
-            && path.join("logins.json").is_file()
-            && path.join("key4.db").is_file()
-        {
+        if path.is_dir() && path.join("logins.json").is_file() && path.join("key4.db").is_file() {
             output.push(ProfileCandidate {
                 source: Source::Firefox,
                 browser: "Firefox",
