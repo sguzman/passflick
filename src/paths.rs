@@ -21,4 +21,3 @@ pub fn vault_path() -> Result<PathBuf, PathError> {
 
     Ok(data_home.join("passflick/vault.passvault"))
 }
-
