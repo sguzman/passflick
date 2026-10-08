@@ -69,16 +69,20 @@ pub fn parse_csv(
     // Some provider exports have a recognizable signature. Avoid accidentally
     // replacing Edge's snapshot with a Firefox or Apple CSV mislabelled as Edge.
     // Edge and Chrome headers can be identical, so this is a guard, not proof.
-    let looks_firefox = headers.iter().any(|header| {
-        matches!(header.as_str(), "httprealm" | "formactionorigin" | "guid")
-    });
+    let looks_firefox = headers
+        .iter()
+        .any(|header| matches!(header.as_str(), "httprealm" | "formactionorigin" | "guid"));
     let looks_apple = headers.iter().any(|header| header == "title")
         && headers.iter().any(|header| header == "notes");
     if looks_firefox && source != Source::Firefox {
-        return Err(ImportError::WrongSource { detected: "Firefox" });
+        return Err(ImportError::WrongSource {
+            detected: "Firefox",
+        });
     }
     if looks_apple && source != Source::Apple {
-        return Err(ImportError::WrongSource { detected: "Apple Passwords" });
+        return Err(ImportError::WrongSource {
+            detected: "Apple Passwords",
+        });
     }
     let password =
         column(&headers, &["password", "pass", "passwd"]).ok_or(ImportError::MissingPassword)?;
