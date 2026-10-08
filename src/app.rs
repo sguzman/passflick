@@ -100,7 +100,8 @@ impl eframe::App for PickerApp {
             } else if self.ranked.is_empty() {
                 ui.label("No matches.");
             } else {
-                for (row, index) in self.ranked.iter().copied().take(8).enumerate() {
+                let first_visible = self.selected.saturating_sub(7);
+                for (row, index) in self.ranked.iter().copied().enumerate().skip(first_visible).take(8) {
                     if ui.selectable_label(row == self.selected, self.records[index].display_label()).clicked() {
                         self.selected = row;
                     }
