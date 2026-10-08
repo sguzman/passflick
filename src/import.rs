@@ -138,7 +138,7 @@ pub fn validate_snapshot_refresh(
     allow_shrink: bool,
 ) -> Result<(), ImportError> {
     let existing = records.iter().filter(|record| record.source == source).count();
-    if !allow_shrink && existing >= 10 && incoming < existing / 2 {
+    if !allow_shrink && existing >= 10 && incoming.saturating_mul(2) < existing {
         return Err(ImportError::SuspiciousShrink {
             source,
             existing,
@@ -274,6 +274,11 @@ mod tests {
         ));
         assert!(validate_snapshot_refresh(&existing, Source::Edge, 2, true).is_ok());
         assert!(validate_snapshot_refresh(&existing, Source::Firefox, 1, false).is_ok());
+        let eleven = &existing[..11];
+        assert!(matches!(
+            validate_snapshot_refresh(eleven, Source::Edge, 5, false),
+            Err(ImportError::SuspiciousShrink { .. })
+        ));
     }
 
     #[test]
