@@ -115,12 +115,20 @@ mod tests {
     #[test]
     fn url_path_case_is_not_silently_folded() {
         let upper = Credential::new(
-            Source::Edge, "A", "https://example.test/Case",
-            "me", "same-password", 0,
+            Source::Edge,
+            "A",
+            "https://example.test/Case",
+            "me",
+            "same-password",
+            0,
         );
         let lower = Credential::new(
-            Source::Chrome, "A", "https://example.test/case",
-            "me", "same-password", 0,
+            Source::Chrome,
+            "A",
+            "https://example.test/case",
+            "me",
+            "same-password",
+            0,
         );
         assert!(!upper.same_identity_and_secret(&lower));
     }
