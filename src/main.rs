@@ -182,7 +182,15 @@ fn launch_picker(
     eframe::run_native(
         "Passflick",
         options,
-        Box::new(move |cc| Ok(Box::new(PickerApp::new(cc, records, notice, locked, trace.clone())))),
+        Box::new(move |cc| {
+            Ok(Box::new(PickerApp::new(
+                cc,
+                records,
+                notice,
+                locked,
+                trace.clone(),
+            )))
+        }),
     )
 }
 
@@ -201,14 +209,8 @@ fn load_picker_records(trace: &startup::StartupTrace) -> (Vec<Credential>, Optio
     trace.mark("vault-path-ready");
     let key = match load_vault_key(&path) {
         Ok(Some(key)) => key,
-        Ok(None) => {
-            return (
-                Vec::new(),
-                None,
-                true,
-            );
-        }
-        Err(error) => return (Vec::new(), Some(error.to_string())),
+        Ok(None) => return (Vec::new(), None, true),
+        Err(error) => return (Vec::new(), Some(error.to_string()), false),
     };
     trace.mark("session-key-loaded");
     match Vault::open_with_key(&path, key) {
