@@ -123,8 +123,17 @@ mod tests {
     fn session_keys_and_explicit_locks_are_scoped_per_vault() {
         let left = Path::new("/example.test/first.passvault");
         let right = Path::new("/example.test/second.passvault");
-        assert_ne!(description(KEY_NAMESPACE, left), description(KEY_NAMESPACE, right));
-        assert_ne!(description(KEY_NAMESPACE, left), description(LOCK_NAMESPACE, left));
-        assert_eq!(description(KEY_NAMESPACE, left), description(KEY_NAMESPACE, left));
+        assert_ne!(
+            description(KEY_NAMESPACE, left),
+            description(KEY_NAMESPACE, right)
+        );
+        assert_ne!(
+            description(KEY_NAMESPACE, left),
+            description(LOCK_NAMESPACE, left)
+        );
+        assert_eq!(
+            description(KEY_NAMESPACE, left),
+            description(KEY_NAMESPACE, left)
+        );
     }
 }
