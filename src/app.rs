@@ -1,5 +1,8 @@
 use crate::clipboard::copy_sensitive;
 use crate::model::Credential;
+use crate::{paths, session};
+use crate::vault::Vault;
+use zeroize::Zeroizing;
 use crate::search::{display_label_with_sources, rank_credentials};
 use crate::startup::StartupTrace;
 use eframe::egui;
@@ -10,6 +13,9 @@ pub struct PickerApp {
     ranked: Vec<usize>,
     selected: usize,
     focused: bool,
+    locked: bool,
+    unlock_focused: bool,
+    passphrase: Zeroizing<String>,
     notice: Option<String>,
     error: Option<String>,
     startup_trace: StartupTrace,
@@ -21,6 +27,7 @@ impl PickerApp {
         cc: &eframe::CreationContext<'_>,
         records: Vec<Credential>,
         notice: Option<String>,
+        locked: bool,
         startup_trace: StartupTrace,
     ) -> Self {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
@@ -43,11 +50,46 @@ impl PickerApp {
             ranked,
             selected: 0,
             focused: false,
+            locked,
+            unlock_focused: false,
+            passphrase: Zeroizing::new(String::new()),
             notice,
             error: None,
             startup_trace,
             first_frame_traced: false,
         }
+    }
+
+    fn attempt_unlock(&mut self) {
+        // The entered passphrase is owned by a zeroizing allocation and is
+        // dropped before returning on both the success and failure paths.
+        let entered = std::mem::replace(&mut self.passphrase, Zeroizing::new(String::new()));
+        if entered.is_empty() {
+            return;
+        }
+        let result = paths::vault_path()
+            .map_err(|_| ())
+            .and_then(|path| Vault::unlock(&path, entered.as_bytes()).map_err(|_| ()));
+        let vault = match result {
+            Ok(vault) => vault,
+            Err(()) => {
+                self.error = Some("Unlock failed. Check passphrase and vault integrity.".to_owned());
+                return;
+            }
+        };
+        if session::store(vault.key()).is_err() {
+            self.error = Some("Unable to cache the unlock key in this login session.".to_owned());
+            return;
+        }
+
+        self.records = vault.into_records();
+        self.locked = false;
+        self.unlock_focused = false;
+        self.focused = false;
+        self.notice = None;
+        self.error = None;
+        self.selected = 0;
+        self.refresh();
     }
 
     fn refresh(&mut self) {
@@ -98,6 +140,36 @@ impl eframe::App for PickerApp {
         let ctx = ui.ctx().clone();
         if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        }
+        if self.locked {
+            egui::CentralPanel::default().show(ui, |ui| {
+                ui.add_space(12.0);
+                ui.heading("Unlock Passflick");
+                ui.label("Enter your vault passphrase once for this login session.");
+                ui.add_space(8.0);
+                let response = ui.add(
+                    egui::TextEdit::singleline(&mut *self.passphrase)
+                        .password(true)
+                        .desired_width(f32::INFINITY)
+                        .hint_text("Vault passphrase"),
+                );
+                if !self.unlock_focused {
+                    response.request_focus();
+                    self.unlock_focused = true;
+                }
+                if response.changed() {
+                    self.error = None;
+                }
+                let should_unlock = ui.button("Unlock").clicked()
+                    || ctx.input(|input| input.key_pressed(egui::Key::Enter));
+                if let Some(error) = &self.error {
+                    ui.label(error);
+                }
+                if should_unlock {
+                    self.attempt_unlock();
+                }
+            });
             return;
         }
         if ctx.input(|input| input.key_pressed(egui::Key::ArrowUp)) {
