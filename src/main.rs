@@ -123,20 +123,36 @@ fn demo_records() -> Vec<Credential> {
     // Deliberately fictional entries only. Demo never touches real vault/keyrings.
     vec![
         Credential::new(
-            Source::Edge, "DEMO · Example", "https://demo.example.test",
-            "alice@example.test", "synthetic-demo-password-alpha", 0,
+            Source::Edge,
+            "DEMO · Example",
+            "https://demo.example.test",
+            "alice@example.test",
+            "synthetic-demo-password-alpha",
+            0,
         ),
         Credential::new(
-            Source::Chrome, "DEMO · Example", "https://demo.example.test",
-            "alice@example.test", "synthetic-demo-password-alpha", 0,
+            Source::Chrome,
+            "DEMO · Example",
+            "https://demo.example.test",
+            "alice@example.test",
+            "synthetic-demo-password-alpha",
+            0,
         ),
         Credential::new(
-            Source::Firefox, "DEMO · Example", "https://demo.example.test",
-            "alice@example.test", "synthetic-demo-password-beta", 0,
+            Source::Firefox,
+            "DEMO · Example",
+            "https://demo.example.test",
+            "alice@example.test",
+            "synthetic-demo-password-beta",
+            0,
         ),
         Credential::new(
-            Source::Apple, "DEMO · Another", "https://other.example.test",
-            "bob@example.test", "synthetic-demo-password-gamma", 0,
+            Source::Apple,
+            "DEMO · Another",
+            "https://other.example.test",
+            "bob@example.test",
+            "synthetic-demo-password-gamma",
+            0,
         ),
     ]
 }
