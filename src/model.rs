@@ -92,7 +92,7 @@ impl Credential {
         }
     }
     pub fn same_identity_and_secret(&self, other: &Self) -> bool {
-        self.url.eq_ignore_ascii_case(&other.url)
+        self.url == other.url
             && self.username == other.username
             && self.password() == other.password()
     }
@@ -112,6 +112,19 @@ mod tests {
         );
         assert_eq!(c.password(), "  möt de passe  ");
     }
+    #[test]
+    fn url_path_case_is_not_silently_folded() {
+        let upper = Credential::new(
+            Source::Edge, "A", "https://example.test/Case",
+            "me", "same-password", 0,
+        );
+        let lower = Credential::new(
+            Source::Chrome, "A", "https://example.test/case",
+            "me", "same-password", 0,
+        );
+        assert!(!upper.same_identity_and_secret(&lower));
+    }
+
     #[test]
     fn recognizes_chromium_alias() {
         assert_eq!("Chromium".parse::<Source>().unwrap(), Source::Chrome);
