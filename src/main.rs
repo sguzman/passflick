@@ -1,4 +1,5 @@
 mod app;
+mod backup;
 mod clipboard;
 mod desktop_keyring;
 mod r#import;
@@ -69,6 +70,10 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
         Some("sources") => {
             no_extra_args(&mut args)?;
             list_source_status()?;
+        }
+        Some("backup") => {
+            no_extra_args(&mut args)?;
+            backup_encrypted_vault()?;
         }
         Some("import") => {
             let source: Source = args
@@ -256,6 +261,14 @@ fn read_import_bytes(reader: impl Read) -> io::Result<Zeroizing<Vec<u8>>> {
     Ok(input)
 }
 
+fn backup_encrypted_vault() -> Result<(), Box<dyn Error>> {
+    // Demand a successful decrypt before preserving a vault snapshot.
+    let (path, _) = open_unlocked_vault()?;
+    let destination = backup::create(&path)?;
+    println!("Created encrypted backup at {}", destination.display());
+    Ok(())
+}
+
 fn list_source_status() -> Result<(), Box<dyn Error>> {
     let (_, vault) = open_unlocked_vault()?;
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
@@ -348,6 +361,7 @@ fn print_help() {
     println!("  passflick list              Show labels only (never passwords)");
     println!("  passflick status            Display vault/keyring status");
     println!("  passflick sources           Show per-source counts and refresh age");
+    println!("  passflick backup            Create an encrypted vault backup");
     println!();
     println!("  import accepts optional --allow-shrink for intentional large deletions");
     println!("Sources: edge, chrome, firefox, apple");
