@@ -447,15 +447,24 @@ mod tests {
         original.header.rotate_nonce().unwrap();
         let mut bytes = original.encode().unwrap();
         bytes[12..16].copy_from_slice(&u32::MAX.to_le_bytes());
-        assert!(matches!(Header::parse(&bytes), Err(VaultError::InvalidHeader)));
+        assert!(matches!(
+            Header::parse(&bytes),
+            Err(VaultError::InvalidHeader)
+        ));
 
         bytes[12..16].copy_from_slice(&DEFAULT_KDF.memory_kib.to_le_bytes());
         bytes[16..20].copy_from_slice(&u32::MAX.to_le_bytes());
-        assert!(matches!(Header::parse(&bytes), Err(VaultError::InvalidHeader)));
+        assert!(matches!(
+            Header::parse(&bytes),
+            Err(VaultError::InvalidHeader)
+        ));
 
         bytes[16..20].copy_from_slice(&DEFAULT_KDF.iterations.to_le_bytes());
         bytes[20..24].copy_from_slice(&0_u32.to_le_bytes());
-        assert!(matches!(Header::parse(&bytes), Err(VaultError::InvalidHeader)));
+        assert!(matches!(
+            Header::parse(&bytes),
+            Err(VaultError::InvalidHeader)
+        ));
     }
 
     #[test]
@@ -511,13 +520,17 @@ mod tests {
         let mut entropy = [0_u8; 8];
         fill_random(&mut entropy).unwrap();
         let temp = std::env::temp_dir().join(format!(
-            "passflick-security-test-{:016x}", u64::from_le_bytes(entropy)
+            "passflick-security-test-{:016x}",
+            u64::from_le_bytes(entropy)
         ));
         fs::create_dir(&temp).unwrap();
         let file = temp.join("real-vault");
         fs::write(&file, b"example").unwrap();
         fs::set_permissions(&file, fs::Permissions::from_mode(0o644)).unwrap();
-        assert!(matches!(read_private_vault(&file), Err(VaultError::UnsafeFile)));
+        assert!(matches!(
+            read_private_vault(&file),
+            Err(VaultError::UnsafeFile)
+        ));
         fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
         assert_eq!(read_private_vault(&file).unwrap(), b"example");
         let link = temp.join("vault-link");
