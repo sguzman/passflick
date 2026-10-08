@@ -1,4 +1,5 @@
 use crate::model::Credential;
+use std::collections::HashSet;
 
 pub fn rank_credentials(records: &[Credential], query: &str) -> Vec<usize> {
     let needle = query.trim().to_lowercase();
@@ -23,17 +24,16 @@ pub fn rank_credentials(records: &[Credential], query: &str) -> Vec<usize> {
             })
             .then_with(|| records[*a].username.cmp(&records[*b].username))
     });
-    let mut visible: Vec<usize> = Vec::new();
-    for (index, _) in ranked {
-        if visible
-            .iter()
-            .any(|&other| records[index].same_identity_and_secret(&records[other]))
-        {
-            continue;
-        }
-        visible.push(index);
-    }
-    visible
+    // Borrow identity and secret references from the encrypted-vault records.
+    // No second plaintext password copy, and duplicate folding is O(n) expected
+    // rather than the former quadratic pass.
+    let mut seen = HashSet::new();
+    ranked
+        .into_iter()
+        .filter_map(|(index, _)| {
+            seen.insert(records[index].identity_key()).then_some(index)
+        })
+        .collect()
 }
 
 /// Summarize all identical source records on a single visible row.
@@ -140,6 +140,15 @@ mod tests {
         let label = display_label_with_sources(&records, 1);
         assert!(label.contains("Edge + Firefox"));
         assert!(!label.contains("password-that-must-not-appear"));
+    }
+
+    #[test]
+    fn title_only_accounts_with_distinct_sites_stay_visible() {
+        let entries = vec![
+            Credential::new(Source::Apple, "Example A", "", "me", "shared", 0),
+            Credential::new(Source::Firefox, "Example B", "", "me", "shared", 0),
+        ];
+        assert_eq!(rank_credentials(&entries, ""), vec![1, 0]);
     }
 
     #[test]
