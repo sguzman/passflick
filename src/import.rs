@@ -19,10 +19,10 @@ pub enum ImportError {
     #[error("CSV contains no credentials; previous snapshot is unchanged")]
     Empty,
     #[error(
-        "suspicious {source} snapshot shrink: {existing} saved vs {incoming} imported; repeat with --allow-shrink if intentional"
+        "suspicious {provider} snapshot shrink: {existing} saved vs {incoming} imported; repeat with --allow-shrink if intentional"
     )]
     SuspiciousShrink {
-        source: Source,
+        provider: Source,
         existing: usize,
         incoming: usize,
     },
@@ -145,7 +145,7 @@ pub fn validate_snapshot_refresh(
         .count();
     if !allow_shrink && existing >= 10 && incoming.saturating_mul(2) < existing {
         return Err(ImportError::SuspiciousShrink {
-            source,
+            provider: source,
             existing,
             incoming,
         });
