@@ -152,7 +152,14 @@ mod tests {
 
     #[test]
     fn url_identity_does_not_merge_with_title_only_identity() {
-        let url = Credential::new(Source::Edge, "Example", "https://example.test", "me", "shared", 1);
+        let url = Credential::new(
+            Source::Edge,
+            "Example",
+            "https://example.test",
+            "me",
+            "shared",
+            1,
+        );
         let title = Credential::new(Source::Apple, "https://example.test", "", "me", "shared", 1);
         assert!(!url.same_identity_and_secret(&title));
     }
