@@ -67,18 +67,22 @@ impl PickerApp {
         if entered.is_empty() {
             return;
         }
-        let result = paths::vault_path()
-            .map_err(|_| ())
-            .and_then(|path| Vault::unlock(&path, entered.as_bytes()).map_err(|_| ()));
-        let vault = match result {
+        let path = match paths::vault_path() {
+            Ok(path) => path,
+            Err(_) => {
+                self.error = Some("Unable to locate the encrypted vault.".to_owned());
+                return;
+            }
+        };
+        let vault = match Vault::unlock(&path, entered.as_bytes()) {
             Ok(vault) => vault,
-            Err(()) => {
+            Err(_) => {
                 self.error =
                     Some("Unlock failed. Check passphrase and vault integrity.".to_owned());
                 return;
             }
         };
-        if session::store(vault.key()).is_err() {
+        if session::store(&path, vault.key()).is_err() {
             self.error = Some("Unable to cache the unlock key in this login session.".to_owned());
             return;
         }
