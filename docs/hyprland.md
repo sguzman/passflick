@@ -11,8 +11,8 @@ windowrule = match:class ^(passflick)$, float on, center on
 Older Hyprland releases use different syntax; for v0.46–v0.50 style configuration:
 
 ```ini
-windowrule = float, class:^(passflick)$
-windowrule = center, class:^(passflick)$
+windowrulev2 = float, class:^(passflick)$
+windowrulev2 = center, class:^(passflick)$
 ```
 
 For configurations using the newer Lua rules interface, an equivalent rule can be declared as:
