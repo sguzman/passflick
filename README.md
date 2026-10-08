@@ -26,8 +26,18 @@ Passflick is currently a **pre-release Rust application** targeting Linux/Waylan
 Build:
 
 ```sh
-cargo build --release
+cargo build --release --locked
 ```
+
+### Safe picker demo
+
+Before creating a vault or importing passwords, launch the same picker against fictional `example.test` records:
+
+```sh
+cargo run --release --locked -- demo
+```
+
+This runs without unlocking, reading, or writing the real vault. It exercises search, provider grouping, conflicts, **Enter** to copy a synthetic password, and **Shift+Enter** to copy a synthetic username. Both actions close the window.
 
 Set up your own encrypted vault:
 
