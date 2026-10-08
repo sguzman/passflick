@@ -1,0 +1,414 @@
+use std::fs::{self, File, OpenOptions};
+use std::io::Write;
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+use std::path::{Path, PathBuf};
+
+use argon2::{Algorithm, Argon2, Params, Version};
+use chacha20poly1305::{
+    XChaCha20Poly1305, XNonce,
+    aead::{Aead, KeyInit, Payload},
+};
+use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
+
+use crate::model::Credential;
+
+const MAGIC: &[u8; 8] = b"PASSFL01";
+const FORMAT_VERSION: u16 = 1;
+const PLAINTEXT_SCHEMA_VERSION: u16 = 1;
+const KDF_ARGON2ID: u8 = 1;
+const HEADER_LEN: usize = 64;
+const SALT_LEN: usize = 16;
+const NONCE_LEN: usize = 24;
+const KEY_LEN: usize = 32;
+
+const DEFAULT_KDF: KdfParams = KdfParams {
+    memory_kib: 64 * 1024,
+    iterations: 3,
+    parallelism: 1,
+};
+
+#[derive(Clone, Copy)]
+struct KdfParams {
+    memory_kib: u32,
+    iterations: u32,
+    parallelism: u32,
+}
+
+#[derive(Clone, Copy)]
+struct Header {
+    kdf: KdfParams,
+    salt: [u8; SALT_LEN],
+    nonce: [u8; NONCE_LEN],
+}
+
+pub struct VaultKey(Zeroizing<[u8; KEY_LEN]>);
+
+impl VaultKey {
+    pub(crate) fn from_bytes(bytes: [u8; KEY_LEN]) -> Self {
+        Self(Zeroizing::new(bytes))
+    }
+
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+pub struct Vault {
+    header: Header,
+    key: VaultKey,
+    records: Vec<Credential>,
+}
+
+impl Vault {
+    pub fn create(path: &Path, passphrase: &[u8]) -> Result<Self, VaultError> {
+        if path.exists() {
+            return Err(VaultError::AlreadyExists(path.to_path_buf()));
+        }
+
+        let header = Header::random(DEFAULT_KDF)?;
+        let key = derive_key(passphrase, &header)?;
+        let mut vault = Self {
+            header,
+            key,
+            records: Vec::new(),
+        };
+        vault.save(path)?;
+        Ok(vault)
+    }
+
+    pub fn unlock(path: &Path, passphrase: &[u8]) -> Result<Self, VaultError> {
+        let bytes = fs::read(path)?;
+        let header = Header::parse(&bytes)?;
+        let key = derive_key(passphrase, &header)?;
+        Self::decode(bytes, header, key)
+    }
+
+    pub fn open_with_key(path: &Path, key: VaultKey) -> Result<Self, VaultError> {
+        let bytes = fs::read(path)?;
+        let header = Header::parse(&bytes)?;
+        Self::decode(bytes, header, key)
+    }
+
+    pub fn key(&self) -> &VaultKey {
+        &self.key
+    }
+
+    pub fn records(&self) -> &[Credential] {
+        &self.records
+    }
+
+    pub fn into_records(self) -> Vec<Credential> {
+        self.records
+    }
+
+    pub fn records_mut(&mut self) -> &mut Vec<Credential> {
+        &mut self.records
+    }
+
+    pub fn save(&mut self, path: &Path) -> Result<(), VaultError> {
+        self.header.rotate_nonce()?;
+        let encoded = self.encode()?;
+        write_atomic(path, &encoded)?;
+        Ok(())
+    }
+
+    fn decode(bytes: Vec<u8>, header: Header, key: VaultKey) -> Result<Self, VaultError> {
+        if bytes.len() <= HEADER_LEN {
+            return Err(VaultError::Truncated);
+        }
+
+        let header_bytes = header.encode();
+        let cipher =
+            XChaCha20Poly1305::new_from_slice(key.as_bytes()).map_err(|_| VaultError::CipherKey)?;
+        let nonce = XNonce::from(header.nonce);
+        let plaintext = cipher
+            .decrypt(
+                &nonce,
+                Payload {
+                    msg: &bytes[HEADER_LEN..],
+                    aad: &header_bytes,
+                },
+            )
+            .map_err(|_| VaultError::Decrypt)?;
+
+        let plaintext = Zeroizing::new(plaintext);
+        let document: PlainVault = serde_json::from_slice(&plaintext)?;
+        if document.schema_version != PLAINTEXT_SCHEMA_VERSION {
+            return Err(VaultError::UnsupportedSchema(document.schema_version));
+        }
+
+        Ok(Self {
+            header,
+            key,
+            records: document.records,
+        })
+    }
+
+    fn encode(&self) -> Result<Vec<u8>, VaultError> {
+        let document = PlainVaultRef {
+            schema_version: PLAINTEXT_SCHEMA_VERSION,
+            records: &self.records,
+        };
+        let plaintext = Zeroizing::new(serde_json::to_vec(&document)?);
+
+        let header_bytes = self.header.encode();
+        let cipher = XChaCha20Poly1305::new_from_slice(self.key.as_bytes())
+            .map_err(|_| VaultError::CipherKey)?;
+        let nonce = XNonce::from(self.header.nonce);
+        let ciphertext = cipher
+            .encrypt(
+                &nonce,
+                Payload {
+                    msg: &plaintext,
+                    aad: &header_bytes,
+                },
+            )
+            .map_err(|_| VaultError::Encrypt)?;
+
+        let mut output = Vec::with_capacity(HEADER_LEN + ciphertext.len());
+        output.extend_from_slice(&header_bytes);
+        output.extend_from_slice(&ciphertext);
+        Ok(output)
+    }
+}
+
+#[derive(Deserialize)]
+struct PlainVault {
+    schema_version: u16,
+    records: Vec<Credential>,
+}
+
+#[derive(Serialize)]
+struct PlainVaultRef<'a> {
+    schema_version: u16,
+    records: &'a [Credential],
+}
+
+impl Header {
+    fn random(kdf: KdfParams) -> Result<Self, VaultError> {
+        let mut salt = [0_u8; SALT_LEN];
+        let mut nonce = [0_u8; NONCE_LEN];
+        fill_random(&mut salt)?;
+        fill_random(&mut nonce)?;
+
+        Ok(Self { kdf, salt, nonce })
+    }
+
+    fn rotate_nonce(&mut self) -> Result<(), VaultError> {
+        fill_random(&mut self.nonce)
+    }
+
+    fn encode(&self) -> [u8; HEADER_LEN] {
+        let mut bytes = [0_u8; HEADER_LEN];
+        bytes[0..8].copy_from_slice(MAGIC);
+        bytes[8..10].copy_from_slice(&FORMAT_VERSION.to_le_bytes());
+        bytes[10] = KDF_ARGON2ID;
+        bytes[11] = 0;
+        bytes[12..16].copy_from_slice(&self.kdf.memory_kib.to_le_bytes());
+        bytes[16..20].copy_from_slice(&self.kdf.iterations.to_le_bytes());
+        bytes[20..24].copy_from_slice(&self.kdf.parallelism.to_le_bytes());
+        bytes[24..40].copy_from_slice(&self.salt);
+        bytes[40..64].copy_from_slice(&self.nonce);
+        bytes
+    }
+
+    fn parse(bytes: &[u8]) -> Result<Self, VaultError> {
+        if bytes.len() < HEADER_LEN {
+            return Err(VaultError::Truncated);
+        }
+        if &bytes[0..8] != MAGIC {
+            return Err(VaultError::BadMagic);
+        }
+
+        let version = u16::from_le_bytes(bytes[8..10].try_into().expect("fixed header slice"));
+        if version != FORMAT_VERSION {
+            return Err(VaultError::UnsupportedFormat(version));
+        }
+        if bytes[10] != KDF_ARGON2ID {
+            return Err(VaultError::UnsupportedKdf(bytes[10]));
+        }
+        if bytes[11] != 0 {
+            return Err(VaultError::InvalidHeader);
+        }
+
+        let memory_kib = u32::from_le_bytes(bytes[12..16].try_into().expect("fixed header slice"));
+        let iterations = u32::from_le_bytes(bytes[16..20].try_into().expect("fixed header slice"));
+        let parallelism = u32::from_le_bytes(bytes[20..24].try_into().expect("fixed header slice"));
+
+        let mut salt = [0_u8; SALT_LEN];
+        salt.copy_from_slice(&bytes[24..40]);
+        let mut nonce = [0_u8; NONCE_LEN];
+        nonce.copy_from_slice(&bytes[40..64]);
+
+        Ok(Self {
+            kdf: KdfParams {
+                memory_kib,
+                iterations,
+                parallelism,
+            },
+            salt,
+            nonce,
+        })
+    }
+}
+
+fn derive_key(passphrase: &[u8], header: &Header) -> Result<VaultKey, VaultError> {
+    let params = Params::new(
+        header.kdf.memory_kib,
+        header.kdf.iterations,
+        header.kdf.parallelism,
+        Some(KEY_LEN),
+    )
+    .map_err(|error| VaultError::Kdf(error.to_string()))?;
+
+    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    let mut key = [0_u8; KEY_LEN];
+    argon2
+        .hash_password_into(passphrase, &header.salt, &mut key)
+        .map_err(|error| VaultError::Kdf(error.to_string()))?;
+
+    Ok(VaultKey::from_bytes(key))
+}
+
+fn fill_random(bytes: &mut [u8]) -> Result<(), VaultError> {
+    getrandom::fill(bytes).map_err(|error| VaultError::Random(error.to_string()))
+}
+
+fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), VaultError> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| VaultError::InvalidPath(path.to_path_buf()))?;
+
+    if !parent.exists() {
+        let mut builder = fs::DirBuilder::new();
+        builder.recursive(true).mode(0o700);
+        builder.create(parent)?;
+    }
+
+    let mut suffix = [0_u8; 8];
+    fill_random(&mut suffix)?;
+    let suffix = u64::from_le_bytes(suffix);
+    let temp_path = parent.join(format!(
+        ".passflick-vault.tmp.{}.{suffix:016x}",
+        std::process::id()
+    ));
+
+    let result = (|| -> Result<(), VaultError> {
+        let mut file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .mode(0o600)
+            .open(&temp_path)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+
+        fs::rename(&temp_path, path)?;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+        File::open(parent)?.sync_all()?;
+        Ok(())
+    })();
+
+    if result.is_err() {
+        let _ = fs::remove_file(&temp_path);
+    }
+
+    result
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum VaultError {
+    #[error("vault already exists at {0}")]
+    AlreadyExists(PathBuf),
+    #[error("invalid vault path: {0}")]
+    InvalidPath(PathBuf),
+    #[error("vault is truncated")]
+    Truncated,
+    #[error("not an Passflick vault")]
+    BadMagic,
+    #[error("unsupported vault format version {0}")]
+    UnsupportedFormat(u16),
+    #[error("unsupported vault plaintext schema {0}")]
+    UnsupportedSchema(u16),
+    #[error("unsupported vault KDF id {0}")]
+    UnsupportedKdf(u8),
+    #[error("invalid vault header")]
+    InvalidHeader,
+    #[error("Argon2 key derivation failed: {0}")]
+    Kdf(String),
+    #[error("system randomness failed: {0}")]
+    Random(String),
+    #[error("invalid encryption key")]
+    CipherKey,
+    #[error("vault encryption failed")]
+    Encrypt,
+    #[error("vault decryption failed; the passphrase or session key is wrong")]
+    Decrypt,
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::Source;
+
+    const TEST_KDF: KdfParams = KdfParams {
+        memory_kib: 8,
+        iterations: 1,
+        parallelism: 1,
+    };
+
+    fn test_vault(passphrase: &[u8]) -> Vault {
+        let header = Header::random(TEST_KDF).unwrap();
+        let key = derive_key(passphrase, &header).unwrap();
+        Vault {
+            header,
+            key,
+            records: vec![Credential::new(
+                Source::Edge, "Example", "https://example.test",
+                "alice@example.test", "strong sample value", 1234,
+            )],
+        }
+    }
+
+    #[test]
+    fn encrypted_round_trip_preserves_records_and_hides_plaintext() {
+        let mut original = test_vault(b"correct horse battery staple");
+        original.header.rotate_nonce().unwrap();
+        let bytes = original.encode().unwrap();
+        for sensitive in ["alice@example.test", "strong sample value"] {
+            assert!(!bytes.windows(sensitive.len()).any(|w| w == sensitive.as_bytes()));
+        }
+        let header = Header::parse(&bytes).unwrap();
+        let key = derive_key(b"correct horse battery staple", &header).unwrap();
+        let reopened = Vault::decode(bytes, header, key).unwrap();
+        assert_eq!(reopened.records().len(), 1);
+        assert_eq!(reopened.records()[0].password(), "strong sample value");
+    }
+
+    #[test]
+    fn wrong_key_cannot_decrypt() {
+        let mut original = test_vault(b"right");
+        original.header.rotate_nonce().unwrap();
+        let bytes = original.encode().unwrap();
+        let header = Header::parse(&bytes).unwrap();
+        let wrong_key = derive_key(b"wrong", &header).unwrap();
+        assert!(matches!(Vault::decode(bytes, header, wrong_key), Err(VaultError::Decrypt)));
+    }
+
+    #[test]
+    fn authenticated_header_rejects_tampering() {
+        let mut original = test_vault(b"passphrase");
+        original.header.rotate_nonce().unwrap();
+        let mut bytes = original.encode().unwrap();
+        bytes[12] ^= 1;
+        let header = Header::parse(&bytes).unwrap();
+        let key = derive_key(b"passphrase", &header).unwrap();
+        assert!(matches!(Vault::decode(bytes, header, key), Err(VaultError::Decrypt)));
+    }
+}
