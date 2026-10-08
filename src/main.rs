@@ -2,6 +2,7 @@ mod app;
 mod backup;
 mod clipboard;
 mod desktop_keyring;
+mod discovery;
 mod r#import;
 mod model;
 mod paths;
@@ -70,6 +71,10 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
         Some("sources") => {
             no_extra_args(&mut args)?;
             list_source_status()?;
+        }
+        Some("discover") => {
+            no_extra_args(&mut args)?;
+            discover_browser_profiles();
         }
         Some("backup") => {
             no_extra_args(&mut args)?;
@@ -264,6 +269,18 @@ fn read_import_bytes(reader: impl Read) -> io::Result<Zeroizing<Vec<u8>>> {
     Ok(input)
 }
 
+fn discover_browser_profiles() {
+    let candidates = discovery::discover();
+    if candidates.is_empty() {
+        println!("No local supported browser credential profiles detected.");
+        return;
+    }
+    for profile in candidates {
+        println!("{}: {} / {} (read-only discovery)", profile.source, profile.browser, profile.profile);
+    }
+    println!("Discovery does not import, decrypt, or sync browser credentials.");
+}
+
 fn backup_encrypted_vault() -> Result<(), Box<dyn Error>> {
     // Demand a successful decrypt before preserving a vault snapshot.
     let (path, _) = open_unlocked_vault()?;
@@ -364,6 +381,7 @@ fn print_help() {
     println!("  passflick list              Show labels only (never passwords)");
     println!("  passflick status            Display vault/keyring status");
     println!("  passflick sources           Show per-source counts and refresh age");
+    println!("  passflick discover          Find local browser profiles, no secret access");
     println!("  passflick backup            Create an encrypted vault backup");
     println!();
     println!("  import accepts optional --allow-shrink for intentional large deletions");
