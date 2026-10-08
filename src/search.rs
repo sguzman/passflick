@@ -36,6 +36,37 @@ pub fn rank_credentials(records: &[Credential], query: &str) -> Vec<usize> {
     visible
 }
 
+/// Summarize all identical source records on a single visible row.
+/// Neither this string nor search ranking contains password material.
+pub fn display_label_with_sources(records: &[Credential], selected: usize) -> String {
+    let credential = &records[selected];
+    let mut sources = vec![credential.source];
+    for record in records {
+        if record.source != credential.source
+            && record.same_identity_and_secret(credential)
+            && !sources.contains(&record.source)
+        {
+            sources.push(record.source);
+        }
+    }
+    sources.sort_by_key(|source| source.priority());
+    let source_labels = sources
+        .into_iter()
+        .map(|source| source.label())
+        .collect::<Vec<_>>()
+        .join(" + ");
+
+    if credential.username.is_empty() {
+        format!("{}  ·  {source_labels}", credential.title())
+    } else {
+        format!(
+            "{}  ·  {}  ·  {source_labels}",
+            credential.title(),
+            credential.username
+        )
+    }
+}
+
 fn score(rec: &Credential, query: &str) -> Option<i32> {
     if query.is_empty() {
         return Some(0);
@@ -100,6 +131,17 @@ mod tests {
         ];
         assert_eq!(rank_credentials(&records, "git"), vec![1]);
     }
+    #[test]
+    fn display_shows_duplicate_provenance_without_secret() {
+        let records = vec![
+            record(Source::Firefox, "GitHub", "password-that-must-not-appear"),
+            record(Source::Edge, "GitHub", "password-that-must-not-appear"),
+        ];
+        let label = display_label_with_sources(&records, 1);
+        assert!(label.contains("Edge + Firefox"));
+        assert!(!label.contains("password-that-must-not-appear"));
+    }
+
     #[test]
     fn conflicts_remain_selectable() {
         let records = vec![
