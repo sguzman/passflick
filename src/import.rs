@@ -28,6 +28,8 @@ pub enum ImportError {
     InvalidRow { row: usize, reason: &'static str },
     #[error("CSV contains no credentials; previous snapshot is unchanged")]
     Empty,
+    #[error("import batch includes credentials attributed to a different source; previous snapshot is unchanged")]
+    MismatchedSource,
     #[error(
         "suspicious {provider} snapshot shrink: {existing} saved vs {incoming} imported; repeat with --allow-shrink if intentional"
     )]
@@ -214,6 +216,14 @@ pub fn commit_snapshot(
     incoming: Vec<Credential>,
     allow_shrink: bool,
 ) -> Result<SnapshotResult, ImportError> {
+    // Enforce the non-destructive import contract here as well as in CSV
+    // parsing. Future providers may call this directly without CSV input.
+    if incoming.is_empty() {
+        return Err(ImportError::Empty);
+    }
+    if incoming.iter().any(|record| record.source != source) {
+        return Err(ImportError::MismatchedSource);
+    }
     validate_snapshot_refresh(vault.records(), source, incoming.len(), allow_shrink)?;
     let previous_backup = if vault.records().iter().any(|record| record.source == source) {
         Some(backup::create(path)?)
@@ -379,6 +389,28 @@ mod tests {
         let initial = commit_snapshot(&path, &mut vault, Source::Edge, first, false).unwrap();
         assert_eq!(initial.count, 1);
         assert!(initial.previous_backup.is_none());
+
+        // The transaction boundary protects the existing encrypted vault even
+        // if a future importer bypasses parse_csv and opts into large shrinks.
+        let before = std::fs::read(&path).unwrap();
+        assert!(matches!(
+            commit_snapshot(&path, &mut vault, Source::Edge, Vec::new(), true),
+            Err(ImportError::Empty)
+        ));
+        let firefox_batch = vec![Credential::new(
+            Source::Firefox,
+            "Wrong source",
+            "https://wrong.example.test",
+            "alice",
+            "fixture",
+            2,
+        )];
+        assert!(matches!(
+            commit_snapshot(&path, &mut vault, Source::Edge, firefox_batch, true),
+            Err(ImportError::MismatchedSource)
+        ));
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert!(!root.join("backups").exists());
 
         let second = parse_csv(
             b"name,url,username,password\nSecond,https://example.test,alice,new-test-password\n",
