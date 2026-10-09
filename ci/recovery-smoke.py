@@ -107,6 +107,31 @@ def main() -> None:
         run_cli(executable, environment, "init")
         assert stat.S_IMODE(vault.stat().st_mode) == 0o600
         run_cli(executable, environment, "import", "edge", str(export))
+        prior_to_rejected_imports = vault.read_bytes()
+
+        # An ambiguous password field must not replace the prior source.
+        ambiguous_export = root / "ambiguous-export.csv"
+        ambiguous_export.write_bytes(
+            b"name,url,username,password,pass\n"
+            b"Wrong,https://example.test,synthetic-user,one,two\n"
+        )
+        run_cli(
+            executable, environment, "import", "edge", str(ambiguous_export),
+            success=False,
+        )
+        assert vault.read_bytes() == prior_to_rejected_imports
+
+        # A missing username column must not silently erase usernames.
+        incomplete_export = root / "incomplete-export.csv"
+        incomplete_export.write_bytes(
+            b"name,url,password\n"
+            b"Wrong,https://example.test,fictional-ci-password\n"
+        )
+        run_cli(
+            executable, environment, "import", "edge", str(incomplete_export),
+            success=False,
+        )
+        assert vault.read_bytes() == prior_to_rejected_imports
         run_cli(executable, environment, "backup")
         snapshots = list((root / "backups").glob("*.passvault"))
         assert len(snapshots) == 1, "Expected one encrypted snapshot"
