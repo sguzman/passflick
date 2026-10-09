@@ -377,7 +377,9 @@ mod tests {
         )
         .unwrap();
         let updated = commit_snapshot(&path, &mut vault, Source::Edge, second, false).unwrap();
-        let old_path = updated.previous_backup.expect("existing source must be backed up");
+        let old_path = updated
+            .previous_backup
+            .expect("existing source must be backed up");
         let previous = Vault::unlock(&old_path, passphrase).unwrap();
         let current = Vault::unlock(&path, passphrase).unwrap();
         assert_eq!(previous.records()[0].password(), "old-test-password");
