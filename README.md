@@ -31,6 +31,8 @@ cargo build --release --locked
 
 CI can produce a checksummed, **pre-release Linux x86_64 archive** under the [Linux Snapshot workflow](https://github.com/sguzman/passflick/actions/workflows/linux-snapshot.yml). Optimized snapshots are built on explicit workflow requests or version tags, not on every code commit; an existing artifact may therefore lag `main`. Its binary is not yet certified for production passwords or verified on Hyprland.
 
+The archive also includes `passflick.desktop` and `install-user.sh`. After extracting the archive, `bash install-user.sh` installs the executable into your user binary directory and registers a graphical application launcher. This requires no root access, opens no terminal emulator, and does not modify Hyprland's configuration or any password manager. The launcher uses an absolute executable path so it works even if your desktop session has a different `PATH`.
+
 ### Safe picker demo
 
 Before creating a vault or importing passwords, launch the same picker against fictional `example.test` records:
