@@ -10,6 +10,7 @@ on:
       - 'desktop/**'
       - 'scripts/install-user.sh'
       - 'ci/desktop-smoke.sh'
+      - 'ci/recovery-smoke.py'
       - '.github/workflows/rust.yml'
   pull_request:
     paths:
@@ -20,6 +21,7 @@ on:
       - 'desktop/**'
       - 'scripts/install-user.sh'
       - 'ci/desktop-smoke.sh'
+      - 'ci/recovery-smoke.py'
       - '.github/workflows/rust.yml'
   workflow_dispatch:
 
@@ -52,6 +54,10 @@ jobs:
         run: |
           cargo run --locked --quiet -- --help | grep -F 'Shift+Enter'
           cargo run --locked --quiet -- --version
+      - name: Synthetic encrypted recovery smoke test
+        run: |
+          cargo build --locked
+          python3 ci/recovery-smoke.py target/debug/passflick
       - name: Clippy
         run: cargo clippy --locked --all-targets -- -D warnings
 
