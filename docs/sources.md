@@ -23,7 +23,7 @@ Source import updates are serialized through a private lock file, preventing con
 
 ## Documented CSV layouts
 
-The parser includes fictional regression cases for the documented provider layouts. These are not substitutes for checking a recent, authorized export from each real browser.
+The parser includes fictional regression cases for the documented provider layouts. An [end-to-end CI run](https://github.com/sguzman/passflick/actions/runs/37974510558) also verified four concurrent provider projections, a rejected mislabeled Apple export, and source-specific shrink protection. These synthetic tests are not substitutes for checking a recent, authorized export from each real browser.
 
 - Edge and Chrome/Chromium commonly use `name,url,username,password` or another header set containing `url,username,password`. The two cannot always be distinguished from header text alone.
 - Firefox exports `url,username,password,httpRealm,formActionOrigin,guid,timeCreated,timeLastUsed,timePasswordChanged`. Its realm, GUID, and timestamps are not copied into the Passflick record.

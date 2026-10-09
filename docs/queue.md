@@ -13,9 +13,10 @@
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Rust CI verified at [`4a57938`](https://github.com/sguzman/passflick/actions/runs/37970160238): 75 passed tests, locked CLI checks, formatting, desktop installation smoke, synthetic encrypted recovery/import smoke, and strict Clippy
+- [x] Rust CI verified at [`221bd76`](https://github.com/sguzman/passflick/actions/runs/37974510558): 75 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/import smoke, and strict Clippy
 - [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
-- [x] Synthetic CLI source refresh passed: adding Firefox then replacing Edge preserves Firefox and retains the encrypted pre-refresh backup
+- [x] Synthetic CLI source refresh passed: Firefox survives Edge replacement; a large accidental Edge shrink is rejected without vault mutation, and `--allow-shrink` preserves Firefox
+- [x] Four-provider synthetic CLI ingestion passed: Edge, Chrome, Firefox, and Apple coexist; Apple exports mislabeled as Edge are rejected without mutation
 - [x] Synthetic filesystem regression tests passed in Rust CI
 - [ ] Confirm filesystem edge cases on target EndeavourOS/Hyprland
 - [x] Automated X11 keyboard/copy/close smoke tests under Xvfb
