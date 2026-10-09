@@ -480,7 +480,9 @@ pub enum VaultError {
     InvalidHeader,
     #[error("vault file must be a private regular file owned by the current user")]
     UnsafeFile,
-    #[error("vault or backup directory must be private, owned by the current user, and not a symlink")]
+    #[error(
+        "vault or backup directory must be private, owned by the current user, and not a symlink"
+    )]
     UnsafeDirectory,
     #[error("vault exceeds 64 MiB safety limit")]
     TooLarge,
