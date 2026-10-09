@@ -302,6 +302,63 @@ mod tests {
     }
 
     #[test]
+    fn recovery_can_replace_a_different_vault_key_without_reusing_old_secrets() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-cross-key-recovery-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let old_path = root.join("old/vault.passvault");
+        let new_path = root.join("new/vault.passvault");
+        let old_passphrase = b"fictional-old-vault-passphrase";
+        let new_passphrase = b"fictional-recovery-vault-passphrase";
+
+        let mut old = Vault::create(&old_path, old_passphrase).unwrap();
+        old.records_mut().push(Credential::new(
+            Source::Edge,
+            "Former vault",
+            "https://old.example.test",
+            "old-user",
+            "fictional-old-secret",
+            1,
+        ));
+        old.save(&old_path).unwrap();
+        let before = fs::read(&old_path).unwrap();
+
+        let mut incoming = Vault::create(&new_path, new_passphrase).unwrap();
+        incoming.records_mut().push(Credential::new(
+            Source::Firefox,
+            "Incoming vault",
+            "https://new.example.test",
+            "new-user",
+            "fictional-new-secret",
+            2,
+        ));
+        incoming.save(&new_path).unwrap();
+        let snapshot = create(&new_path).unwrap();
+        let imported_bytes = fs::read(&snapshot).unwrap();
+
+        // Recovery must authenticate with the backup's own passphrase, not
+        // the damaged primary's old key. A bad password is non-destructive.
+        assert!(recover_into(&old_path, &snapshot, old_passphrase).is_err());
+        assert_eq!(fs::read(&old_path).unwrap(), before);
+
+        let result = recover_into(&old_path, &snapshot, new_passphrase).unwrap();
+        assert_eq!(result.records, 1);
+        assert_eq!(fs::read(&old_path).unwrap(), imported_bytes);
+        let safety = result.previous_raw_snapshot.expect("old ciphertext copy");
+        assert_eq!(fs::read(safety).unwrap(), before);
+
+        let reopened = Vault::unlock(&old_path, new_passphrase).unwrap();
+        assert_eq!(reopened.records().len(), 1);
+        assert_eq!(reopened.records()[0].source, Source::Firefox);
+        assert_eq!(reopened.records()[0].password(), "fictional-new-secret");
+        assert!(Vault::unlock(&old_path, old_passphrase).is_err());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn backup_is_byte_exact_and_privately_permissioned() {
         let mut entropy = [0_u8; 8];
         getrandom::fill(&mut entropy).unwrap();
