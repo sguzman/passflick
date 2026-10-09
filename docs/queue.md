@@ -9,6 +9,7 @@
 - [x] Per-vault session-key/explicit-lock isolation for safe independent testing
 - [x] Graceful one-shot GUI and interactive CLI fallback when session caching is unavailable
 - [x] Reject empty/mixed-provider import batches and NUL-containing clipboard values before committing
+- [x] Neutralize terminal escape and bidirectional text-control characters in visible metadata without changing copied usernames
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
