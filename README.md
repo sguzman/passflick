@@ -23,11 +23,13 @@ There is no persistent tray app, no browser dependency for ordinary lookups, and
 
 Passflick is currently a **pre-release Rust application** targeting Linux/Wayland, with Hyprland as the primary desktop. Its functional workflow is being validated; real credentials should not be imported before target-host acceptance and further security testing.
 
-Build:
+Build locally if needed:
 
 ```sh
 cargo build --release --locked
 ```
+
+CI also produces a checksummed, **pre-release Linux x86_64 archive** under the [Linux Snapshot workflow](https://github.com/sguzman/passflick/actions/workflows/linux-snapshot.yml). Its binary is not yet certified for production passwords or verified on Hyprland.
 
 ### Safe picker demo
 
