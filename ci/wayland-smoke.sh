@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Headless Wayland compositor startup test with fictional demo credentials.
-# This verifies a native Wayland window reaches its first egui frame; it does
-# not claim to test Hyprland's floating rules or real clipboard behavior.
+# Verify native Wayland first-frame rendering and a fictional clipboard
+# round-trip. This does not prove Hyprland-specific floating or focus behavior.
 set -euo pipefail
 
 tmp="$(mktemp -d)"
@@ -53,10 +53,11 @@ fi
 ./target/debug/passflick demo >"$tmp/picker.stdout" 2>"$tmp/picker.stderr" &
 picker_pid="$!"
 
+first_frame=0
 for _ in $(seq 1 150); do
   if grep -q '^passflick-startup first-frame ' "$tmp/picker.stderr"; then
-    echo "Passflick reached its first native Wayland frame with synthetic credentials."
-    exit 0
+    first_frame=1
+    break
   fi
   if ! kill -0 "$picker_pid" 2>/dev/null; then
     cat "$tmp/picker.stderr" "$tmp/weston.log" >&2
@@ -65,6 +66,17 @@ for _ in $(seq 1 150); do
   fi
   sleep 0.1
 done
-cat "$tmp/picker.stderr" "$tmp/weston.log" >&2
-echo "Wayland picker never rendered its first frame" >&2
-exit 1
+if [[ "$first_frame" -ne 1 ]]; then
+  cat "$tmp/picker.stderr" "$tmp/weston.log" >&2
+  echo "Wayland picker never rendered its first frame" >&2
+  exit 1
+fi
+echo "Passflick reached its first native Wayland frame with synthetic credentials."
+
+# Exercise the same MIME type, sensitive hint, and byte-preserving clipboard
+# transport as Passflick. Do not run this with a real vault or user clipboard.
+printf 'fictional-wayland-password  \n\n' > "$tmp/clipboard.expected"
+wl-copy --sensitive --type 'text/plain;charset=utf-8' < "$tmp/clipboard.expected"
+timeout 10s wl-paste --no-newline --type 'text/plain;charset=utf-8' > "$tmp/clipboard.actual"
+cmp "$tmp/clipboard.expected" "$tmp/clipboard.actual"
+echo "Wayland sensitive clipboard preserved synthetic trailing spaces and newlines."
