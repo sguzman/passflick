@@ -32,7 +32,7 @@ Use isolated temporary XDG data directories and synthetic CSV exports for all fo
 - Import the same source twice; confirm its snapshot updates rather than accumulating duplicates, and the original encrypted snapshot is automatically saved under `backups/` before replacement.
 - Import two sources and refresh one; verify the other is preserved.
 - Reject malformed rows, missing required columns, and oversized exports without changing a valid snapshot.
-- Reject two different CSV header aliases for one field (such as `password` and `pass`, or `url` and `website`) before source replacement.
+- Reject two different CSV header aliases for one field (such as `password` and `pass`, or `url` and `website`) before source replacement. Also reject a missing username header without rejecting rows whose username value is blank.
 - Test unusually small snapshots and the explicit `--allow-shrink` override.
 - Verify private file and directory permissions, encrypted contents, and authenticated decryption failure after tampering.
 - Confirm an active vault refuses unlock from a shared or symlinked immediate directory even if its file is mode 0600; confirm encrypted snapshots remain verifiable from an external directory when the snapshot file itself is private.
