@@ -14,8 +14,10 @@ pub struct PickerApp {
     selected: usize,
     focused: bool,
     locked: bool,
+    setup_required: bool,
     unlock_focused: bool,
     passphrase: Zeroizing<String>,
+    confirmation: Zeroizing<String>,
     notice: Option<String>,
     error: Option<String>,
     startup_trace: StartupTrace,
@@ -28,6 +30,7 @@ impl PickerApp {
         records: Vec<Credential>,
         notice: Option<String>,
         locked: bool,
+        setup_required: bool,
         startup_trace: StartupTrace,
     ) -> Self {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
@@ -51,13 +54,68 @@ impl PickerApp {
             selected: 0,
             focused: false,
             locked,
+            setup_required,
             unlock_focused: false,
             passphrase: Zeroizing::new(String::new()),
+            confirmation: Zeroizing::new(String::new()),
             notice,
             error: None,
             startup_trace,
             first_frame_traced: false,
         }
+    }
+
+    fn ready(&mut self, records: Vec<Credential>) {
+        self.records = records;
+        self.locked = false;
+        self.setup_required = false;
+        self.unlock_focused = false;
+        self.focused = false;
+        self.query.clear();
+        self.notice = None;
+        self.error = None;
+        self.selected = 0;
+        self.refresh();
+    }
+
+    fn attempt_setup(&mut self) {
+        // Keep both entry fields in zeroizing storage and clear them even when
+        // creation fails. Never call an external terminal or shell for setup.
+        let first = std::mem::replace(&mut self.passphrase, Zeroizing::new(String::new()));
+        let confirmation =
+            std::mem::replace(&mut self.confirmation, Zeroizing::new(String::new()));
+        self.unlock_focused = false;
+        if first.is_empty() {
+            self.error = Some("A non-empty vault passphrase is required.".to_owned());
+            return;
+        }
+        if first.as_str() != confirmation.as_str() {
+            self.error = Some("Passphrases do not match.".to_owned());
+            return;
+        }
+        let path = match paths::vault_path() {
+            Ok(path) => path,
+            Err(error) => {
+                self.error = Some(error.to_string());
+                return;
+            }
+        };
+        let vault = match Vault::create(&path, first.as_bytes()) {
+            Ok(vault) => vault,
+            Err(error) => {
+                self.error = Some(format!("Vault creation failed: {error}"));
+                return;
+            }
+        };
+        self.setup_required = false;
+        if session::store(&path, vault.key()).is_err() {
+            // The encrypted vault was successfully created and must never be
+            // overwritten on retry. Offer the normal unlock flow instead.
+            self.locked = true;
+            self.error = Some("Vault created; session unlock failed. Enter your passphrase to retry.".to_owned());
+            return;
+        }
+        self.ready(vault.into_records());
     }
 
     fn attempt_unlock(&mut self) {
@@ -87,14 +145,7 @@ impl PickerApp {
             return;
         }
 
-        self.records = vault.into_records();
-        self.locked = false;
-        self.unlock_focused = false;
-        self.focused = false;
-        self.notice = None;
-        self.error = None;
-        self.selected = 0;
-        self.refresh();
+        self.ready(vault.into_records());
     }
 
     fn refresh(&mut self) {
@@ -145,6 +196,43 @@ impl eframe::App for PickerApp {
         let ctx = ui.ctx().clone();
         if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        }
+        if self.setup_required {
+            egui::CentralPanel::default().show(ui, |ui| {
+                ui.add_space(12.0);
+                ui.heading("Create your Passflick vault");
+                ui.label("This stores a separate, encrypted local copy of your credentials.");
+                ui.label("Choose a long, unique passphrase.");
+                ui.add_space(8.0);
+                let first = ui.add(
+                    egui::TextEdit::singleline(&mut *self.passphrase)
+                        .password(true)
+                        .desired_width(f32::INFINITY)
+                        .hint_text("New vault passphrase"),
+                );
+                if !self.unlock_focused {
+                    first.request_focus();
+                    self.unlock_focused = true;
+                }
+                let second = ui.add(
+                    egui::TextEdit::singleline(&mut *self.confirmation)
+                        .password(true)
+                        .desired_width(f32::INFINITY)
+                        .hint_text("Confirm passphrase"),
+                );
+                if first.changed() || second.changed() {
+                    self.error = None;
+                }
+                let create = ui.button("Create encrypted vault").clicked()
+                    || ctx.input(|input| input.key_pressed(egui::Key::Enter));
+                if let Some(error) = &self.error {
+                    ui.label(error);
+                }
+                if create {
+                    self.attempt_setup();
+                }
+            });
             return;
         }
         if self.locked {
