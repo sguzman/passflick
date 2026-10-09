@@ -39,5 +39,5 @@ jobs:
         run: cargo build --locked
       - name: Exercise picker with synthetic account data only
         run: xvfb-run -a bash ci/gui-smoke.sh
-      - name: Verify first native Wayland frame using headless Weston
-        run: bash ci/wayland-smoke.sh
+      - name: Verify native Wayland frame and clipboard using nested Weston
+        run: xvfb-run -a bash ci/wayland-smoke.sh
