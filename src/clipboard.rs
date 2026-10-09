@@ -13,6 +13,8 @@ pub enum ClipboardError {
     Wait(#[source] io::Error),
     #[error("wl-copy exited unsuccessfully")]
     Failed,
+    #[error("wl-clipboard 2.3 or newer is needed for sensitive password copying; upgrade wl-clipboard")]
+    SensitiveUnsupported,
 }
 
 /// Preserve every byte of a password, including intentional trailing newlines.
@@ -21,6 +23,10 @@ fn wl_copy_command() -> Command {
     let mut command = Command::new("wl-copy");
     command.args(["--type", "text/plain;charset=utf-8", "--sensitive"]);
     command
+}
+
+fn has_sensitive_flag(output: &[u8]) -> bool {
+    output.windows(b"--sensitive".len()).any(|window| window == b"--sensitive")
 }
 
 pub fn copy_sensitive(text: &str) -> Result<(), ClipboardError> {
@@ -39,6 +45,20 @@ pub fn copy_sensitive(text: &str) -> Result<(), ClipboardError> {
 
     let status = child.wait().map_err(ClipboardError::Wait)?;
     if !status.success() {
+        // Fail closed rather than silently using the ordinary clipboard.
+        // wl-clipboard <2.3 does not understand --sensitive; dropping the
+        // flag without an explicit decision risks persistent secret history.
+        if let Ok(help) = Command::new("wl-copy")
+            .arg("--help")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+        {
+            let supports_hint = has_sensitive_flag(&help.stdout) || has_sensitive_flag(&help.stderr);
+            if !supports_hint {
+                return Err(ClipboardError::SensitiveUnsupported);
+            }
+        }
         return Err(ClipboardError::Failed);
     }
 
@@ -48,6 +68,12 @@ pub fn copy_sensitive(text: &str) -> Result<(), ClipboardError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sensitive_flag_detection_distinguishes_old_and_new_wl_copy() {
+        assert!(!has_sensitive_flag(b"wl-copy --type --paste-once --trim-newline"));
+        assert!(has_sensitive_flag(b"wl-copy --type --sensitive --paste-once"));
+    }
 
     #[test]
     fn clipboard_command_never_trims_password_newlines() {
