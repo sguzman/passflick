@@ -39,7 +39,7 @@
 - [x] Automatic encrypted pre-refresh backups for existing credential sources
 - [x] Atomically published backups with no overwrite and safe temporary-file cleanup
 - [x] Provider-signature and duplicate-header checks for CSV import snapshots
-- [x] Reject ambiguous semantic CSV header aliases before importing a source snapshot
+- [x] Reject ambiguous semantic CSV header aliases and missing username headers before importing a source snapshot
 - [x] Synthetic complete-format Firefox and Apple exports; Apple OTPAuth and Notes are not persisted
 - [x] Require sensitive clipboard support instead of silently copying password values into unmarked history
 - [x] Reject named-pipe vault and lock paths without blocking; require private active-vault parent at unlock while keeping external encrypted snapshots verifiable
