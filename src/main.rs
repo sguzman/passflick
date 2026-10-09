@@ -6,6 +6,7 @@ mod discovery;
 mod r#import;
 mod model;
 mod paths;
+mod passphrase;
 mod process_security;
 mod search;
 mod session;
@@ -247,13 +248,8 @@ fn load_picker_records(
 fn init_vault() -> Result<(), Box<dyn Error>> {
     let path = paths::vault_path()?;
     let first = Zeroizing::new(rpassword::prompt_password("New Passflick passphrase: ")?);
-    if first.is_empty() {
-        return Err("passphrase cannot be empty".into());
-    }
     let confirm = Zeroizing::new(rpassword::prompt_password("Confirm passphrase: ")?);
-    if first.as_str() != confirm.as_str() {
-        return Err("passphrases do not match".into());
-    }
+    passphrase::validate_new(first.as_str(), confirm.as_str())?;
     let vault = Vault::create(&path, first.as_bytes())?;
     session::store(&path, vault.key())?;
     println!("Initialized and unlocked {}.", path.display());
