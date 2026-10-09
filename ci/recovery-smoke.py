@@ -341,7 +341,84 @@ def main() -> None:
         assert b"fictional-apple-password" not in labels
         assert len(list((root / "backups").glob("*.passvault"))) == backups_before_shrink + 1
 
-    print("Synthetic Passflick CLI recovery and four-source import checks passed")
+        # Normal restore is not disaster recovery. It must authenticate the
+        # chosen snapshot with the live vault key, reject bad sources before
+        # creating safety backups, and restore all providers atomically.
+        backups = root / "backups"
+        known = set(backups.glob("*.passvault"))
+        run_cli(executable, environment, "backup")
+        new_snapshots = set(backups.glob("*.passvault")) - known
+        assert len(new_snapshots) == 1
+        restore_source = new_snapshots.pop()
+        snapshot_bytes = restore_source.read_bytes()
+        assert snapshot_bytes == vault.read_bytes()
+        run_cli(executable, environment, "verify", str(restore_source))
+
+        changed_edge = root / "fictional-edge-post-backup.csv"
+        changed_edge.write_bytes(
+            b"name,url,username,password\n"
+            b"Temporary Edge,https://temporary.example.test,temporary-user,fictional-temporary-password\n"
+        )
+        run_cli(executable, environment, "import", "edge", str(changed_edge))
+        modified = vault.read_bytes()
+        assert modified != snapshot_bytes
+        modified_labels = run_cli(executable, environment, "list")
+        assert b"Temporary Edge" in modified_labels
+        assert b"Apple Entry" in modified_labels
+        assert b"Chrome Entry" in modified_labels
+
+        count_before_failed_restore = len(list(backups.glob("*.passvault")))
+        run_cli(
+            executable, environment, "restore", str(restore_source),
+            success=False, expected_error=b"requires explicit --confirm",
+        )
+        assert vault.read_bytes() == modified
+        assert len(list(backups.glob("*.passvault"))) == count_before_failed_restore
+
+        tampered_source = root / "fictional-tampered-restore.passvault"
+        broken_snapshot = bytearray(snapshot_bytes)
+        broken_snapshot[-1] ^= 1
+        tampered_source.write_bytes(broken_snapshot)
+        tampered_source.chmod(0o600)
+        run_cli(
+            executable, environment, "restore", str(tampered_source), "--confirm",
+            success=False, expected_error=b"vault decryption failed",
+        )
+        assert vault.read_bytes() == modified
+        assert len(list(backups.glob("*.passvault"))) == count_before_failed_restore
+
+        # A different pathname may still point to the active inode.
+        alias = root / "fictional-hardlink-to-active.passvault"
+        os.link(vault, alias)
+        run_cli(
+            executable, environment, "restore", str(alias), "--confirm",
+            success=False, expected_error=b"invalid vault path",
+        )
+        assert vault.read_bytes() == modified
+        assert len(list(backups.glob("*.passvault"))) == count_before_failed_restore
+        alias.unlink()
+
+        run_cli(executable, environment, "restore", str(restore_source), "--confirm")
+        assert len(list(backups.glob("*.passvault"))) == count_before_failed_restore + 1
+        new_safety = set(backups.glob("*.passvault")) - known - {restore_source}
+        assert any(path.read_bytes() == modified for path in new_safety)
+        assert restore_source.read_bytes() == snapshot_bytes
+        restored_labels = run_cli(executable, environment, "list")
+        for expected in (b"Bulk 0", b"Chrome Entry", b"Apple Entry", b"https://firefox.example.test"):
+            assert expected in restored_labels
+        assert b"Temporary Edge" not in restored_labels
+        restored_status = run_cli(executable, environment, "sources")
+        for expected in (
+            b"Edge: 3 credentials",
+            b"Chrome: 1 credentials",
+            b"Firefox: 1 credentials",
+            b"Apple: 1 credentials",
+        ):
+            assert expected in restored_status
+        assert b"fictional-temporary-password" not in restored_labels
+        assert b"fictional-apple-password" not in restored_labels
+
+    print("Synthetic Passflick CLI recovery, restore, and four-source import checks passed")
 
 
 if __name__ == "__main__":
