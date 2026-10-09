@@ -8,12 +8,12 @@
 - [x] Standalone first-run vault setup in the graphical picker
 - [x] Per-vault session-key/explicit-lock isolation for safe independent testing; report cleanup failures accurately after cached-key decryption errors
 - [x] Graceful one-shot GUI and interactive CLI fallback when session caching is unavailable
-- [x] Reject empty/mixed-provider import batches and NUL-containing clipboard values before committing
+- [x] Reject empty/mixed-provider import batches and NUL-containing clipboard values before committing; enforce the same empty-password, NUL, and missing-site checks at the transaction boundary for future source adapters
 - [x] Neutralize terminal escape and bidirectional text-control characters in visible metadata without changing copied usernames
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Rust CI verified at [`8062c17`](https://github.com/sguzman/passflick/actions/runs/37968557525): 74 passed tests, locked CLI checks, formatting, desktop installation smoke, synthetic encrypted recovery/import smoke, and strict Clippy
+- [x] Rust CI verified at [`4a57938`](https://github.com/sguzman/passflick/actions/runs/37970160238): 75 passed tests, locked CLI checks, formatting, desktop installation smoke, synthetic encrypted recovery/import smoke, and strict Clippy
 - [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
 - [x] Synthetic CLI source refresh passed: adding Firefox then replacing Edge preserves Firefox and retains the encrypted pre-refresh backup
 - [x] Synthetic filesystem regression tests passed in Rust CI
