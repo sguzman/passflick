@@ -97,10 +97,7 @@ impl Vault {
 
     /// Authenticate the exact encrypted bytes before any disaster recovery
     /// write. No primary vault is required, and no plaintext file is created.
-    pub(crate) fn authenticate_bytes(
-        bytes: &[u8],
-        passphrase: &[u8],
-    ) -> Result<usize, VaultError> {
+    pub(crate) fn authenticate_bytes(bytes: &[u8], passphrase: &[u8]) -> Result<usize, VaultError> {
         if bytes.len() as u64 > MAX_VAULT_BYTES {
             return Err(VaultError::TooLarge);
         }
