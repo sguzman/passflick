@@ -1,41 +1,47 @@
 # Hyprland integration
 
-Passflick's executable creates a small undecorated always-on-top Wayland window with the app ID `passflick`. Hyprland, not egui, ultimately decides whether that window floats or joins the tiling layout. For reliable summon-and-dismiss behavior, explicitly float and center it.
+Passflick is an independent Wayland application with app ID `passflick`. Its window should float and center without rearranging tiled workspaces. Hyprland owns that decision; the application does not edit compositor configuration.
 
-The following example targets the newer Hyprland window-rule syntax (v0.53 generation, `hyprland.conf`):
+## Floating window rule
+
+Use the syntax appropriate to your installed Hyprland version.
+
+**Hyprland 0.55+ (Lua):**
+
+```lua
+hl.window_rule({
+  name = "passflick-picker",
+  match = { class = "^(passflick)$" },
+  float = true,
+  center = true,
+})
+```
+
+**Hyprland 0.53–0.54 (hyprlang):**
 
 ```ini
 windowrule = match:class ^(passflick)$, float on, center on
 ```
 
-Older Hyprland releases use different syntax; for v0.46–v0.50 style configuration:
+**Older hyprlang configurations:**
 
 ```ini
 windowrulev2 = float, class:^(passflick)$
 windowrulev2 = center, class:^(passflick)$
 ```
 
-For configurations using the newer Lua rules interface, an equivalent rule can be declared as:
+Only use the rule format supported by your compositor. Check the actual app ID through `hyprctl clients` if needed.
 
-```lua
-hl.window_rule({
-  name = "passflick-picker",
-  match = { class = "passflick" },
-  float = true,
-  center = true,
-})
-```
+## Summon shortcut
 
-The release and user configuration determine which syntax applies. Do **not** paste multiple syntaxes together. Check the actual window class with `hyprctl clients` if the rule does not match.
-
-Set a compositor shortcut to invoke the binary directly, for example:
+Once the pre-release user installer has placed Passflick at `~/.local/bin/passflick`, a traditional hyprlang keybinding can launch it directly:
 
 ```ini
-bind = SUPER, P, exec, passflick
+bind = SUPER, P, exec, ~/.local/bin/passflick
 ```
 
-Choose your own binding if that conflicts with an existing keymap. No resident daemon is necessary; each invocation opens a fresh picker and exits after the copy action.
+The graphical desktop entry is also installed for application launchers. Neither path requires a terminal window or resident daemon. A custom XDG binary directory can change the executable path.
 
-References: [Hyprland v0.53 window rules](https://wiki.hypr.land/0.53.0/Configuring/Window-Rules/), [current Hyprland rule reference](https://wiki.hypr.land/configuring/core/rules/window-rules/).
+**Acceptance gate:** Actual floating behavior and focus restoration have not yet been checked in the target Hyprland session.
 
-**Acceptance gate:** Actual floating behavior and window-class matching have not yet been verified on the target Hyprland session. Do not claim the application can force the compositor not to tile without that rule.
+References: [current Hyprland window rules](https://wiki.hypr.land/Configuring/Basics/Window-Rules/) and [Hyprland 0.54 window rules](https://wiki.hypr.land/0.54.0/Configuring/Window-Rules/).
