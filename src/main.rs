@@ -226,6 +226,20 @@ fn launch_picker(
     )
 }
 
+/// Unlike Path::exists, symlink_metadata distinguishes a genuinely missing
+/// vault from a dangling symlink, FIFO, directory, or permission error.
+fn vault_file_presence(path: &Path) -> io::Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.is_file() => Ok(true),
+        Ok(_) => Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "expected a regular vault file, not a symlink or special file",
+        )),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error),
+    }
+}
+
 fn load_picker_records(
     trace: &startup::StartupTrace,
 ) -> (Vec<Credential>, Option<String>, bool, bool) {
@@ -233,10 +247,21 @@ fn load_picker_records(
         Ok(path) => path,
         Err(error) => return (Vec::new(), Some(error.to_string()), false, false),
     };
-    if !path.exists() {
-        // The graphical application can initialize a fresh encrypted vault
-        // directly. The CLI init command remains available for automation.
-        return (Vec::new(), None, false, true);
+    match vault_file_presence(&path) {
+        Ok(false) => {
+            // The graphical application can initialize a genuinely absent
+            // encrypted vault. A dangling symlink is NOT an absent vault.
+            return (Vec::new(), None, false, true);
+        }
+        Ok(true) => {}
+        Err(error) => {
+            return (
+                Vec::new(),
+                Some(format!("Unsafe or inaccessible vault path: {error}")),
+                true,
+                false,
+            );
+        }
     }
     trace.mark("vault-path-ready");
     let key = match load_vault_key(&path) {
@@ -586,6 +611,28 @@ fn print_help() {
 #[cfg(test)]
 mod demo_tests {
     use super::*;
+
+    #[test]
+    fn first_run_distinguishes_missing_vault_from_dangling_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let directory = std::env::temp_dir().join(format!(
+            "passflick-first-run-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&directory).unwrap();
+        let vault = directory.join("vault.passvault");
+        assert!(!vault_file_presence(&vault).unwrap());
+        let redirect = directory.join("missing.passvault");
+        symlink(&redirect, &vault).unwrap();
+        assert!(vault_file_presence(&vault).is_err());
+        fs::remove_file(&vault).unwrap();
+        fs::write(&vault, b"synthetic encrypted placeholder").unwrap();
+        assert!(vault_file_presence(&vault).unwrap());
+        fs::remove_dir_all(&directory).unwrap();
+    }
 
     #[test]
     fn demo_is_purely_synthetic_and_observes_duplicate_folding() {
