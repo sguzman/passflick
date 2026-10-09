@@ -87,6 +87,25 @@ await_exit
 printf 'alice@example.test' > "$root/expected"
 cmp "$root/expected" "$PASSFLICK_TEST_CLIPBOARD"
 
+echo "Synthetic GUI test: Arrow Down selects conflicting Firefox value"
+launch_picker >/dev/null
+xdotool type --clearmodifiers --delay 35 'Example'
+xdotool key --clearmodifiers Down
+xdotool key --clearmodifiers Return
+await_exit
+printf 'synthetic-demo-password-beta' > "$root/expected"
+cmp "$root/expected" "$PASSFLICK_TEST_CLIPBOARD"
+
+echo "Synthetic GUI test: Enter with no matches copies nothing"
+launch_picker >/dev/null
+xdotool type --clearmodifiers --delay 35 'zzzzzzzzzz'
+xdotool key --clearmodifiers Return
+sleep 0.3
+kill -0 "$picker_pid"
+cmp "$root/expected" "$PASSFLICK_TEST_CLIPBOARD"
+xdotool key --clearmodifiers Escape
+await_exit
+
 echo "Synthetic GUI test: Escape leaves clipboard unchanged"
 launch_picker >/dev/null
 xdotool key --clearmodifiers Escape
