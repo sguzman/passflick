@@ -95,6 +95,33 @@ impl Vault {
         Self::decode(bytes, header, key)
     }
 
+    /// Authenticate the exact encrypted bytes before any disaster recovery
+    /// write. No primary vault is required, and no plaintext file is created.
+    pub(crate) fn authenticate_bytes(
+        bytes: &[u8],
+        passphrase: &[u8],
+    ) -> Result<usize, VaultError> {
+        if bytes.len() as u64 > MAX_VAULT_BYTES {
+            return Err(VaultError::TooLarge);
+        }
+        let header = Header::parse(bytes)?;
+        let key = derive_key(passphrase, &header)?;
+        Ok(Self::decode(bytes.to_vec(), header, key)?.records.len())
+    }
+
+    /// The caller must hold the vault write lock, authenticate `bytes`, and
+    /// preserve the old ciphertext first when overwriting a previous vault.
+    pub(crate) fn install_verified_bytes(
+        path: &Path,
+        bytes: &[u8],
+        create_only: bool,
+    ) -> Result<(), VaultError> {
+        if bytes.len() as u64 > MAX_VAULT_BYTES {
+            return Err(VaultError::TooLarge);
+        }
+        write_atomic(path, bytes, create_only)
+    }
+
     pub fn key(&self) -> &VaultKey {
         &self.key
     }
