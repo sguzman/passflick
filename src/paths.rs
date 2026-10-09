@@ -84,13 +84,16 @@ mod tests {
             "passflick-path-identity-{:016x}",
             u64::from_le_bytes(entropy)
         ));
-        let real = root.join("real");
+        // The symlink is an ancestor, not the immediate vault directory:
+        // active-vault operations reject a symlinked immediate parent.
+        let real_ancestor = root.join("actual");
+        let real = real_ancestor.join("private");
         fs::create_dir_all(&real).unwrap();
         fs::set_permissions(&real, fs::Permissions::from_mode(0o700)).unwrap();
         let alias = root.join("alias");
-        symlink(&real, &alias).unwrap();
+        symlink(&real_ancestor, &alias).unwrap();
 
-        let through_alias = alias.join("vault.passvault");
+        let through_alias = alias.join("private/vault.passvault");
         let expected = real.join("vault.passvault");
         assert_eq!(vault_identity_path(&through_alias), expected);
         fs::write(&expected, b"synthetic ciphertext").unwrap();
