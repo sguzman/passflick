@@ -30,7 +30,7 @@ Use isolated temporary XDG data directories and synthetic CSV exports for all fo
 - Initialize and unlock a fresh vault, import a source, then reopen successfully.
 - Show source counts and snapshot age without printing any secret.
 - Import the same source twice; confirm its snapshot updates rather than accumulating duplicates, and the original encrypted snapshot is automatically saved under `backups/` before replacement.
-- Import two sources and refresh one; verify the other is preserved.
+- Import two sources and refresh one; verify the other is preserved. The synthetic CLI smoke test exercises this for Firefox and Edge, but its CI run and eventual target-host acceptance remain separate gates.
 - Reject malformed rows, missing required columns, and oversized exports without changing a valid snapshot.
 - Reject two different CSV header aliases for one field (such as `password` and `pass`, or `url` and `website`) before source replacement. Also reject a missing username header without rejecting rows whose username value is blank.
 - Test unusually small snapshots and the explicit `--allow-shrink` override.
