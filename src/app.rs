@@ -240,6 +240,9 @@ impl eframe::App for PickerApp {
                 ui.add_space(12.0);
                 ui.heading("Unlock Passflick");
                 ui.label("Enter your vault passphrase once for this login session.");
+                if let Some(notice) = &self.notice {
+                    ui.label(notice);
+                }
                 ui.add_space(8.0);
                 let response = ui.add(
                     egui::TextEdit::singleline(&mut *self.passphrase)
