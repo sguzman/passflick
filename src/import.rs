@@ -1,5 +1,9 @@
 use crate::model::{Credential, Source};
 use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+
+use crate::backup;
+use crate::vault::{Vault, VaultError};
 
 /// A defensive limit for a single explicit export snapshot.
 pub const MAX_IMPORT_BYTES: usize = 32 * 1024 * 1024;
@@ -10,6 +14,8 @@ pub enum ImportError {
     Csv(#[from] csv::Error),
     #[error("CSV export is larger than 32 MiB")]
     TooLarge,
+    #[error(transparent)]
+    Vault(#[from] VaultError),
     #[error("CSV has no password column")]
     MissingPassword,
     #[error("CSV has neither URL nor title column")]
@@ -190,6 +196,36 @@ pub fn replace_snapshot(
     count
 }
 
+/// Result of one fully validated source refresh transaction.
+pub struct SnapshotResult {
+    pub count: usize,
+    pub previous_backup: Option<PathBuf>,
+}
+
+/// Call this with the vault's write lock already held. Validation happens
+/// before any backup or write, and a previous source is automatically backed
+/// up in encrypted form before its snapshot can be replaced.
+pub fn commit_snapshot(
+    path: &Path,
+    vault: &mut Vault,
+    source: Source,
+    incoming: Vec<Credential>,
+    allow_shrink: bool,
+) -> Result<SnapshotResult, ImportError> {
+    validate_snapshot_refresh(vault.records(), source, incoming.len(), allow_shrink)?;
+    let previous_backup = if vault.records().iter().any(|record| record.source == source) {
+        Some(backup::create(path)?)
+    } else {
+        None
+    };
+    let count = replace_snapshot(vault.records_mut(), source, incoming);
+    vault.save(path)?;
+    Ok(SnapshotResult {
+        count,
+        previous_backup,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -310,6 +346,43 @@ mod tests {
             validate_snapshot_refresh(eleven, Source::Edge, 5, false),
             Err(ImportError::SuspiciousShrink { .. })
         ));
+    }
+
+    #[test]
+    fn replacing_a_source_preserves_its_old_encrypted_vault() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-import-backup-test-{:016x}",
+            u64::from_le_bytes(entropy),
+        ));
+        let path = root.join("vault.passvault");
+        let passphrase = b"fictional-import-test-key";
+        let mut vault = Vault::create(&path, passphrase).unwrap();
+
+        let first = parse_csv(
+            b"name,url,username,password\nFirst,https://example.test,alice,old-test-password\n",
+            Source::Edge,
+            1,
+        )
+        .unwrap();
+        let initial = commit_snapshot(&path, &mut vault, Source::Edge, first, false).unwrap();
+        assert_eq!(initial.count, 1);
+        assert!(initial.previous_backup.is_none());
+
+        let second = parse_csv(
+            b"name,url,username,password\nSecond,https://example.test,alice,new-test-password\n",
+            Source::Edge,
+            2,
+        )
+        .unwrap();
+        let updated = commit_snapshot(&path, &mut vault, Source::Edge, second, false).unwrap();
+        let old_path = updated.previous_backup.expect("existing source must be backed up");
+        let previous = Vault::unlock(&old_path, passphrase).unwrap();
+        let current = Vault::unlock(&path, passphrase).unwrap();
+        assert_eq!(previous.records()[0].password(), "old-test-password");
+        assert_eq!(current.records()[0].password(), "new-test-password");
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
