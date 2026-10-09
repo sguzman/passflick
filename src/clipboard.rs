@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::io::{self, Write};
 use std::process::{Command, Stdio};
 
@@ -21,8 +22,8 @@ pub enum ClipboardError {
 
 /// Preserve every byte of a password, including intentional trailing newlines.
 /// OTPick can safely trim a generated TOTP code; Passflick cannot.
-fn wl_copy_command() -> Command {
-    let mut command = Command::new("wl-copy");
+fn wl_copy_command(executable: &OsStr) -> Command {
+    let mut command = Command::new(executable);
     command.args(["--type", "text/plain;charset=utf-8", "--sensitive"]);
     command
 }
@@ -34,7 +35,11 @@ fn has_sensitive_flag(output: &[u8]) -> bool {
 }
 
 pub fn copy_sensitive(text: &str) -> Result<(), ClipboardError> {
-    let mut child = wl_copy_command()
+    copy_sensitive_using(text, OsStr::new("wl-copy"))
+}
+
+fn copy_sensitive_using(text: &str, executable: &OsStr) -> Result<(), ClipboardError> {
+    let mut child = wl_copy_command(executable)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -53,7 +58,7 @@ pub fn copy_sensitive(text: &str) -> Result<(), ClipboardError> {
         // Fail closed rather than silently using the ordinary clipboard.
         // wl-clipboard <2.3 does not understand --sensitive; dropping the
         // flag without an explicit decision risks persistent secret history.
-        if let Ok(help) = Command::new("wl-copy")
+        if let Ok(help) = Command::new(executable)
             .arg("--help")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -89,8 +94,36 @@ mod tests {
     }
 
     #[test]
+    fn older_wl_copy_reports_explicit_upgrade_instead_of_a_pipe_error() {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "passflick-clipboard-cli-test-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&dir).unwrap();
+        let executable = dir.join("old-wl-copy");
+        // A fake unsupported wl-copy that can exit before stdin is written.
+        fs::write(
+            &executable,
+            b"#!/bin/sh\\nif [ \\"$1\\" = \\"--help\\" ]; then echo '--type --trim-newline'; exit 0; fi\\nexit 2\\n",
+        )
+        .unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+
+        assert!(matches!(
+            copy_sensitive_using("fictional-clipboard-secret", executable.as_os_str()),
+            Err(ClipboardError::SensitiveUnsupported)
+        ));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn clipboard_command_never_trims_password_newlines() {
-        let command = wl_copy_command();
+        let command = wl_copy_command(OsStr::new("wl-copy"));
         let args: Vec<_> = command.get_args().collect();
         assert!(!args.contains(&std::ffi::OsStr::new("--trim-newline")));
         assert!(args.contains(&std::ffi::OsStr::new("--sensitive")));
