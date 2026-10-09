@@ -37,6 +37,7 @@ Use isolated temporary XDG data directories and synthetic CSV exports for all fo
 - Create and reopen a byte-exact encrypted backup.
 - Verify session unlock, explicit lock, failed unlock, and the optional Secret Service integration.
 - Switch between two isolated `PASSFLICK_VAULT` paths in one login session; cached keys and manual-lock markers must not cross between them.
+- Verify an encrypted backup with `passflick verify FILE` before any restore; corrupt or incompatible backups must fail without changing live data.
 - Restore a compatible encrypted snapshot with `--confirm`; verify automatic pre-restore backup and that a corrupted snapshot leaves the live vault unchanged.
 - Confirm no plaintext CSV remains in Passflick-controlled storage.
 
