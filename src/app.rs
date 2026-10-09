@@ -7,6 +7,26 @@ use crate::{passphrase, paths, session};
 use eframe::egui;
 use zeroize::Zeroizing;
 
+/// Validate the exact bytes before giving text to the Wayland clipboard.
+fn value_to_copy(record: &Credential, username: bool) -> Result<&str, &'static str> {
+    let text = if username {
+        record.username.as_str()
+    } else {
+        record.password()
+    };
+    if text.is_empty() {
+        return Err(if username {
+            "Selected credential has no username to copy."
+        } else {
+            "Selected credential has no password to copy."
+        });
+    }
+    if text.contains('\0') {
+        return Err("Credential contains a NUL byte and cannot be copied safely as text.");
+    }
+    Ok(text)
+}
+
 pub struct PickerApp {
     records: Vec<Credential>,
     query: String,
@@ -164,19 +184,58 @@ impl PickerApp {
             return;
         };
         let record = &self.records[index];
-        let text = if username {
-            record.username.as_str()
-        } else {
-            record.password()
+        let text = match value_to_copy(record, username) {
+            Ok(text) => text,
+            Err(error) => {
+                self.error = Some(error.to_owned());
+                return;
+            }
         };
-        if text.is_empty() {
-            self.error = Some("Selected credential has no username to copy.".to_owned());
-            return;
-        }
         match copy_sensitive(text) {
             Ok(()) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             Err(error) => self.error = Some(error.to_string()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::Source;
+
+    #[test]
+    fn clipboard_rejects_empty_and_nul_values_from_old_vaults() {
+        let empty_username = Credential::new(
+            Source::Apple,
+            "Empty user",
+            "https://example.test",
+            "",
+            "secret",
+            0,
+        );
+        assert!(value_to_copy(&empty_username, true).is_err());
+        assert_eq!(value_to_copy(&empty_username, false), Ok("secret"));
+
+        let secret_with_nul = Credential::new(
+            Source::Edge,
+            "Legacy",
+            "https://example.test",
+            "alice",
+            "begin\0end",
+            0,
+        );
+        assert!(value_to_copy(&secret_with_nul, false).is_err());
+        assert_eq!(value_to_copy(&secret_with_nul, true), Ok("alice"));
+
+        let user_with_nul = Credential::new(
+            Source::Firefox,
+            "Legacy",
+            "https://example.test",
+            "al\0ice",
+            "valid",
+            0,
+        );
+        assert!(value_to_copy(&user_with_nul, true).is_err());
     }
 }
 
