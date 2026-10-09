@@ -1,4 +1,4 @@
-use crate::model::Credential;
+use crate::model::{Credential, safe_display_text};
 use std::collections::HashSet;
 
 pub fn rank_credentials(records: &[Credential], query: &str) -> Vec<usize> {
@@ -54,13 +54,13 @@ pub fn display_label_with_sources(records: &[Credential], selected: usize) -> St
         .collect::<Vec<_>>()
         .join(" + ");
 
+    let title = safe_display_text(credential.title());
     let mut label = if credential.username.is_empty() {
-        format!("{}  ·  {source_labels}", credential.title())
+        format!("{title}  ·  {source_labels}")
     } else {
         format!(
-            "{}  ·  {}  ·  {source_labels}",
-            credential.title(),
-            credential.username
+            "{title}  ·  {}  ·  {source_labels}",
+            safe_display_text(&credential.username)
         )
     };
     if has_secret_conflict(records, selected) {
@@ -193,6 +193,24 @@ mod tests {
             Credential::new(Source::Edge, "Site B", "", "me", "new", 0),
         ];
         assert!(!has_secret_conflict(&unrelated, 0));
+    }
+
+    #[test]
+    fn visible_picker_rows_sanitize_metadata_without_modifying_records() {
+        let records = vec![Credential::new(
+            Source::Edge,
+            "Bad\u{001b}[2J",
+            "https://example.test",
+            "test\u{202e}eman",
+            "passphrase-value",
+            0,
+        )];
+        let row = display_label_with_sources(&records, 0);
+        assert!(!row.contains('\u{001b}'));
+        assert!(!row.contains('\u{202e}'));
+        assert!(row.contains("Bad\u{fffd}[2J"));
+        assert_eq!(records[0].username, "test\u{202e}eman");
+        assert_eq!(records[0].password(), "passphrase-value");
     }
 
     #[test]
