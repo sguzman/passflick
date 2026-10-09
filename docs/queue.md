@@ -21,7 +21,8 @@
 - [x] Show source counts and snapshot age in the CLI (`passflick sources`)
 - [ ] Show optional source refresh details in the picker without clutter
 - [x] Group identical credentials with combined source labels; keep conflicts separate
-- [ ] Highlight conflicts and potentially stale source snapshots
+- [x] Highlight competing password values for the same credential identity
+- [ ] Highlight potentially stale source snapshots in the picker
 - [x] Add non-secret local browser profile discovery (`passflick discover`)
 - [ ] Evaluate authorized read-only browser credential adapters
 - [x] Add bounds to import and vault parsing, private filesystem permissions, write locking, and encrypted backups
