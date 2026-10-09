@@ -18,6 +18,8 @@ pub enum ImportError {
     Vault(#[from] VaultError),
     #[error("CSV has no password column")]
     MissingPassword,
+    #[error("CSV has no username column; previous snapshot is unchanged")]
+    MissingUsername,
     #[error("CSV has neither URL nor title column")]
     MissingSite,
     #[error("CSV contains duplicate normalized column names; previous snapshot is unchanged")]
@@ -126,7 +128,8 @@ pub fn parse_csv(
         &headers,
         &["username", "user", "login", "account", "userid"],
         "username",
-    )?;
+    )?
+    .ok_or(ImportError::MissingUsername)?;
     if url.is_none() && title.is_none() {
         return Err(ImportError::MissingSite);
     }
@@ -144,7 +147,7 @@ pub fn parse_csv(
         let site_name = field(title).trim();
         // Usernames are copied verbatim: leading or trailing whitespace may
         // be part of the actual login, just as it may be in a password.
-        let login = field(username);
+        let login = row.get(username).unwrap_or("");
 
         if secret.is_empty() {
             return Err(ImportError::InvalidRow {
@@ -659,6 +662,22 @@ mod tests {
             parse_csv(data, Source::Edge, 0),
             Err(ImportError::DuplicateColumn)
         ));
+    }
+
+    #[test]
+    fn missing_username_column_never_creates_silent_empty_accounts() {
+        let data = b"name,url,password\nExample,https://example.test,fictional-secret\n";
+        assert!(matches!(
+            parse_csv(data, Source::Edge, 1),
+            Err(ImportError::MissingUsername)
+        ));
+
+        // Missing values in an existing username field remain valid:
+        // some providers legitimately export credentials without usernames.
+        let no_username_value =
+            b"name,url,username,password\nExample,https://example.test,,fictional-secret\n";
+        let records = parse_csv(no_username_value, Source::Edge, 1).unwrap();
+        assert_eq!(records[0].username, "");
     }
 
     #[test]
