@@ -2,7 +2,20 @@ name: Synthetic GUI
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'ci/gui-smoke.sh'
+      - '.github/workflows/gui-smoke.yml'
   pull_request:
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'ci/gui-smoke.sh'
+      - '.github/workflows/gui-smoke.yml'
+  workflow_dispatch:
 
 concurrency:
   group: gui-${{ github.ref }}
