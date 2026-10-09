@@ -104,9 +104,32 @@ def run_cli(
     return bytes(output)
 
 
+def test_terminal_driver() -> None:
+    """A Python-only check for prompt handling and output-draining races."""
+    environment = os.environ.copy()
+    command = (
+        "import sys; "
+        "sys.stdout.write('Backup passphrase: '); sys.stdout.flush(); "
+        "assert sys.stdin.readline().strip() == 'fictional-ci-recovery-passphrase-2026'; "
+        "sys.stdout.write('BEGIN:' + 'x' * 12000 + ':END'); sys.stdout.flush()"
+    )
+    output = run_cli(sys.executable, environment, "-u", "-c", command)
+    assert b"BEGIN:" in output and b":END" in output
+    assert output.count(b"x") >= 12000
+    failure = "import sys; sys.stderr.write('synthetic rejection\\n'); sys.exit(9)"
+    run_cli(
+        sys.executable, environment, "-u", "-c", failure,
+        success=False, expected_error=b"synthetic rejection",
+    )
+    print("Passflick PTY smoke-test driver self-check passed")
+
+
 def main() -> None:
+    if len(sys.argv) == 2 and sys.argv[1] == "--self-test":
+        test_terminal_driver()
+        return
     if len(sys.argv) != 2:
-        raise SystemExit("Usage: recovery-smoke.py /absolute/path/to/passflick")
+        raise SystemExit("Usage: recovery-smoke.py --self-test | /absolute/path/to/passflick")
     executable = str(Path(sys.argv[1]).resolve(strict=True))
 
     with tempfile.TemporaryDirectory(prefix="passflick-synthetic-cli-") as temp:
