@@ -241,8 +241,40 @@ pub fn commit_snapshot(
     } else {
         None
     };
-    let count = replace_snapshot(vault.records_mut(), source, incoming);
-    vault.save(path)?;
+    // Move records instead of cloning secrets. Keep the removed source
+    // records and their original positions until the encrypted save succeeds.
+    // If storage fails, reconstruct the exact previous in-memory projection.
+    let count = incoming.len();
+    let original = std::mem::take(vault.records_mut());
+    let mut displaced = Vec::new();
+    let mut candidate = Vec::with_capacity(original.len() + incoming.len());
+    for (index, record) in original.into_iter().enumerate() {
+        if record.source == source {
+            displaced.push((index, record));
+        } else {
+            candidate.push(record);
+        }
+    }
+    candidate.extend(incoming);
+    *vault.records_mut() = candidate;
+    if let Err(error) = vault.save(path) {
+        let changed = std::mem::take(vault.records_mut());
+        let mut retained = changed
+            .into_iter()
+            .filter(|record| record.source != source);
+        let total = retained.len() + displaced.len();
+        let mut displaced = displaced.into_iter().peekable();
+        let mut restored = Vec::with_capacity(total);
+        for index in 0..total {
+            if displaced.peek().is_some_and(|(position, _)| *position == index) {
+                restored.push(displaced.next().expect("displaced record").1);
+            } else {
+                restored.push(retained.next().expect("retained record"));
+            }
+        }
+        *vault.records_mut() = restored;
+        return Err(error.into());
+    }
     Ok(SnapshotResult {
         count,
         previous_backup,
