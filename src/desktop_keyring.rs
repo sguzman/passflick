@@ -5,7 +5,7 @@ use secret_service::EncryptionType;
 use secret_service::blocking::SecretService;
 use zeroize::Zeroize;
 
-use crate::vault::VaultKey;
+use crate::{paths, vault::VaultKey};
 
 const APP: &str = "passflick";
 const KIND: &str = "vault-key-v1";
@@ -81,8 +81,7 @@ fn attributes(vault: &str) -> HashMap<&str, &str> {
 }
 
 fn vault_id(path: &Path) -> String {
-    path.canonicalize()
-        .unwrap_or_else(|_| path.to_path_buf())
+    paths::vault_identity_path(path)
         .to_string_lossy()
         .into_owned()
 }
