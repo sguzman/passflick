@@ -54,7 +54,7 @@ pub fn display_label_with_sources(records: &[Credential], selected: usize) -> St
         .collect::<Vec<_>>()
         .join(" + ");
 
-    if credential.username.is_empty() {
+    let mut label = if credential.username.is_empty() {
         format!("{}  ·  {source_labels}", credential.title())
     } else {
         format!(
@@ -62,7 +62,25 @@ pub fn display_label_with_sources(records: &[Credential], selected: usize) -> St
             credential.title(),
             credential.username
         )
+    };
+    if has_secret_conflict(records, selected) {
+        label.push_str("  ·  Conflict");
     }
+    label
+}
+
+/// Detect competing passwords for one URL-or-title and username identity.
+/// Passwords are compared only in memory, never incorporated into the label.
+pub fn has_secret_conflict(records: &[Credential], selected: usize) -> bool {
+    let credential = &records[selected];
+    let (url_based, site, username, _) = credential.identity_key();
+    records.iter().any(|other| {
+        let (other_url_based, other_site, other_username, _) = other.identity_key();
+        other_url_based == url_based
+            && other_site == site
+            && other_username == username
+            && other.password() != credential.password()
+    })
 }
 
 fn score(rec: &Credential, query: &str) -> Option<i32> {
@@ -147,6 +165,34 @@ mod tests {
             Credential::new(Source::Firefox, "Example B", "", "me", "shared", 0),
         ];
         assert_eq!(rank_credentials(&entries, ""), vec![1, 0]);
+    }
+
+    #[test]
+    fn conflicting_secrets_are_marked_without_displaying_passwords() {
+        let records = vec![
+            record(Source::Firefox, "GitHub", "old-test-secret"),
+            record(Source::Edge, "GitHub", "new-test-secret"),
+        ];
+        for selected in 0..2 {
+            let label = display_label_with_sources(&records, selected);
+            assert!(label.contains("Conflict"));
+            assert!(!label.contains("old-test-secret"));
+            assert!(!label.contains("new-test-secret"));
+        }
+    }
+
+    #[test]
+    fn matching_secrets_and_unrelated_sites_are_not_marked() {
+        let same = vec![
+            record(Source::Firefox, "GitHub", "shared"),
+            record(Source::Edge, "GitHub", "shared"),
+        ];
+        assert!(!has_secret_conflict(&same, 0));
+        let unrelated = vec![
+            Credential::new(Source::Apple, "Site A", "", "me", "old", 0),
+            Credential::new(Source::Edge, "Site B", "", "me", "new", 0),
+        ];
+        assert!(!has_secret_conflict(&unrelated, 0));
     }
 
     #[test]
