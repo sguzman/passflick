@@ -92,6 +92,12 @@ impl Vault {
 
     pub fn open_with_key(path: &Path, key: VaultKey) -> Result<Self, VaultError> {
         ensure_private_vault_parent(path)?;
+        Self::open_snapshot_with_key(path, key)
+    }
+
+    /// A backup source can live outside the active vault directory. It still
+    /// must be a private regular file and authenticate under the supplied key.
+    pub(crate) fn open_snapshot_with_key(path: &Path, key: VaultKey) -> Result<Self, VaultError> {
         let bytes = read_private_vault(path)?;
         let header = Header::parse(&bytes)?;
         Self::decode(bytes, header, key)
