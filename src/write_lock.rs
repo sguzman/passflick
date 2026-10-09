@@ -123,7 +123,11 @@ mod tests {
         let mut workers = Vec::new();
         for (source, title, password) in [
             (Source::Edge, "Edge account", "fictional-edge-secret"),
-            (Source::Firefox, "Firefox account", "fictional-firefox-secret"),
+            (
+                Source::Firefox,
+                "Firefox account",
+                "fictional-firefox-secret",
+            ),
         ] {
             let path = path.clone();
             let starting_line = Arc::clone(&starting_line);
