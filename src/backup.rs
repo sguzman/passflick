@@ -82,7 +82,7 @@ pub fn verify_snapshot(snapshot: &Path, live: &Vault) -> Result<usize, VaultErro
 fn open_verified_snapshot(snapshot: &Path, live: &Vault) -> Result<Vault, VaultError> {
     let mut key_bytes = [0_u8; 32];
     key_bytes.copy_from_slice(live.key().as_bytes());
-    Vault::open_with_key(snapshot, VaultKey::from_bytes(key_bytes))
+    Vault::open_snapshot_with_key(snapshot, VaultKey::from_bytes(key_bytes))
 }
 
 /// Explicit recovery from a verified encrypted snapshot when the active
@@ -205,6 +205,33 @@ mod tests {
         assert!(verify_snapshot(&broken, &vault).is_err());
         assert!(restore_into(&path, &broken, &mut vault).is_err());
         assert_eq!(fs::read(&path).unwrap(), live_before);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn verifies_private_snapshot_in_shared_external_directory() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-external-snapshot-test-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let private = root.join("vault");
+        let external = root.join("external");
+        fs::create_dir_all(&private).unwrap();
+        fs::create_dir_all(&external).unwrap();
+        fs::set_permissions(&private, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::set_permissions(&external, fs::Permissions::from_mode(0o755)).unwrap();
+        let active = private.join("vault.passvault");
+        let vault = Vault::create(&active, b"fictional-snapshot-passphrase").unwrap();
+        let external_copy = external.join("snapshot.passvault");
+        fs::copy(&active, &external_copy).unwrap();
+        assert_eq!(verify_snapshot(&external_copy, &vault).unwrap(), 0);
+        // An external snapshot does not relax the active vault requirement.
+        assert!(matches!(
+            Vault::unlock(&external_copy, b"fictional-snapshot-passphrase"),
+            Err(VaultError::UnsafeDirectory)
+        ));
         fs::remove_dir_all(&root).unwrap();
     }
 
