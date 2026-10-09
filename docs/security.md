@@ -8,7 +8,7 @@ Passflick stores a local, versioned encrypted projection using Argon2id and XCha
 
 New vaults require a passphrase between 12 and 1024 characters. Passphrases do not require arbitrary combinations of character classes. Existing vaults remain unlockable with their original passphrases, including shorter values created by earlier versions.
 
-On first launch, the graphical application can create an encrypted vault using masked passphrase and confirmation fields. Passphrase entry buffers are cleared after setup and unlock attempts. The normal picker shows labels and usernames, not passwords; copying requires an explicit key action.
+On first launch, the graphical application can create an encrypted vault using masked passphrase and confirmation fields. Passphrase entry buffers are cleared after setup and unlock attempts. The normal picker shows labels and usernames, not passwords; copying requires an explicit key action. Metadata is rendered with terminal escape and bidirectional text-control characters replaced visibly; the original username is preserved for exact copying.
 
 ## Process and clipboard
 
