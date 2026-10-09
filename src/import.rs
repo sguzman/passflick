@@ -123,7 +123,9 @@ pub fn parse_csv(
         let secret = row.get(password).unwrap_or("");
         let site_url = field(url).trim();
         let site_name = field(title).trim();
-        let login = field(username).trim();
+        // Usernames are copied verbatim: leading or trailing whitespace may
+        // be part of the actual login, just as it may be in a password.
+        let login = field(username);
 
         if secret.is_empty() {
             return Err(ImportError::InvalidRow {
@@ -236,6 +238,14 @@ mod tests {
             b"name,url,username,password\nExample,https://example.test,alice,\"  hE!llo \"\n";
         let items = parse_csv(data, Source::Edge, 10).unwrap();
         assert_eq!(items[0].password(), "  hE!llo ");
+    }
+
+    #[test]
+    fn username_whitespace_is_not_silently_removed() {
+        let data =
+            b"name,url,username,password\nExample,https://example.test,\"  alice  \",secret\n";
+        let items = parse_csv(data, Source::Edge, 10).unwrap();
+        assert_eq!(items[0].username, "  alice  ");
     }
 
     #[test]
