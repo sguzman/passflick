@@ -198,47 +198,6 @@ impl PickerApp {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::model::Source;
-
-    #[test]
-    fn clipboard_rejects_empty_and_nul_values_from_old_vaults() {
-        let empty_username = Credential::new(
-            Source::Apple,
-            "Empty user",
-            "https://example.test",
-            "",
-            "secret",
-            0,
-        );
-        assert!(value_to_copy(&empty_username, true).is_err());
-        assert_eq!(value_to_copy(&empty_username, false), Ok("secret"));
-
-        let secret_with_nul = Credential::new(
-            Source::Edge,
-            "Legacy",
-            "https://example.test",
-            "alice",
-            "begin\0end",
-            0,
-        );
-        assert!(value_to_copy(&secret_with_nul, false).is_err());
-        assert_eq!(value_to_copy(&secret_with_nul, true), Ok("alice"));
-
-        let user_with_nul = Credential::new(
-            Source::Firefox,
-            "Legacy",
-            "https://example.test",
-            "al\0ice",
-            "valid",
-            0,
-        );
-        assert!(value_to_copy(&user_with_nul, true).is_err());
-    }
-}
-
 impl eframe::App for PickerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         if !self.first_frame_traced {
@@ -398,5 +357,46 @@ impl eframe::App for PickerApp {
             let shift = ctx.input(|input| input.modifiers.shift);
             self.copy_selected(&ctx, shift);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::Source;
+
+    #[test]
+    fn clipboard_rejects_empty_and_nul_values_from_old_vaults() {
+        let empty_username = Credential::new(
+            Source::Apple,
+            "Empty user",
+            "https://example.test",
+            "",
+            "secret",
+            0,
+        );
+        assert!(value_to_copy(&empty_username, true).is_err());
+        assert_eq!(value_to_copy(&empty_username, false), Ok("secret"));
+
+        let secret_with_nul = Credential::new(
+            Source::Edge,
+            "Legacy",
+            "https://example.test",
+            "alice",
+            "begin\0end",
+            0,
+        );
+        assert!(value_to_copy(&secret_with_nul, false).is_err());
+        assert_eq!(value_to_copy(&secret_with_nul, true), Ok("alice"));
+
+        let user_with_nul = Credential::new(
+            Source::Firefox,
+            "Legacy",
+            "https://example.test",
+            "al\0ice",
+            "valid",
+            0,
+        );
+        assert!(value_to_copy(&user_with_nul, true).is_err());
     }
 }
