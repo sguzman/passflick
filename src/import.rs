@@ -200,6 +200,7 @@ pub fn validate_snapshot_refresh(
     Ok(())
 }
 
+#[cfg(test)]
 pub fn replace_snapshot(
     records: &mut Vec<Credential>,
     source: Source,
