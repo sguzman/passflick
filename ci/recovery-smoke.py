@@ -222,8 +222,8 @@ def main() -> None:
         # intact. The previous Edge ciphertext gets a fresh encrypted backup.
         firefox_export = root / "fictional-firefox-export.csv"
         firefox_export.write_bytes(
-            b"url,username,password,httpRealm,formActionOrigin\\n"
-            b"https://firefox.example.test,fox-user,fictional-firefox-password,,\\n"
+            b"url,username,password,httpRealm,formActionOrigin\n"
+            b"https://firefox.example.test,fox-user,fictional-firefox-password,,\n"
         )
         run_cli(executable, environment, "import", "firefox", str(firefox_export))
         before_refresh = run_cli(executable, environment, "list")
@@ -233,8 +233,8 @@ def main() -> None:
 
         edge_refresh = root / "fictional-edge-refresh.csv"
         edge_refresh.write_bytes(
-            b"name,url,username,password\\n"
-            b"Updated Edge,https://updated.example.test,new-edge-user,fictional-refreshed-password\\n"
+            b"name,url,username,password\n"
+            b"Updated Edge,https://updated.example.test,new-edge-user,fictional-refreshed-password\n"
         )
         run_cli(executable, environment, "import", "edge", str(edge_refresh))
         after_refresh = run_cli(executable, environment, "list")
