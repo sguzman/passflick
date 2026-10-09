@@ -42,9 +42,10 @@ pub fn copy_sensitive(text: &str) -> Result<(), ClipboardError> {
         .map_err(ClipboardError::Spawn)?;
 
     let mut stdin = child.stdin.take().ok_or(ClipboardError::MissingStdin)?;
-    stdin
-        .write_all(text.as_bytes())
-        .map_err(ClipboardError::Write)?;
+    // An old wl-copy can reject --sensitive and exit before the pipe write
+    // completes, producing EPIPE instead of a useful unsupported-flag error.
+    // Always reap the child before diagnosing either write or exit failures.
+    let write_result = stdin.write_all(text.as_bytes());
     drop(stdin);
 
     let status = child.wait().map_err(ClipboardError::Wait)?;
@@ -64,10 +65,13 @@ pub fn copy_sensitive(text: &str) -> Result<(), ClipboardError> {
                 return Err(ClipboardError::SensitiveUnsupported);
             }
         }
+        if let Err(error) = write_result {
+            return Err(ClipboardError::Write(error));
+        }
         return Err(ClipboardError::Failed);
     }
 
-    Ok(())
+    write_result.map_err(ClipboardError::Write)
 }
 
 #[cfg(test)]
