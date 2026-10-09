@@ -259,10 +259,10 @@ pub fn commit_snapshot(
     *vault.records_mut() = candidate;
     if let Err(error) = vault.save(path) {
         let changed = std::mem::take(vault.records_mut());
+        let total = changed.len() - count + displaced.len();
         let mut retained = changed
             .into_iter()
             .filter(|record| record.source != source);
-        let total = retained.len() + displaced.len();
         let mut displaced = displaced.into_iter().peekable();
         let mut restored = Vec::with_capacity(total);
         for index in 0..total {
@@ -508,6 +508,66 @@ mod tests {
         let current = Vault::unlock(&path, passphrase).unwrap();
         assert_eq!(previous.records()[0].password(), "old-test-password");
         assert_eq!(current.records()[0].password(), "new-test-password");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn failed_save_restores_original_records_and_the_encrypted_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-failed-save-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let path = root.join("vault.passvault");
+        let mut vault = Vault::create(&path, b"fictional-key-for-failure-test").unwrap();
+        vault.records_mut().push(Credential::new(
+            Source::Apple,
+            "Apple",
+            "https://apple.example.test",
+            "apple-user",
+            "apple-original",
+            1,
+        ));
+        vault.records_mut().push(Credential::new(
+            Source::Edge,
+            "Edge",
+            "https://edge.example.test",
+            "edge-user",
+            "edge-original",
+            1,
+        ));
+        vault.records_mut().push(Credential::new(
+            Source::Firefox,
+            "Firefox",
+            "https://firefox.example.test",
+            "fox-user",
+            "firefox-original",
+            1,
+        ));
+        vault.save(&path).unwrap();
+        let encrypted_before = std::fs::read(&path).unwrap();
+
+        // The existing vault is no longer private, so write_atomic must
+        // reject the replacement. Keep original order and contents in memory.
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let incoming = vec![Credential::new(
+            Source::Chrome,
+            "New",
+            "https://new.example.test",
+            "new-user",
+            "new-secret",
+            2,
+        )];
+        let result = commit_snapshot(&path, &mut vault, Source::Chrome, incoming, false);
+        assert!(matches!(result, Err(ImportError::Vault(VaultError::UnsafeFile))));
+        assert_eq!(std::fs::read(&path).unwrap(), encrypted_before);
+        let labels: Vec<_> = vault.records().iter().map(|record| record.title()).collect();
+        assert_eq!(labels, ["Apple", "Edge", "Firefox"]);
+        assert_eq!(vault.records()[0].password(), "apple-original");
+        assert_eq!(vault.records()[1].password(), "edge-original");
+        assert_eq!(vault.records()[2].password(), "firefox-original");
         std::fs::remove_dir_all(&root).unwrap();
     }
 
