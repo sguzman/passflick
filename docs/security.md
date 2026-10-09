@@ -1,13 +1,31 @@
 # Security model
 
-Passflick holds high-value credentials and is not yet independently audited.
+Passflick holds high-value credentials. It is **pre-release** and has not undergone an independent security audit. Real credentials should not be imported until target-host acceptance and security review are complete.
 
-The local vault uses Argon2id passphrase-based key derivation and XChaCha20-Poly1305 authenticated encryption, with a versioned file format distinct from OTPick's. Persistent vault files are 0600 and created directories 0700. A Linux session-keyring entry stores the derived Passflick-only vault key. Optional Secret Service integration can make key recovery across picker launches convenient.
+## Encrypted vault
 
-The normal picker must not reveal passwords in a list, copy them without an explicit key action, write them to logs, put them in process arguments, or send them over the network. Its first-run session unlock field masks passphrase input, clears the entered passphrase after each attempt, and does not open the credential picker unless the encrypted vault is verified and session key caching succeeds. The sensitive clipboard hint is advisory; clipboard managers and processes under the same desktop login may capture values. Unlocking the desktop exposes more risk than leaving a vault locked.
+Passflick stores a local, versioned encrypted projection using Argon2id and XChaCha20-Poly1305 authenticated encryption. It enforces private vault-file permissions (0600) and private vault directories (0700). The derived key can be cached in the Linux session keyring, separately for each vault. Desktop Secret Service integration is optional.
 
-Unexpectedly small but syntactically valid snapshots are rejected by default to avoid accidental bulk deletion; an explicit `--allow-shrink` permits intentional cleanup.\n\nBefore handling vault secrets, the Linux process attempts to disable process core dumps and ptrace attachment using `PR_SET_DUMPABLE=0` and reduces `RLIMIT_CORE` to zero. Startup aborts if either guard cannot be installed. This reduces accidental exposure of decrypted credentials in crash dumps but is not a comprehensive defense against a compromised user session, clipboard manager, or other same-user process.\n\nThe application offers `passflick backup` for private encrypted snapshots and `passflick restore FILE --confirm` for compatible authenticated backups. Restore requires a source snapshot decryptable under the current vault key, acquires the exclusive write lock, and makes a new encrypted safety backup before changing records. Source imports acquire an exclusive Linux file lock until their new encrypted vault has been committed. A valid refresh of an existing source creates an encrypted rollback snapshot before replacing records; if backup creation fails, the import aborts without changing the vault. Initialization does not overwrite an existing vault. An explicit session lock is not lifted until a valid unlock succeeds. These measures reduce ordinary data-loss risks, but they are not a substitute for an independent security audit.\n\nCSV files exported by password managers are **plaintext**. Passflick reads an explicit file, then writes encrypted records to its vault. It does not own the exported file or guarantee secure erasure. The user should delete plaintext exports and avoid syncing or committing them. A future import UX should minimize plaintext file persistence.
+New vaults require a passphrase between 12 and 1024 characters. Passphrases do not require arbitrary combinations of character classes. Existing vaults remain unlockable with their original passphrases, including shorter values created by earlier versions.
 
-Direct source integrations must use authorized local interfaces. Do not attempt browser authentication bypass, cloud account access, or unattended decryption of profiles.
+On first launch, the graphical application can create an encrypted vault using masked passphrase and confirmation fields. Passphrase entry buffers are cleared after setup and unlock attempts. The normal picker shows labels and usernames, not passwords; copying requires an explicit key action.
 
-Never commit user credentials, exported files, browser profiles, screenshots with sensitive values, keys, or private language.
+## Process and clipboard
+
+Before handling vault data, Passflick disables Linux core dumps and ptrace attachment with `RLIMIT_CORE=0` and `PR_SET_DUMPABLE=0`. Startup fails if these safeguards cannot be installed.
+
+Password copying uses `wl-copy --sensitive`, preserving literal whitespace and newlines. **The sensitive hint is advisory**: clipboard managers or other software in the same desktop session may still capture clipboard contents. The application does not claim protection from a compromised user session.
+
+## Data preservation
+
+Source imports parse and validate the full CSV before changing a source snapshot. Suspicious bulk reductions require `--allow-shrink`. Updates take an exclusive file lock; refreshing an existing source first creates an encrypted rollback snapshot.
+
+`passflick backup` creates a private encrypted snapshot without overwriting previous backups. `passflick restore FILE --confirm` authenticates the selected backup against the current vault key, acquires the write lock, and preserves another encrypted safety backup before replacing the live records. Vault initialization never silently overwrites an existing path.
+
+## Source boundaries
+
+CSV exports from browsers and password managers are **plaintext**. Passflick does not securely erase these source files, so they should not be left in shared or synchronized locations. Native browser profile discovery examines filenames only; it does not decrypt or import stored credentials.
+
+Future native adapters must use authorized local interfaces. CI fixtures contain synthetic credentials rather than production account data.
+
+These safeguards reduce identifiable risks. They do not replace real-world compositor, clipboard, browser-export, and security acceptance.
