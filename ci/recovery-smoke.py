@@ -250,6 +250,51 @@ def main() -> None:
         assert b"Firefox: 1 credentials" in source_status
         assert len(list((root / "backups").glob("*.passvault"))) == 3
 
+        # A truncated browser export must not silently erase most of an
+        # existing source. The deliberate override affects only that source.
+        bulk_export = root / "fictional-edge-bulk.csv"
+        bulk_export.write_bytes(
+            b"name,url,username,password\n"
+            + b"".join(
+                f"Bulk {i},https://bulk{i}.example.test,bulk-user,fictional-bulk-password-{i}\n".encode()
+                for i in range(12)
+            )
+        )
+        run_cli(executable, environment, "import", "edge", str(bulk_export))
+        before_shrink = vault.read_bytes()
+        backups_before_shrink = len(list((root / "backups").glob("*.passvault")))
+        status = run_cli(executable, environment, "sources")
+        assert b"Edge: 12 credentials" in status
+        assert b"Firefox: 1 credentials" in status
+
+        shortened_export = root / "fictional-edge-shortened.csv"
+        shortened_export.write_bytes(
+            b"name,url,username,password\n"
+            + b"".join(
+                f"Bulk {i},https://bulk{i}.example.test,bulk-user,fictional-bulk-password-{i}\n".encode()
+                for i in range(3)
+            )
+        )
+        run_cli(
+            executable, environment, "import", "edge", str(shortened_export),
+            success=False, expected_error=b"suspicious Edge snapshot shrink",
+        )
+        assert vault.read_bytes() == before_shrink
+        assert len(list((root / "backups").glob("*.passvault"))) == backups_before_shrink
+
+        run_cli(
+            executable, environment, "import", "edge", str(shortened_export),
+            "--allow-shrink",
+        )
+        status = run_cli(executable, environment, "sources")
+        assert b"Edge: 3 credentials" in status
+        assert b"Firefox: 1 credentials" in status
+        after_shrink = run_cli(executable, environment, "list")
+        assert b"Bulk 0" in after_shrink
+        assert b"Bulk 11" not in after_shrink
+        assert b"https://firefox.example.test" in after_shrink
+        assert len(list((root / "backups").glob("*.passvault"))) == backups_before_shrink + 1
+
     print("Synthetic Passflick CLI recovery and import smoke tests passed")
 
 
