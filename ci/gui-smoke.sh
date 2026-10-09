@@ -30,7 +30,11 @@ export WINIT_UNIX_BACKEND=x11
 unset WAYLAND_DISPLAY
 
 launch_picker() {
-  ./target/debug/passflick demo > "$root/stdout" 2> "$root/stderr" &
+  if [[ "${1:-demo}" == "normal" ]]; then
+    ./target/debug/passflick > "$root/stdout" 2> "$root/stderr" &
+  else
+    ./target/debug/passflick demo > "$root/stdout" 2> "$root/stderr" &
+  fi
   picker_pid="$!"
   local window=""
   for _ in $(seq 1 150); do
@@ -88,5 +92,36 @@ launch_picker >/dev/null
 xdotool key --clearmodifiers Escape
 await_exit
 cmp "$root/expected" "$PASSFLICK_TEST_CLIPBOARD"
+
+echo "Synthetic GUI test: first-run setup rejects mismatched passphrases"
+export PASSFLICK_VAULT="$root/new-vault.passvault"
+launch_picker normal >/dev/null
+xdotool type --clearmodifiers --delay 25 'fictional-test-passphrase-42'
+xdotool key --clearmodifiers Tab
+xdotool type --clearmodifiers --delay 25 'mismatch-test-passphrase'
+xdotool key --clearmodifiers Return
+sleep 0.4
+test ! -e "$PASSFLICK_VAULT"
+xdotool key --clearmodifiers Escape
+await_exit
+
+echo "Synthetic GUI test: first-run setup creates private encrypted vault"
+launch_picker normal >/dev/null
+xdotool type --clearmodifiers --delay 25 'fictional-test-passphrase-42'
+xdotool key --clearmodifiers Tab
+xdotool type --clearmodifiers --delay 25 'fictional-test-passphrase-42'
+xdotool key --clearmodifiers Return
+for _ in $(seq 1 100); do
+  if [[ -f "$PASSFLICK_VAULT" ]]; then break; fi
+  sleep 0.1
+done
+test -f "$PASSFLICK_VAULT"
+test "$(stat -c '%a' "$PASSFLICK_VAULT")" = "600"
+if grep -aq 'fictional-test-passphrase-42' "$PASSFLICK_VAULT"; then
+  echo "Vault file unexpectedly includes the plaintext test passphrase." >&2
+  exit 1
+fi
+xdotool key --clearmodifiers Escape
+await_exit
 
 echo "Passflick synthetic GUI checks passed."
