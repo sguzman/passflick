@@ -14,6 +14,7 @@
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
 - [x] Locked Linux CI: build, 59 tests, CLI smoke checks, formatting, and strict Clippy
+- [ ] Confirm the newly added filesystem regression tests with CI and target-host acceptance
 - [x] Automated X11 keyboard/copy/close smoke tests under Xvfb
 - [x] Automated native Wayland first-frame and exact synthetic clipboard transport under nested Weston (Xvfb)
 - [ ] Complete [synthetic target-host acceptance](acceptance.md) on EndeavourOS/Hyprland
@@ -40,6 +41,7 @@
 - [x] Provider-signature and duplicate-header checks for CSV import snapshots
 - [x] Synthetic complete-format Firefox and Apple exports; Apple OTPAuth and Notes are not persisted
 - [x] Require sensitive clipboard support instead of silently copying password values into unmarked history
+- [x] Reject named-pipe vault and lock paths without blocking; require private active-vault parent at unlock while keeping external encrypted snapshots verifiable
 - [ ] More security review: symlink races, keyring lifecycle, clipboard history, import edge cases
 - [x] Checksummed Linux x86_64 pre-release binary build workflow
 - [ ] Keyboard latency profiling, target-host packaging validation, and MVP acceptance
