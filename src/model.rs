@@ -112,7 +112,12 @@ impl Credential {
         if self.username.is_empty() {
             format!("{}  ·  {}", title, self.source)
         } else {
-            format!("{}  ·  {}  ·  {}", title, safe_display_text(&self.username), self.source)
+            format!(
+                "{}  ·  {}  ·  {}",
+                title,
+                safe_display_text(&self.username),
+                self.source
+            )
         }
     }
     /// Key borrows the original secret rather than creating another plaintext
