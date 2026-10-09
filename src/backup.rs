@@ -85,6 +85,47 @@ fn open_verified_snapshot(snapshot: &Path, live: &Vault) -> Result<Vault, VaultE
     Vault::open_with_key(snapshot, VaultKey::from_bytes(key_bytes))
 }
 
+/// Explicit recovery from a verified encrypted snapshot when the active
+/// vault is damaged or absent. Caller holds the exclusive write lock.
+pub struct RecoveryResult {
+    pub records: usize,
+    /// An exact ciphertext copy, possibly corrupted, of the previous target.
+    pub previous_raw_snapshot: Option<PathBuf>,
+}
+
+pub fn recover_into(
+    vault_path: &Path,
+    snapshot: &Path,
+    passphrase: &[u8],
+) -> Result<RecoveryResult, VaultError> {
+    // Read only once: authenticate exactly the bytes that will be installed.
+    // A source changing between verification and installation cannot swap an
+    // unverified ciphertext into the active vault.
+    let bytes = read_private_vault(snapshot)?;
+    let records = Vault::authenticate_bytes(&bytes, passphrase)?;
+
+    let existing = match fs::symlink_metadata(vault_path) {
+        Ok(_) => true,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(error) => return Err(error.into()),
+    };
+    if existing && fs::canonicalize(vault_path)? == fs::canonicalize(snapshot)? {
+        return Err(VaultError::InvalidPath(snapshot.to_path_buf()));
+    }
+    // The previous primary need not decrypt. Preserve its exact raw bytes
+    // before replacing anything, even when its authentication tag is broken.
+    let previous_raw_snapshot = if existing {
+        Some(create(vault_path)?)
+    } else {
+        None
+    };
+    Vault::install_verified_bytes(vault_path, &bytes, !existing)?;
+    Ok(RecoveryResult {
+        records,
+        previous_raw_snapshot,
+    })
+}
+
 /// Restore a verified backup from this vault's encryption lineage.
 /// The caller must hold the exclusive vault write lock. Before any replacement,
 /// preserve the current encrypted vault as a fresh backup. The source snapshot
@@ -180,6 +221,56 @@ mod tests {
         fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).unwrap();
         assert!(matches!(create(&path), Err(VaultError::UnsafeDirectory)));
         assert!(!root.join("backups").exists());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn recovery_handles_corrupt_and_missing_primary_without_plaintext() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-recover-test-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let path = root.join("vault.passvault");
+        let passphrase = b"fictional-recovery-passphrase";
+        let mut live = Vault::create(&path, passphrase).unwrap();
+        live.records_mut().push(Credential::new(
+            Source::Edge,
+            "Recovered",
+            "https://recovered.example.test",
+            "alice",
+            "fictional-recovered-secret",
+            1,
+        ));
+        live.save(&path).unwrap();
+        let snapshot = create(&path).unwrap();
+        let original_backup = fs::read(&snapshot).unwrap();
+
+        let mut broken = fs::read(&path).unwrap();
+        *broken.last_mut().unwrap() ^= 1;
+        fs::write(&path, &broken).unwrap();
+        assert!(Vault::unlock(&path, passphrase).is_err());
+        let previous = recover_into(&path, &snapshot, passphrase).unwrap();
+        assert_eq!(previous.records, 1);
+        let raw = previous.previous_raw_snapshot.expect("raw safety copy");
+        assert_eq!(fs::read(&raw).unwrap(), broken);
+        assert_eq!(fs::read(&path).unwrap(), original_backup);
+        assert_eq!(
+            Vault::unlock(&path, passphrase).unwrap().records()[0].password(),
+            "fictional-recovered-secret"
+        );
+
+        // Wrong credentials never overwrite a valid primary.
+        let before = fs::read(&path).unwrap();
+        assert!(recover_into(&path, &snapshot, b"incorrect-passphrase").is_err());
+        assert_eq!(fs::read(&path).unwrap(), before);
+
+        fs::remove_file(&path).unwrap();
+        let recreated = recover_into(&path, &snapshot, passphrase).unwrap();
+        assert_eq!(recreated.records, 1);
+        assert!(recreated.previous_raw_snapshot.is_none());
+        assert_eq!(fs::read(&path).unwrap(), original_backup);
         fs::remove_dir_all(&root).unwrap();
     }
 
