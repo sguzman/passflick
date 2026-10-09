@@ -88,6 +88,11 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
             no_extra_args(&mut args)?;
             backup_encrypted_vault()?;
         }
+        Some("verify") => {
+            let snapshot = args.next().ok_or("verify requires an encrypted backup file")?;
+            no_extra_args(&mut args)?;
+            verify_encrypted_backup(Path::new(&snapshot))?;
+        }
         Some("restore") => {
             let snapshot = args
                 .next()
@@ -363,6 +368,14 @@ fn discover_browser_profiles() {
     println!("Discovery does not import, decrypt, or sync browser credentials.");
 }
 
+fn verify_encrypted_backup(snapshot: &Path) -> Result<(), Box<dyn Error>> {
+    let (_, vault) = open_unlocked_vault()?;
+    let count = backup::verify_snapshot(snapshot, &vault)?;
+    println!("Encrypted backup authenticated for this vault ({count} credentials).");
+    println!("No vault data was changed.");
+    Ok(())
+}
+
 fn restore_encrypted_vault(snapshot: &Path) -> Result<(), Box<dyn Error>> {
     let path = paths::vault_path()?;
     let _guard = write_lock::acquire(&path)?;
@@ -496,6 +509,7 @@ fn print_help() {
     println!("  passflick discover          Find local browser profiles, no secret access");
     println!("  passflick demo              Open picker with synthetic test credentials");
     println!("  passflick backup            Create an encrypted vault backup");
+    println!("  passflick verify FILE       Authenticate a backup without restoring");
     println!("  passflick restore FILE --confirm  Restore compatible encrypted backup");
     println!();
     println!("  import accepts optional --allow-shrink for intentional large deletions");
