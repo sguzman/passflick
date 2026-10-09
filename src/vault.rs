@@ -331,7 +331,9 @@ pub(crate) fn read_private_vault(path: &Path) -> Result<Vec<u8>, VaultError> {
     // O_NOFOLLOW prevents a vault-path symlink from redirecting reads to another file.
     let file = OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_NOFOLLOW)
+        // Never block opening an attacker-controlled FIFO or device: validate the
+        // opened descriptor's file type before attempting any read.
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(path)?;
     let metadata = file.metadata()?;
     if !metadata.is_file() || metadata.permissions().mode() & 0o077 != 0 {
@@ -628,6 +630,27 @@ mod tests {
         symlink(&file, &link).unwrap();
         assert!(read_private_vault(&link).is_err());
         fs::remove_dir_all(&temp).unwrap();
+    }
+
+    #[test]
+    fn private_vault_reader_rejects_fifo_without_waiting_for_writer() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let mut entropy = [0_u8; 8];
+        fill_random(&mut entropy).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "passflick-fifo-vault-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&dir).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+        let fifo = dir.join("vault.passvault");
+        let name = std::ffi::CString::new(fifo.as_os_str().as_bytes()).unwrap();
+        // SAFETY: name is a valid NUL-terminated pathname and mkfifo does
+        // not retain this pointer after returning.
+        assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+        assert!(matches!(read_private_vault(&fifo), Err(VaultError::UnsafeFile)));
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
