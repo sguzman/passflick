@@ -43,7 +43,7 @@ Use isolated temporary XDG data directories and synthetic CSV exports for all fo
 ## 3. Clipboard and input boundary
 
 - Verify literal spaces, Unicode, quoted CSV values, embedded newlines, and trailing newlines survive import and copy.
-- Confirm the `wl-copy` sensitive hint and evaluate the host clipboard manager's actual history handling.
+- Confirm `wl-clipboard` 2.3+ and the `wl-copy --sensitive` hint; old versions must give an explicit diagnostic without writing unmarked secrets. Evaluate the host clipboard manager's actual history handling.
 - Check the tool never prints passwords or vault keys in ordinary output, startup traces, crash diagnostics, or screenshots.
 - Imported site names and usernames containing terminal escape sequences or Unicode direction-control characters must be displayed harmlessly; Shift+Enter must still copy the original username exactly.
 - Do not record or upload clipboard contents from production sessions.
