@@ -584,16 +584,17 @@ mod tests {
             ("Has NUL", "https://example.test", "user\0other", "secret"),
             ("  ", "  ", "user", "secret"),
         ] {
-            let incoming = vec![Credential::new(
-                Source::Edge,
-                "Valid first",
-                "https://first.example.test",
-                "first",
-                "good-value",
-                2,
-            ), Credential::new(
-                Source::Edge, label, url, username, password, 2,
-            )];
+            let incoming = vec![
+                Credential::new(
+                    Source::Edge,
+                    "Valid first",
+                    "https://first.example.test",
+                    "first",
+                    "good-value",
+                    2,
+                ),
+                Credential::new(Source::Edge, label, url, username, password, 2),
+            ];
             assert!(matches!(
                 commit_snapshot(&path, &mut vault, Source::Edge, incoming, false),
                 Err(ImportError::InvalidCredential { position: 2, .. })
