@@ -32,7 +32,8 @@
 - [x] Add bounds to import and vault parsing, private filesystem permissions, write locking, and encrypted backups
 - [x] Authenticated encrypted restore with pre-restore safety backup
 - [x] Read-only encrypted backup authentication command (`passflick verify FILE`)
-- [ ] Verified disaster recovery from a missing or corrupted primary vault, without assuming the live vault can be unlocked
+- [x] Passphrase-authenticated disaster recovery from a missing or corrupted primary vault, preserving original raw bytes before replacement
+- [ ] Validate disaster recovery and session-key invalidation on target EndeavourOS/Hyprland
 - [x] Failed source refresh restores original in-memory projection without cloning secrets
 - [x] Automatic encrypted pre-refresh backups for existing credential sources
 - [x] Atomically published backups with no overwrite and safe temporary-file cleanup
