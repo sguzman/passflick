@@ -32,6 +32,8 @@ jobs:
         run: |
           set -euo pipefail
           install -Dm755 target/release/passflick package/passflick
+          install -Dm755 scripts/install-user.sh package/install-user.sh
+          install -Dm644 desktop/passflick.desktop package/passflick.desktop
           install -Dm644 README.md package/README.md
           install -Dm644 LICENSE package/LICENSE
           mkdir -p package/docs
