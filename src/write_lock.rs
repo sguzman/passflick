@@ -103,6 +103,65 @@ mod tests {
     }
 
     #[test]
+    fn concurrent_source_imports_preserve_both_encrypted_snapshots() {
+        use crate::model::{Credential, Source};
+        use crate::{r#import, vault::Vault};
+        use std::sync::{Arc, Barrier};
+        use std::thread;
+
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-concurrent-import-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let path = root.join("vault.passvault");
+        const PASSPHRASE: &[u8] = b"fictional-concurrent-import-passphrase";
+        Vault::create(&path, PASSPHRASE).unwrap();
+
+        let starting_line = Arc::new(Barrier::new(3));
+        let mut workers = Vec::new();
+        for (source, title, password) in [
+            (Source::Edge, "Edge account", "fictional-edge-secret"),
+            (Source::Firefox, "Firefox account", "fictional-firefox-secret"),
+        ] {
+            let path = path.clone();
+            let starting_line = Arc::clone(&starting_line);
+            workers.push(thread::spawn(move || {
+                starting_line.wait();
+                // The guard must cover both reading and committing. If each
+                // worker reads first and locks only for save, the last writer
+                // can erase the other provider's imported records.
+                let _guard = acquire(&path).unwrap();
+                let mut live = Vault::unlock(&path, PASSPHRASE).unwrap();
+                let records = vec![Credential::new(
+                    source,
+                    title,
+                    "https://example.test",
+                    "fictional-user",
+                    password,
+                    1,
+                )];
+                r#import::commit_snapshot(&path, &mut live, source, records, false).unwrap();
+            }));
+        }
+        starting_line.wait();
+        for worker in workers {
+            worker.join().unwrap();
+        }
+
+        let reopened = Vault::unlock(&path, PASSPHRASE).unwrap();
+        assert_eq!(reopened.records().len(), 2);
+        assert!(reopened.records().iter().any(|record| {
+            record.source == Source::Edge && record.password() == "fictional-edge-secret"
+        }));
+        assert!(reopened.records().iter().any(|record| {
+            record.source == Source::Firefox && record.password() == "fictional-firefox-secret"
+        }));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn independent_file_handles_serialize_writes() {
         let mut entropy = [0_u8; 8];
         getrandom::fill(&mut entropy).unwrap();
