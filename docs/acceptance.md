@@ -1,6 +1,6 @@
 # Acceptance plan
 
-Passflick is pre-release until the following checks are run against its real Linux/Wayland target. Automated tests use fictional `example.test` credentials exclusively. CI has already validated the X11 search/Enter/Shift+Enter/Escape lifecycle under Xvfb and the first native Wayland frame plus a synthetic byte-exact clipboard round-trip under nested Weston. A separate synthetic CLI recovery smoke test has been added to the Rust workflow but must pass before it counts as validated. The CI runner uses an older `wl-copy`, so its transport test does not validate the sensitive-data hint; that remains a target-host acceptance item. The checklist below contains the remaining target-host acceptance work. This document is an acceptance gate, not a feature changelog.
+Passflick is pre-release until the following checks are run against its real Linux/Wayland target. Automated tests use fictional `example.test` credentials exclusively. CI has already validated the X11 search/Enter/Shift+Enter/Escape lifecycle under Xvfb and the first native Wayland frame plus a synthetic byte-exact clipboard round-trip under nested Weston. The Rust workflow's synthetic CLI recovery and multi-source import smoke test passed on [October 9, 2026](https://github.com/sguzman/passflick/actions/runs/37945324870), alongside 71 Rust tests, locked CLI checks, formatting, and strict Clippy. The CI runner uses an older `wl-copy`, so its transport test does not validate the sensitive-data hint; that remains a target-host acceptance item. The checklist below contains the remaining target-host acceptance work. This document is an acceptance gate, not a feature changelog.
 
 ## 1. Synthetic graphical picker
 
@@ -30,7 +30,7 @@ Use isolated temporary XDG data directories and synthetic CSV exports for all fo
 - Initialize and unlock a fresh vault, import a source, then reopen successfully.
 - Show source counts and snapshot age without printing any secret.
 - Import the same source twice; confirm its snapshot updates rather than accumulating duplicates, and the original encrypted snapshot is automatically saved under `backups/` before replacement.
-- Import two sources and refresh one; verify the other is preserved. The synthetic CLI smoke test exercises this for Firefox and Edge, but its CI run and eventual target-host acceptance remain separate gates.
+- Import two sources and refresh one; verify the other is preserved. The synthetic CLI smoke test verified this for Firefox and Edge. Target-host acceptance remains a separate gate.
 - Reject malformed rows, missing required columns, and oversized exports without changing a valid snapshot.
 - Reject two different CSV header aliases for one field (such as `password` and `pass`, or `url` and `website`) before source replacement. Also reject a missing username header without rejecting rows whose username value is blank.
 - Test unusually small snapshots and the explicit `--allow-shrink` override.

@@ -13,10 +13,11 @@
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Locked Linux CI baseline: build, 59 tests, CLI smoke checks, formatting, and strict Clippy
-- [x] Added synthetic CLI encrypted-recovery smoke workflow (passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, safety snapshot); latest workflow result still awaiting independent confirmation
-- [x] Extend CLI recovery smoke coverage to source isolation and refresh: adding Firefox then replacing Edge must preserve Firefox, replace only Edge, and retain an encrypted pre-refresh backup (workflow validation pending)
-- [ ] Confirm the newly added filesystem regression tests with CI and target-host acceptance
+- [x] Rust CI verified at [`b1e7d5e`](https://github.com/sguzman/passflick/actions/runs/37945324870): 71 passed tests, locked CLI checks, formatting, desktop installation smoke, synthetic encrypted recovery/import smoke, and strict Clippy
+- [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
+- [x] Synthetic CLI source refresh passed: adding Firefox then replacing Edge preserves Firefox and retains the encrypted pre-refresh backup
+- [x] Synthetic filesystem regression tests passed in Rust CI
+- [ ] Confirm filesystem edge cases on target EndeavourOS/Hyprland
 - [x] Automated X11 keyboard/copy/close smoke tests under Xvfb
 - [x] Automated native Wayland first-frame and exact synthetic clipboard transport under nested Weston (Xvfb)
 - [ ] Complete [synthetic target-host acceptance](acceptance.md) on EndeavourOS/Hyprland
@@ -44,7 +45,7 @@
 - [x] Reject ambiguous semantic CSV header aliases and missing username headers before importing a source snapshot
 - [x] Synthetic complete-format Firefox and Apple exports; Apple OTPAuth and Notes are not persisted
 - [x] Require sensitive clipboard support instead of silently copying password values into unmarked history
-- [x] Add synthetic regression coverage for early-exiting legacy `wl-copy` and exact byte preservation with a supported helper (CI validation pending)
+- [x] CI passed synthetic regression tests for early-exiting legacy `wl-copy` and exact bytes with a supported helper
 - [x] Reject named-pipe vault and lock paths without blocking; require private active-vault parent at unlock while keeping external encrypted snapshots verifiable
 - [ ] More security review: symlink races, keyring lifecycle, clipboard history, import edge cases
 - [x] Checksummed Linux x86_64 pre-release binary build workflow

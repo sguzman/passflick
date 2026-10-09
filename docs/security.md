@@ -30,6 +30,6 @@ CSV exports from browsers and password managers are **plaintext**. Passflick doe
 
 Future native adapters must use authorized local interfaces. CI fixtures contain synthetic credentials rather than production account data.
 
-The Rust workflow also includes a synthetic end-to-end encrypted-recovery CLI smoke test using only fictional credentials, an isolated temporary directory, and a pseudo-terminal for passphrases. The test checks bad-passphrase non-destructiveness, exact ciphertext restoration, a displaced-raw safety snapshot, and subsequent read-only verification. This is an added test, not a claim of a passing CI run or an independent audit.
+The Rust workflow also includes a synthetic end-to-end encrypted-recovery CLI smoke test using only fictional credentials, an isolated temporary directory, and a pseudo-terminal for passphrases. The test checks bad-passphrase non-destructiveness, exact ciphertext restoration, a displaced-raw safety snapshot, and subsequent read-only verification. It passed in [Rust CI on October 9, 2026](https://github.com/sguzman/passflick/actions/runs/37945324870). CI is not an independent security audit or target-host acceptance.
 
 These safeguards reduce identifiable risks. They do not replace real-world compositor, clipboard, browser-export, and security acceptance.
