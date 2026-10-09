@@ -13,13 +13,23 @@ All four are exposed through `passflick import SOURCE FILE`, with the aliases `e
 
 ## Snapshot rules
 
-1. Validate every row before replacing anything in the encrypted vault. Incomplete rows, empty exports, and unexpected columns fail closed. A suspiciously large source shrink also requires explicit `--allow-shrink` confirmation.
+1. Validate every row before replacing anything in the encrypted vault. Incomplete rows, empty exports, duplicate normalized column names, and recognizable provider mismatches fail closed. Unrecognized **extra** columns are ignored rather than stored. A suspiciously large source shrink also requires explicit `--allow-shrink` confirmation.
 2. Replacing one source's snapshot cannot remove records from any other source.
 3. Credentials with different secret values remain separate entries even when they have the same website and username.
 4. Entries with the same website, username, and password may be grouped for display. Original records remain intact.
 5. Keep source and import timestamp. A missing or old snapshot is not represented as live browser state.
 
 Source import updates are serialized through a private lock file, preventing concurrent source refreshes from accidentally overwriting each other. Plaintext CSV files are a transient exchange format and should be deleted after their import is verified. The stdin interface (`passflick import edge -`) permits trusted exporters to stream a snapshot directly.
+
+## Documented CSV layouts
+
+The parser includes fictional regression cases for the documented provider layouts. These are not substitutes for checking a recent, authorized export from each real browser.
+
+- Edge and Chrome/Chromium commonly use `name,url,username,password` or another header set containing `url,username,password`. The two cannot always be distinguished from header text alone.
+- Firefox exports `url,username,password,httpRealm,formActionOrigin,guid,timeCreated,timeLastUsed,timePasswordChanged`. Its realm, GUID, and timestamps are not copied into the Passflick record.
+- Apple/Safari exports `Title,URL,Username,Password,Notes,OTPAuth`. Passflick takes the password identity only: **Notes and OTPAuth are intentionally ignored**, so TOTP seeds are not silently imported into the password projection.
+
+References: [Google Password Manager CSV format](https://support.google.com/chrome/answer/13068232?hl=en-GB), [Firefox LoginExport implementation](https://searchfox.org/mozilla-central/source/toolkit/components/passwordmgr/LoginExport.sys.mjs), [Apple Safari password-export columns](https://developer.apple.com/documentation/SafariServices/importing-data-exported-from-safari).
 
 ## Native integration research
 
