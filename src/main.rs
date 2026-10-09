@@ -95,6 +95,16 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
             no_extra_args(&mut args)?;
             verify_encrypted_backup(Path::new(&snapshot))?;
         }
+        Some("recover") => {
+            let snapshot = args
+                .next()
+                .ok_or("recover requires an encrypted backup file and --confirm")?;
+            if args.next().as_deref() != Some("--confirm") {
+                return Err("recover requires explicit --confirm".into());
+            }
+            no_extra_args(&mut args)?;
+            recover_encrypted_vault(Path::new(&snapshot))?;
+        }
         Some("restore") => {
             let snapshot = args
                 .next()
@@ -370,6 +380,34 @@ fn discover_browser_profiles() {
     println!("Discovery does not import, decrypt, or sync browser credentials.");
 }
 
+fn recover_encrypted_vault(snapshot: &Path) -> Result<(), Box<dyn Error>> {
+    let path = paths::vault_path()?;
+    let _guard = write_lock::acquire(&path)?;
+    let passphrase = Zeroizing::new(rpassword::prompt_password("Backup passphrase: ")?);
+    let result = backup::recover_into(&path, snapshot, passphrase.as_bytes())?;
+
+    // The recovered snapshot might originate from a different salt/key. Do
+    // not allow old cached keys to masquerade as successful authentication.
+    let _ = session::mark_locked(&path);
+    let _ = session::clear(&path);
+    if let Err(error) = desktop_keyring::remove(&path) {
+        eprintln!("passflick: previous desktop key could not be removed: {error}");
+    }
+
+    println!(
+        "Recovered authenticated encrypted backup ({} credentials).",
+        result.records
+    );
+    if let Some(previous) = result.previous_raw_snapshot {
+        println!(
+            "Previous primary ciphertext preserved, unverified, at {}",
+            previous.display()
+        );
+    }
+    println!("Unlock with the backup passphrase on your next picker launch.");
+    Ok(())
+}
+
 fn verify_encrypted_backup(snapshot: &Path) -> Result<(), Box<dyn Error>> {
     let (_, vault) = open_unlocked_vault()?;
     let count = backup::verify_snapshot(snapshot, &vault)?;
@@ -512,6 +550,7 @@ fn print_help() {
     println!("  passflick demo              Open picker with synthetic test credentials");
     println!("  passflick backup            Create an encrypted vault backup");
     println!("  passflick verify FILE       Authenticate a backup without restoring");
+    println!("  passflick recover FILE --confirm Recover missing/corrupt primary vault");
     println!("  passflick restore FILE --confirm  Restore compatible encrypted backup");
     println!();
     println!("  import accepts optional --allow-shrink for intentional large deletions");
