@@ -22,6 +22,8 @@ pub enum ImportError {
     MissingSite,
     #[error("CSV contains duplicate normalized column names; previous snapshot is unchanged")]
     DuplicateColumn,
+    #[error("CSV contains ambiguous {role} columns; previous snapshot is unchanged")]
+    AmbiguousColumn { role: &'static str },
     #[error("CSV resembles a {detected} export, but a different source was selected")]
     WrongSource { detected: &'static str },
     #[error("CSV record {row} is incomplete: {reason}; previous snapshot is unchanged")]
@@ -52,10 +54,21 @@ fn normalize_header(value: &str) -> String {
         .collect()
 }
 
-fn column(headers: &[String], candidates: &[&str]) -> Option<usize> {
-    headers
-        .iter()
-        .position(|h| candidates.contains(&h.as_str()))
+fn column(
+    headers: &[String],
+    candidates: &[&str],
+    role: &'static str,
+) -> Result<Option<usize>, ImportError> {
+    let mut found = None;
+    for (index, header) in headers.iter().enumerate() {
+        if candidates.contains(&header.as_str()) {
+            if found.is_some() {
+                return Err(ImportError::AmbiguousColumn { role });
+            }
+            found = Some(index);
+        }
+    }
+    Ok(found)
 }
 
 /// Parse the entire input, including every row, before permitting a snapshot replacement.
@@ -94,8 +107,8 @@ pub fn parse_csv(
             detected: "Apple Passwords",
         });
     }
-    let password =
-        column(&headers, &["password", "pass", "passwd"]).ok_or(ImportError::MissingPassword)?;
+    let password = column(&headers, &["password", "pass", "passwd"], "password")?
+        .ok_or(ImportError::MissingPassword)?;
     let url = column(
         &headers,
         &[
@@ -106,12 +119,14 @@ pub fn parse_csv(
             "websiteurl",
             "loginuri",
         ],
-    );
-    let title = column(&headers, &["name", "title", "sitename"]);
+        "site URL",
+    )?;
+    let title = column(&headers, &["name", "title", "sitename"], "site title")?;
     let username = column(
         &headers,
         &["username", "user", "login", "account", "userid"],
-    );
+        "username",
+    )?;
     if url.is_none() && title.is_none() {
         return Err(ImportError::MissingSite);
     }
@@ -644,6 +659,33 @@ mod tests {
             parse_csv(data, Source::Edge, 0),
             Err(ImportError::DuplicateColumn)
         ));
+    }
+
+    #[test]
+    fn ambiguous_alias_columns_fail_before_any_credentials_are_replaced() {
+        for (csv, role) in [
+            (
+                "url,username,password,pass\\nhttps://example.test,user,correct,wrong\\n",
+                "password",
+            ),
+            (
+                "url,website,username,password\\nhttps://example.test,https://other.example.test,user,secret\\n",
+                "site URL",
+            ),
+            (
+                "name,title,username,password\\nFirst,Second,user,secret\\n",
+                "site title",
+            ),
+            (
+                "url,username,user,password\\nhttps://example.test,alice,bob,secret\\n",
+                "username",
+            ),
+        ] {
+            assert!(matches!(
+                parse_csv(csv.replace("\\\\n", "\\n").as_bytes(), Source::Edge, 0),
+                Err(ImportError::AmbiguousColumn { role: found }) if found == role
+            ));
+        }
     }
 
     #[test]
