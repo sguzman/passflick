@@ -109,7 +109,10 @@ mod tests {
         // A fake unsupported wl-copy that can exit before stdin is written.
         fs::write(
             &executable,
-            b"#!/bin/sh\\nif [ \\"$1\\" = \\"--help\\" ]; then echo '--type --trim-newline'; exit 0; fi\\nexit 2\\n",
+            br#"#!/bin/sh
+if [ "$1" = "--help" ]; then echo '--type --trim-newline'; exit 0; fi
+exit 2
+"#,
         )
         .unwrap();
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
