@@ -13,8 +13,9 @@
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Rust CI verified at [`221bd76`](https://github.com/sguzman/passflick/actions/runs/37974510558): 75 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/import smoke, and strict Clippy
+- [x] Rust CI verified at [`29cb48c`](https://github.com/sguzman/passflick/actions/runs/37994144875): 76 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy
 - [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
+- [x] Synthetic ordinary restore smoke passed: explicit confirmation, corrupted and hard-linked snapshot rejection, four-source restoration, and encrypted pre-restore safety backup
 - [x] Synthetic CLI source refresh passed: Firefox survives Edge replacement; a large accidental Edge shrink is rejected without vault mutation, and `--allow-shrink` preserves Firefox
 - [x] Four-provider synthetic CLI ingestion passed: Edge, Chrome, Firefox, and Apple coexist; Apple exports mislabeled as Edge are rejected without mutation
 - [x] Synthetic filesystem regression tests passed in Rust CI
@@ -48,6 +49,7 @@
 - [x] Require sensitive clipboard support instead of silently copying password values into unmarked history
 - [x] CI passed synthetic regression tests for early-exiting legacy `wl-copy` and exact bytes with a supported helper
 - [x] Reject named-pipe vault and lock paths without blocking; require private effective-user-owned active vault, lock, and managed backup paths while keeping external encrypted snapshots verifiable
+- [x] Verify backup creation rejects a symlink-substituted backup directory without changing the vault or redirected target
 - [ ] More security review: symlink races, keyring lifecycle, clipboard history, import edge cases
 - [x] Checksummed Linux x86_64 pre-release binary build workflow
 - [ ] Keyboard latency profiling, target-host packaging validation, and MVP acceptance
