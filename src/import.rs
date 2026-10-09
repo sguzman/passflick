@@ -260,13 +260,14 @@ pub fn commit_snapshot(
     if let Err(error) = vault.save(path) {
         let changed = std::mem::take(vault.records_mut());
         let total = changed.len() - count + displaced.len();
-        let mut retained = changed
-            .into_iter()
-            .filter(|record| record.source != source);
+        let mut retained = changed.into_iter().filter(|record| record.source != source);
         let mut displaced = displaced.into_iter().peekable();
         let mut restored = Vec::with_capacity(total);
         for index in 0..total {
-            if displaced.peek().is_some_and(|(position, _)| *position == index) {
+            if displaced
+                .peek()
+                .is_some_and(|(position, _)| *position == index)
+            {
                 restored.push(displaced.next().expect("displaced record").1);
             } else {
                 restored.push(retained.next().expect("retained record"));
@@ -561,9 +562,16 @@ mod tests {
             2,
         )];
         let result = commit_snapshot(&path, &mut vault, Source::Chrome, incoming, false);
-        assert!(matches!(result, Err(ImportError::Vault(VaultError::UnsafeFile))));
+        assert!(matches!(
+            result,
+            Err(ImportError::Vault(VaultError::UnsafeFile))
+        ));
         assert_eq!(std::fs::read(&path).unwrap(), encrypted_before);
-        let labels: Vec<_> = vault.records().iter().map(|record| record.title()).collect();
+        let labels: Vec<_> = vault
+            .records()
+            .iter()
+            .map(|record| record.title())
+            .collect();
         assert_eq!(labels, ["Apple", "Edge", "Firefox"]);
         assert_eq!(vault.records()[0].password(), "apple-original");
         assert_eq!(vault.records()[1].password(), "edge-original");
