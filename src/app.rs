@@ -3,7 +3,7 @@ use crate::model::Credential;
 use crate::search::{display_label_with_sources, rank_credentials};
 use crate::startup::StartupTrace;
 use crate::vault::Vault;
-use crate::{paths, session};
+use crate::{passphrase, paths, session};
 use eframe::egui;
 use zeroize::Zeroizing;
 
@@ -84,12 +84,8 @@ impl PickerApp {
         let first = std::mem::replace(&mut self.passphrase, Zeroizing::new(String::new()));
         let confirmation = std::mem::replace(&mut self.confirmation, Zeroizing::new(String::new()));
         self.unlock_focused = false;
-        if first.is_empty() {
-            self.error = Some("A non-empty vault passphrase is required.".to_owned());
-            return;
-        }
-        if first.as_str() != confirmation.as_str() {
-            self.error = Some("Passphrases do not match.".to_owned());
+        if let Err(error) = passphrase::validate_new(first.as_str(), confirmation.as_str()) {
+            self.error = Some(error.to_string());
             return;
         }
         let path = match paths::vault_path() {
@@ -204,7 +200,10 @@ impl eframe::App for PickerApp {
                 ui.add_space(12.0);
                 ui.heading("Create your Passflick vault");
                 ui.label("This stores a separate, encrypted local copy of your credentials.");
-                ui.label("Choose a long, unique passphrase.");
+                ui.label(format!(
+                    "Choose a unique passphrase of at least {} characters.",
+                    passphrase::MIN_LENGTH
+                ));
                 ui.add_space(8.0);
                 let first = ui.add(
                     egui::TextEdit::singleline(&mut *self.passphrase)
