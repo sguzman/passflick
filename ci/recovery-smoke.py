@@ -295,7 +295,53 @@ def main() -> None:
         assert b"https://firefox.example.test" in after_shrink
         assert len(list((root / "backups").glob("*.passvault"))) == backups_before_shrink + 1
 
-    print("Synthetic Passflick CLI recovery and import smoke tests passed")
+        # All four documented providers must coexist in the same encrypted
+        # projection. A recognizable Apple export cannot replace Edge by
+        # accidentally specifying the wrong source.
+        chrome_export = root / "fictional-chrome-export.csv"
+        chrome_export.write_bytes(
+            b"name,url,username,password\n"
+            b"Chrome Entry,https://chrome.example.test,chrome-user,fictional-chrome-password\n"
+        )
+        apple_export = root / "fictional-apple-export.csv"
+        apple_export.write_bytes(
+            b"Title,URL,Username,Password,Notes,OTPAuth\r\n"
+            b"Apple Entry,https://apple.example.test,apple-user,fictional-apple-password,"
+            b"fictional note,otpauth://totp/example?secret=FAKEOTPONLY\r\n"
+        )
+        before_bad_source = vault.read_bytes()
+        run_cli(
+            executable, environment, "import", "edge", str(apple_export),
+            success=False, expected_error=b"different source was selected",
+        )
+        assert vault.read_bytes() == before_bad_source
+        assert len(list((root / "backups").glob("*.passvault"))) == backups_before_shrink + 1
+
+        run_cli(executable, environment, "import", "chrome", str(chrome_export))
+        run_cli(executable, environment, "import", "apple", str(apple_export))
+        status = run_cli(executable, environment, "sources")
+        for expected in (
+            b"Edge: 3 credentials",
+            b"Chrome: 1 credentials",
+            b"Firefox: 1 credentials",
+            b"Apple: 1 credentials",
+        ):
+            assert expected in status, f"Provider missing from sources: {expected!r}"
+        labels = run_cli(executable, environment, "list")
+        for expected in (
+            b"Bulk 0",
+            b"Chrome Entry",
+            b"https://firefox.example.test",
+            b"Apple Entry",
+        ):
+            assert expected in labels, f"Provider missing from list: {expected!r}"
+        assert b"FAKEOTPONLY" not in labels
+        assert b"fictional note" not in labels
+        assert b"fictional-chrome-password" not in labels
+        assert b"fictional-apple-password" not in labels
+        assert len(list((root / "backups").glob("*.passvault"))) == backups_before_shrink + 1
+
+    print("Synthetic Passflick CLI recovery and four-source import checks passed")
 
 
 if __name__ == "__main__":
