@@ -461,17 +461,22 @@ fn open_unlocked_vault() -> Result<(PathBuf, Vault), Box<dyn Error>> {
 }
 
 fn load_vault_key(path: &Path) -> Result<Option<vault::VaultKey>, Box<dyn Error>> {
-    if session::is_manually_locked(path)? {
+    // Never silently bypass an explicit manual lock. If its state cannot be
+    // verified, require a passphrase rather than auto-unlocking via Secret
+    // Service on the user's behalf.
+    if !matches!(session::is_manually_locked(path), Ok(false)) {
         return Ok(None);
     }
-    if let Some(key) = session::load(path)? {
+    if let Ok(Some(key)) = session::load(path) {
         return Ok(Some(key));
     }
     let key = match desktop_keyring::load(path) {
         Ok(Some(key)) => key,
         Ok(None) | Err(_) => return Ok(None),
     };
-    session::store(path, &key)?;
+    // A valid Secret Service key remains useful for this one invocation even
+    // if the kernel session keyring is temporarily unavailable.
+    let _ = session::store(path, &key);
     Ok(Some(key))
 }
 
