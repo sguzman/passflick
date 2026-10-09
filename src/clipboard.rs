@@ -13,7 +13,9 @@ pub enum ClipboardError {
     Wait(#[source] io::Error),
     #[error("wl-copy exited unsuccessfully")]
     Failed,
-    #[error("wl-clipboard 2.3 or newer is needed for sensitive password copying; upgrade wl-clipboard")]
+    #[error(
+        "wl-clipboard 2.3 or newer is needed for sensitive password copying; upgrade wl-clipboard"
+    )]
     SensitiveUnsupported,
 }
 
@@ -26,7 +28,9 @@ fn wl_copy_command() -> Command {
 }
 
 fn has_sensitive_flag(output: &[u8]) -> bool {
-    output.windows(b"--sensitive".len()).any(|window| window == b"--sensitive")
+    output
+        .windows(b"--sensitive".len())
+        .any(|window| window == b"--sensitive")
 }
 
 pub fn copy_sensitive(text: &str) -> Result<(), ClipboardError> {
@@ -54,7 +58,8 @@ pub fn copy_sensitive(text: &str) -> Result<(), ClipboardError> {
             .stderr(Stdio::piped())
             .output()
         {
-            let supports_hint = has_sensitive_flag(&help.stdout) || has_sensitive_flag(&help.stderr);
+            let supports_hint =
+                has_sensitive_flag(&help.stdout) || has_sensitive_flag(&help.stderr);
             if !supports_hint {
                 return Err(ClipboardError::SensitiveUnsupported);
             }
@@ -71,8 +76,12 @@ mod tests {
 
     #[test]
     fn sensitive_flag_detection_distinguishes_old_and_new_wl_copy() {
-        assert!(!has_sensitive_flag(b"wl-copy --type --paste-once --trim-newline"));
-        assert!(has_sensitive_flag(b"wl-copy --type --sensitive --paste-once"));
+        assert!(!has_sensitive_flag(
+            b"wl-copy --type --paste-once --trim-newline"
+        ));
+        assert!(has_sensitive_flag(
+            b"wl-copy --type --sensitive --paste-once"
+        ));
     }
 
     #[test]
