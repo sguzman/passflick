@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fmt::Write as _;
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
 use secret_service::EncryptionType;
@@ -81,9 +83,19 @@ fn attributes(vault: &str) -> HashMap<&str, &str> {
 }
 
 fn vault_id(path: &Path) -> String {
-    paths::vault_identity_path(path)
-        .to_string_lossy()
-        .into_owned()
+    let identity = paths::vault_identity_path(path);
+    // Preserve existing Secret Service labels for ordinary UTF-8 paths.
+    if let Some(utf8) = identity.to_str() {
+        return utf8.to_owned();
+    }
+    // Lossy conversion can map different invalid UTF-8 path bytes to the
+    // same replacement character. Encode raw bytes for unambiguous lookup.
+    // The prefix cannot collide with an ordinary absolute vault path.
+    let mut encoded = String::from("nonutf8:");
+    for byte in identity.as_os_str().as_bytes() {
+        write!(&mut encoded, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    encoded
 }
 
 fn decode_key(secret: &[u8]) -> Result<VaultKey, DesktopKeyringError> {
@@ -107,6 +119,20 @@ pub enum DesktopKeyringError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn non_utf8_vault_paths_have_distinct_desktop_keyring_ids() {
+        use std::ffi::OsStr;
+
+        let first = Path::new(OsStr::from_bytes(b"/fictional/credentials-\\xff/vault.passvault"));
+        let second = Path::new(OsStr::from_bytes(b"/fictional/credentials-\\xfe/vault.passvault"));
+        assert_ne!(vault_id(first), vault_id(second));
+        assert!(vault_id(first).starts_with("nonutf8:"));
+        assert_eq!(
+            vault_id(Path::new("/fictional/utf8/vault.passvault")),
+            "/fictional/utf8/vault.passvault"
+        );
+    }
 
     #[test]
     fn validates_key_length_without_touching_dbus() {
