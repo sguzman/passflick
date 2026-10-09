@@ -89,7 +89,9 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
             backup_encrypted_vault()?;
         }
         Some("verify") => {
-            let snapshot = args.next().ok_or("verify requires an encrypted backup file")?;
+            let snapshot = args
+                .next()
+                .ok_or("verify requires an encrypted backup file")?;
             no_extra_args(&mut args)?;
             verify_encrypted_backup(Path::new(&snapshot))?;
         }
