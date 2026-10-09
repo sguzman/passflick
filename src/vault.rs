@@ -83,6 +83,7 @@ impl Vault {
     }
 
     pub fn unlock(path: &Path, passphrase: &[u8]) -> Result<Self, VaultError> {
+        ensure_private_vault_parent(path)?;
         let bytes = read_private_vault(path)?;
         let header = Header::parse(&bytes)?;
         let key = derive_key(passphrase, &header)?;
@@ -90,6 +91,7 @@ impl Vault {
     }
 
     pub fn open_with_key(path: &Path, key: VaultKey) -> Result<Self, VaultError> {
+        ensure_private_vault_parent(path)?;
         let bytes = read_private_vault(path)?;
         let header = Header::parse(&bytes)?;
         Self::decode(bytes, header, key)
@@ -325,6 +327,20 @@ fn derive_key(passphrase: &[u8], header: &Header) -> Result<VaultKey, VaultError
 
 fn fill_random(bytes: &mut [u8]) -> Result<(), VaultError> {
     getrandom::fill(bytes).map_err(|error| VaultError::Random(error.to_string()))
+}
+
+/// The active vault must live in a private directory even during read-only
+/// unlock. A private file inside a shared directory can be replaced or rolled
+/// back by another user with directory write permission.
+fn ensure_private_vault_parent(path: &Path) -> Result<(), VaultError> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| VaultError::InvalidPath(path.to_path_buf()))?;
+    let metadata = fs::symlink_metadata(parent)?;
+    if !metadata.is_dir() || metadata.permissions().mode() & 0o077 != 0 {
+        return Err(VaultError::UnsafeDirectory);
+    }
+    Ok(())
 }
 
 pub(crate) fn read_private_vault(path: &Path) -> Result<Vec<u8>, VaultError> {
@@ -604,6 +620,32 @@ mod tests {
         let mut vault = test_vault(b"test-only-passphrase");
         let outcome = vault.save(&dir.join("vault.passvault"));
         assert!(matches!(outcome, Err(VaultError::UnsafeDirectory)));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn unlocking_requires_private_parent_even_when_vault_file_is_private() {
+        let mut entropy = [0_u8; 8];
+        fill_random(&mut entropy).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "passflick-shared-unlock-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let path = dir.join("vault.passvault");
+        let vault = Vault::create(&path, b"fictional-directory-test-key").unwrap();
+        let mut key_bytes = [0_u8; KEY_LEN];
+        key_bytes.copy_from_slice(vault.key().as_bytes());
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o777)).unwrap();
+        assert!(matches!(
+            Vault::unlock(&path, b"fictional-directory-test-key"),
+            Err(VaultError::UnsafeDirectory)
+        ));
+        assert!(matches!(
+            Vault::open_with_key(&path, VaultKey::from_bytes(key_bytes)),
+            Err(VaultError::UnsafeDirectory)
+        ));
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+        assert!(Vault::unlock(&path, b"fictional-directory-test-key").is_ok());
         fs::remove_dir_all(&dir).unwrap();
     }
 
