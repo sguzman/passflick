@@ -267,6 +267,29 @@ mod tests {
     }
 
     #[test]
+    fn backup_directory_symlink_cannot_redirect_encrypted_snapshots() {
+        use std::os::unix::fs::symlink;
+
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-backup-symlink-test-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let path = root.join("vault.passvault");
+        Vault::create(&path, b"fictional-backup-symlink-passphrase").unwrap();
+        let before = fs::read(&path).unwrap();
+        let redirected = root.join("unrelated-private-directory");
+        fs::create_dir(&redirected).unwrap();
+        symlink(&redirected, root.join("backups")).unwrap();
+
+        assert!(matches!(create(&path), Err(VaultError::UnsafeDirectory)));
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert!(fs::read_dir(&redirected).unwrap().next().is_none());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn recovery_handles_corrupt_and_missing_primary_without_plaintext() {
         let mut entropy = [0_u8; 8];
         getrandom::fill(&mut entropy).unwrap();
