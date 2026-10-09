@@ -1,6 +1,6 @@
 use std::fs::{self, DirBuilder, File, OpenOptions};
 use std::io::Write;
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -91,6 +91,15 @@ fn open_verified_snapshot(snapshot: &Path, live: &Vault) -> Result<Vault, VaultE
     Vault::open_snapshot_with_key(snapshot, VaultKey::from_bytes(key_bytes))
 }
 
+/// Two different paths can address the same inode through hard links.
+/// A pathname-only comparison misses this and can unintentionally treat the
+/// active vault as its own recovery or restore source.
+fn same_file_inode(left: &Path, right: &Path) -> Result<bool, VaultError> {
+    let first = fs::metadata(left)?;
+    let second = fs::metadata(right)?;
+    Ok(first.dev() == second.dev() && first.ino() == second.ino())
+}
+
 /// Explicit recovery from a verified encrypted snapshot when the active
 /// vault is damaged or absent. Caller holds the exclusive write lock.
 pub struct RecoveryResult {
@@ -115,7 +124,7 @@ pub fn recover_into(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
         Err(error) => return Err(error.into()),
     };
-    if existing && fs::canonicalize(vault_path)? == fs::canonicalize(snapshot)? {
+    if existing && same_file_inode(vault_path, snapshot)? {
         return Err(VaultError::InvalidPath(snapshot.to_path_buf()));
     }
     // The previous primary need not decrypt. Preserve its exact raw bytes
@@ -141,7 +150,7 @@ pub fn restore_into(
     snapshot: &Path,
     live: &mut Vault,
 ) -> Result<PathBuf, VaultError> {
-    if fs::canonicalize(vault_path)? == fs::canonicalize(snapshot)? {
+    if same_file_inode(vault_path, snapshot)? {
         return Err(VaultError::InvalidPath(snapshot.to_path_buf()));
     }
 
@@ -304,6 +313,47 @@ mod tests {
         assert_eq!(recreated.records, 1);
         assert!(recreated.previous_raw_snapshot.is_none());
         assert_eq!(fs::read(&path).unwrap(), original_backup);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn hardlink_alias_to_active_vault_is_not_a_recovery_or_restore_source() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-hardlink-recovery-test-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let active = root.join("vault.passvault");
+        let passphrase = b"fictional-hardlink-safety-passphrase";
+        let mut live = Vault::create(&active, passphrase).unwrap();
+        live.records_mut().push(Credential::new(
+            Source::Edge,
+            "Synthetic entry",
+            "https://example.test",
+            "fictional-user",
+            "fictional-secret",
+            1,
+        ));
+        live.save(&active).unwrap();
+
+        let alias = root.join("different-name.passvault");
+        fs::hard_link(&active, &alias).unwrap();
+        assert_ne!(active, alias);
+        assert!(same_file_inode(&active, &alias).unwrap());
+        let original = fs::read(&active).unwrap();
+
+        assert!(matches!(
+            recover_into(&active, &alias, passphrase),
+            Err(VaultError::InvalidPath(_))
+        ));
+        assert!(matches!(
+            restore_into(&active, &alias, &mut live),
+            Err(VaultError::InvalidPath(_))
+        ));
+        assert_eq!(fs::read(&active).unwrap(), original);
+        assert_eq!(fs::read(&alias).unwrap(), original);
+        assert!(!root.join("backups").exists());
         fs::remove_dir_all(&root).unwrap();
     }
 
