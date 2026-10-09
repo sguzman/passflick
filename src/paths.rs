@@ -22,6 +22,19 @@ fn absolute_file_path(path: PathBuf) -> Result<PathBuf, PathError> {
     }
 }
 
+/// Stable identity for a vault, including while the vault file is missing
+/// during disaster recovery. Canonicalizing the full file fails when it has
+/// been deleted, but its parent generally still exists and can be resolved.
+/// Never open or follow the vault file itself to construct its cache identity.
+pub fn vault_identity_path(path: &std::path::Path) -> PathBuf {
+    match (path.parent(), path.file_name()) {
+        (Some(parent), Some(filename)) => std::fs::canonicalize(parent)
+            .map(|canonical_parent| canonical_parent.join(filename))
+            .unwrap_or_else(|_| path.to_path_buf()),
+        _ => path.to_path_buf(),
+    }
+}
+
 pub fn vault_path() -> Result<PathBuf, PathError> {
     if let Some(path) = env::var_os("PASSFLICK_VAULT") {
         return absolute_file_path(PathBuf::from(path));
@@ -58,6 +71,34 @@ mod tests {
                 Err(PathError::InvalidVaultPath)
             ));
         }
+    }
+
+    #[test]
+    fn cache_identity_is_stable_across_missing_vault_and_symlinked_parent() {
+        use std::fs;
+        use std::os::unix::fs::{symlink, PermissionsExt};
+
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = env::temp_dir().join(format!(
+            "passflick-path-identity-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let real = root.join("real");
+        fs::create_dir_all(&real).unwrap();
+        fs::set_permissions(&real, fs::Permissions::from_mode(0o700)).unwrap();
+        let alias = root.join("alias");
+        symlink(&real, &alias).unwrap();
+
+        let through_alias = alias.join("vault.passvault");
+        let expected = real.join("vault.passvault");
+        assert_eq!(vault_identity_path(&through_alias), expected);
+        fs::write(&expected, b"synthetic ciphertext").unwrap();
+        assert_eq!(vault_identity_path(&through_alias), expected);
+        assert_eq!(vault_identity_path(&expected), expected);
+        fs::remove_file(&expected).unwrap();
+        assert_eq!(vault_identity_path(&through_alias), expected);
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
