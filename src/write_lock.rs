@@ -29,7 +29,9 @@ pub fn acquire(vault_path: &Path) -> io::Result<VaultWriteGuard> {
         .write(true)
         .create(true)
         .mode(0o600)
-        .custom_flags(libc::O_NOFOLLOW)
+        // Open nonblocking so a substituted FIFO cannot hang before the
+        // regular-file check. This does not make flock nonblocking.
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(&lock_path)?;
     let info = file.metadata()?;
     if !info.is_file() || info.permissions().mode() & 0o077 != 0 {
@@ -71,6 +73,27 @@ mod tests {
         let vault = dir.join("vault.passvault");
         assert!(acquire(&vault).is_err());
         assert_eq!(fs::read(&target).unwrap(), b"do-not-touch");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn lock_file_fifo_is_rejected_without_waiting_for_a_reader() {
+        use std::os::unix::ffi::OsStrExt;
+
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "passflick-fifo-lock-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&dir).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+        let fifo = dir.join(".passflick.write-lock");
+        let name = std::ffi::CString::new(fifo.as_os_str().as_bytes()).unwrap();
+        // SAFETY: this is a valid NUL-terminated pathname, and mkfifo does
+        // not keep the pointer after returning.
+        assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+        assert!(acquire(&dir.join("vault.passvault")).is_err());
         fs::remove_dir_all(&dir).unwrap();
     }
 
