@@ -7,6 +7,7 @@ Passflick is pre-release until the following checks are run against its real Lin
 Use the project's existing `passflick demo` command. It does not access the real vault.
 
 - The picker opens as a floating overlay without rearranging tiled windows.
+- A dangling symlink at the active vault filename must not trigger first-run vault creation.
 - The search field has keyboard focus on first frame and accepts typing immediately.
 - Matching and Arrow Up/Down selection behave correctly for multiple entries.
 - Exact duplicates from Edge and Chrome appear as one item with combined provenance.
@@ -39,6 +40,8 @@ Use isolated temporary XDG data directories and synthetic CSV exports for all fo
 - Create and reopen a byte-exact encrypted backup.
 - Verify session unlock, explicit lock, failed unlock, and the optional Secret Service integration.
 - Switch between two isolated `PASSFLICK_VAULT` paths in one login session; cached keys and manual-lock markers must not cross between them.
+- With an isolated synthetic vault and a symlinked ancestor (not an immediate symlinked vault directory), compare session and desktop-key cache identities before creation, while the file exists, and after deletion/recovery. They must remain stable.
+- Simulate failure to clear one or more cached keys after recovery; the CLI must disclose incomplete invalidation instead of promising that a fresh passphrase will be required.
 - Verify an encrypted backup with `passflick verify FILE` before any restore; corrupt or incompatible backups must fail without changing live data.
 - Restore a compatible encrypted snapshot with `--confirm`; verify automatic pre-restore backup and that a corrupted snapshot leaves the live vault unchanged.
 - Corrupt or delete the primary vault in a synthetic environment, then run `passflick recover FILE --confirm`: require the backup passphrase, preserve existing raw ciphertext, reconstruct a private encrypted file, and require a fresh session unlock. An incorrect passphrase must leave existing primary bytes unchanged.
