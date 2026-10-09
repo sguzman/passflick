@@ -102,17 +102,14 @@ impl PickerApp {
                 return;
             }
         };
-        self.setup_required = false;
-        if session::store(&path, vault.key()).is_err() {
-            // The encrypted vault was successfully created and must never be
-            // overwritten on retry. Offer the normal unlock flow instead.
-            self.locked = true;
-            self.error = Some(
-                "Vault created; session unlock failed. Enter your passphrase to retry.".to_owned(),
-            );
-            return;
-        }
+        // An unavailable kernel session keyring should not make this
+        // standalone graphical app unusable. This process holds the decrypted
+        // projection only until the picker closes.
+        let cache_failed = session::store(&path, vault.key()).is_err();
         self.ready(vault.into_records());
+        if cache_failed {
+            self.notice = Some("Session cache unavailable; unlock again next launch.".to_owned());
+        }
     }
 
     fn attempt_unlock(&mut self) {
@@ -137,12 +134,11 @@ impl PickerApp {
                 return;
             }
         };
-        if session::store(&path, vault.key()).is_err() {
-            self.error = Some("Unable to cache the unlock key in this login session.".to_owned());
-            return;
-        }
-
+        let cache_failed = session::store(&path, vault.key()).is_err();
         self.ready(vault.into_records());
+        if cache_failed {
+            self.notice = Some("Session cache unavailable; unlock again next launch.".to_owned());
+        }
     }
 
     fn refresh(&mut self) {
@@ -297,8 +293,11 @@ impl eframe::App for PickerApp {
 
             if let Some(notice) = &self.notice {
                 ui.label(notice);
-            } else if self.records.is_empty() {
-                ui.label("No imported credentials.");
+            }
+            if self.records.is_empty() {
+                if self.notice.is_none() {
+                    ui.label("No imported credentials.");
+                }
             } else if self.ranked.is_empty() {
                 ui.label("No matches.");
             } else {
