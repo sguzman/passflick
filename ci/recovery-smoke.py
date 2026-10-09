@@ -160,6 +160,13 @@ def main() -> None:
         corrupted = bytearray(authentic)
         corrupted[-1] ^= 1
         vault.write_bytes(corrupted)
+        # Recovery is destructive and requires an explicit opt-in.
+        run_cli(
+            executable, environment, "recover", str(snapshot),
+            success=False, expected_error=b"requires explicit --confirm",
+        )
+        assert vault.read_bytes() == corrupted
+
         run_cli(
             executable, environment, "recover", str(snapshot), "--confirm",
             passphrase=b"fictional-wrong-recovery-passphrase", success=False,
@@ -179,6 +186,14 @@ def main() -> None:
         labels = run_cli(executable, environment, "list")
         assert b"Smoke Example" in labels and b"synthetic-user" in labels
         assert b"fictional-ci-password" not in labels
+
+        # Exercise the create-only recovery branch with no active primary.
+        vault.unlink()
+        assert not vault.exists()
+        run_cli(executable, environment, "recover", str(snapshot), "--confirm")
+        assert vault.read_bytes() == authentic
+        assert len(list((root / "backups").glob("*.passvault"))) == 2
+        assert b"Smoke Example" in run_cli(executable, environment, "list")
 
     print("Synthetic Passflick CLI recovery smoke test passed")
 
