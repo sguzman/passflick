@@ -90,7 +90,7 @@ Passflick disables Linux process core dumps and ptrace attachment before loading
 
 Passflick keeps source provenance and import timestamps. Source priority is Edge, then Chrome, Firefox, and Apple. Exact matching credentials from multiple sources can appear as one result. Different passwords for the same site and username remain separately selectable and are marked **Conflict** without displaying the underlying secret. No operation modifies the original password managers.
 
-The default encrypted vault lives under `$XDG_DATA_HOME/passflick/vault.passvault` (normally `~/.local/share/passflick/vault.passvault`). `PASSFLICK_VAULT` overrides the file path. The vault uses Argon2id, XChaCha20-Poly1305, and a Linux session-keyring hot path. Clipboard copies use `wl-copy` with a sensitive hint, although clipboard history isolation cannot be guaranteed across all environments.
+The default encrypted vault lives under `$XDG_DATA_HOME/passflick/vault.passvault` (normally `~/.local/share/passflick/vault.passvault`). `PASSFLICK_VAULT` overrides the file path. The vault uses Argon2id, XChaCha20-Poly1305, and a Linux session-keyring hot path. Clipboard copies require `wl-clipboard` 2.3 or newer so `wl-copy --sensitive` is supported. Older releases fail with an explicit upgrade message rather than silently exposing passwords to ordinary clipboard history. Even with the hint, clipboard history isolation cannot be guaranteed across all environments.
 
 ## Browser integration
 
