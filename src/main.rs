@@ -251,8 +251,12 @@ fn init_vault() -> Result<(), Box<dyn Error>> {
     let confirm = Zeroizing::new(rpassword::prompt_password("Confirm passphrase: ")?);
     passphrase::validate_new(first.as_str(), confirm.as_str())?;
     let vault = Vault::create(&path, first.as_bytes())?;
-    session::store(&path, vault.key())?;
-    println!("Initialized and unlocked {}.", path.display());
+    if session::store(&path, vault.key()).is_ok() {
+        println!("Initialized and unlocked {}.", path.display());
+    } else {
+        println!("Initialized encrypted vault at {}.", path.display());
+        println!("Session cache unavailable; enter your passphrase in the picker when needed.");
+    }
     Ok(())
 }
 
@@ -291,7 +295,9 @@ fn enable_keyring() -> Result<(), Box<dyn Error>> {
         None => {
             let passphrase = Zeroizing::new(rpassword::prompt_password("Passflick passphrase: ")?);
             let vault = Vault::unlock(&path, passphrase.as_bytes())?;
-            session::store(&path, vault.key())?;
+            // Desktop Secret Service can work even when the kernel session
+            // keyring is unavailable. Treat session caching as optional here.
+            let _ = session::store(&path, vault.key());
             vault
         }
     };
@@ -443,13 +449,15 @@ fn import_csv(source: Source, path: &Path, allow_shrink: bool) -> Result<(), Box
 
 fn open_unlocked_vault() -> Result<(PathBuf, Vault), Box<dyn Error>> {
     let path = paths::vault_path()?;
-    let key = load_vault_key(&path)?.ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "vault locked; run passflick unlock",
-        )
-    })?;
-    Ok((path.clone(), Vault::open_with_key(&path, key)?))
+    match load_vault_key(&path) {
+        Ok(Some(key)) => Ok((path.clone(), Vault::open_with_key(&path, key)?)),
+        Ok(None) | Err(_) => {
+            // Explicit CLI maintenance may ask for a passphrase, but never
+            // passes one in argv or silently assumes a password was cached.
+            let passphrase = Zeroizing::new(rpassword::prompt_password("Passflick passphrase: ")?);
+            Ok((path.clone(), Vault::unlock(&path, passphrase.as_bytes())?))
+        }
+    }
 }
 
 fn load_vault_key(path: &Path) -> Result<Option<vault::VaultKey>, Box<dyn Error>> {
