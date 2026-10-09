@@ -29,7 +29,7 @@ Build locally if needed:
 cargo build --release --locked
 ```
 
-CI also produces a checksummed, **pre-release Linux x86_64 archive** under the [Linux Snapshot workflow](https://github.com/sguzman/passflick/actions/workflows/linux-snapshot.yml). Its binary is not yet certified for production passwords or verified on Hyprland.
+CI can produce a checksummed, **pre-release Linux x86_64 archive** under the [Linux Snapshot workflow](https://github.com/sguzman/passflick/actions/workflows/linux-snapshot.yml). Optimized snapshots are built on explicit workflow requests or version tags, not on every code commit; an existing artifact may therefore lag `main`. Its binary is not yet certified for production passwords or verified on Hyprland.
 
 ### Safe picker demo
 
