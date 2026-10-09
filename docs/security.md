@@ -14,7 +14,7 @@ On first launch, the graphical application can create an encrypted vault using m
 
 Before handling vault data, Passflick disables Linux core dumps and ptrace attachment with `RLIMIT_CORE=0` and `PR_SET_DUMPABLE=0`. Startup fails if these safeguards cannot be installed.
 
-Password copying uses `wl-copy --sensitive`, preserving literal whitespace and newlines. **The sensitive hint is advisory**: clipboard managers or other software in the same desktop session may still capture clipboard contents. The application does not claim protection from a compromised user session.
+Password copying requires `wl-clipboard` 2.3+ and uses `wl-copy --sensitive`, preserving literal whitespace and newlines. Older versions fail closed with an upgrade diagnostic rather than falling back to unmarked clipboard writes. **The sensitive hint is advisory**: clipboard managers or other software in the same desktop session may still capture clipboard contents. The application does not claim protection from a compromised user session.
 
 ## Data preservation
 
