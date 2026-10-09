@@ -13,6 +13,13 @@ pub fn create(vault_path: &Path) -> Result<PathBuf, VaultError> {
     let parent = vault_path
         .parent()
         .ok_or_else(|| VaultError::InvalidPath(vault_path.to_path_buf()))?;
+    // Reject a shared or symlinked vault directory before creating backups.
+    // A caller invoking backup directly should receive the same filesystem
+    // protections as an operation that already holds the write lock.
+    let parent_metadata = fs::symlink_metadata(parent)?;
+    if !parent_metadata.is_dir() || parent_metadata.permissions().mode() & 0o077 != 0 {
+        return Err(VaultError::UnsafeDirectory);
+    }
     let directory = parent.join("backups");
 
     match fs::symlink_metadata(&directory) {
@@ -144,6 +151,22 @@ mod tests {
         let live_before = fs::read(&path).unwrap();
         assert!(restore_into(&path, &broken, &mut vault).is_err());
         assert_eq!(fs::read(&path).unwrap(), live_before);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn backups_refuse_shared_vault_directories_without_creating_files() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-backup-private-test-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let path = root.join("vault.passvault");
+        Vault::create(&path, b"fictional-backup-test").unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(matches!(create(&path), Err(VaultError::UnsafeDirectory)));
+        assert!(!root.join("backups").exists());
         fs::remove_dir_all(&root).unwrap();
     }
 
