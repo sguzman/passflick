@@ -26,9 +26,11 @@ export WAYLAND_DISPLAY="passflick-ci-wayland"
 export PASSFLICK_TRACE_STARTUP=1
 export PASSFLICK_VAULT="$tmp/nonexistent.passvault"
 export LIBGL_ALWAYS_SOFTWARE=1
-unset DISPLAY WINIT_UNIX_BACKEND
+# Nested Weston on Xvfb provides a Wayland seat; the pure headless backend
+# has no seat and cannot exercise clipboard protocols.
+unset WINIT_UNIX_BACKEND
 
-weston --backend=headless --renderer=gl --no-config --idle-time=0 \
+weston --backend=x11 --renderer=gl --no-config --idle-time=0 \
   --socket="$WAYLAND_DISPLAY" --width=800 --height=600 \
   --log="$tmp/weston.log" >"$tmp/weston.stdout" 2>"$tmp/weston.stderr" &
 weston_pid="$!"
@@ -50,6 +52,8 @@ if [[ ! -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]]; then
   exit 1
 fi
 
+# Weston already inherited DISPLAY; prevent winit from silently using X11.
+unset DISPLAY
 ./target/debug/passflick demo >"$tmp/picker.stdout" 2>"$tmp/picker.stderr" &
 picker_pid="$!"
 
