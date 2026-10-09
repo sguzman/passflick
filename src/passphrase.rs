@@ -13,8 +13,14 @@ pub enum PassphraseError {
 impl fmt::Display for PassphraseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::TooShort => write!(f, "New vault passphrase must have at least {MIN_LENGTH} characters"),
-            Self::TooLong => write!(f, "New vault passphrase exceeds the {MAX_LENGTH}-character limit"),
+            Self::TooShort => write!(
+                f,
+                "New vault passphrase must have at least {MIN_LENGTH} characters"
+            ),
+            Self::TooLong => write!(
+                f,
+                "New vault passphrase exceeds the {MAX_LENGTH}-character limit"
+            ),
             Self::Mismatch => write!(f, "Passphrases do not match"),
         }
     }
@@ -44,9 +50,18 @@ mod tests {
 
     #[test]
     fn minimum_length_is_enforced_without_character_class_rules() {
-        assert_eq!(validate_new("short", "short"), Err(PassphraseError::TooShort));
+        assert_eq!(
+            validate_new("short", "short"),
+            Err(PassphraseError::TooShort)
+        );
         assert!(validate_new("twelve chars", "twelve chars").is_ok());
-        assert!(validate_new("correct horse battery staple", "correct horse battery staple").is_ok());
+        assert!(
+            validate_new(
+                "correct horse battery staple",
+                "correct horse battery staple"
+            )
+            .is_ok()
+        );
     }
 
     #[test]
@@ -66,6 +81,9 @@ mod tests {
         let unicode = "猫".repeat(MIN_LENGTH);
         assert!(validate_new(&unicode, &unicode).is_ok());
         let enormous = "a".repeat(MAX_LENGTH + 1);
-        assert_eq!(validate_new(&enormous, &enormous), Err(PassphraseError::TooLong));
+        assert_eq!(
+            validate_new(&enormous, &enormous),
+            Err(PassphraseError::TooLong)
+        );
     }
 }
