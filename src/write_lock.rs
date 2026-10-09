@@ -22,7 +22,7 @@ pub fn acquire(vault_path: &Path) -> io::Result<VaultWriteGuard> {
     {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
-            "vault directory must be private",
+            "vault directory must be private and owned by the current user",
         ));
     }
 
@@ -42,7 +42,7 @@ pub fn acquire(vault_path: &Path) -> io::Result<VaultWriteGuard> {
     if !info.is_file() || info.permissions().mode() & 0o077 != 0 || !owned_by_current_user(&info) {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
-            "vault lock file must be private",
+            "vault lock file must be private and owned by the current user",
         ));
     }
 

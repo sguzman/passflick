@@ -1,6 +1,6 @@
 # Acceptance plan
 
-Passflick is pre-release until the following checks are run against its real Linux/Wayland target. Automated tests use fictional `example.test` credentials exclusively. CI has already validated the X11 search/Enter/Shift+Enter/Escape lifecycle under Xvfb and the first native Wayland frame plus a synthetic byte-exact clipboard round-trip under nested Weston. The Rust workflow's synthetic CLI recovery and multi-source import smoke test passed on [October 9, 2026](https://github.com/sguzman/passflick/actions/runs/37945324870), alongside 71 Rust tests, locked CLI checks, formatting, and strict Clippy. The CI runner uses an older `wl-copy`, so its transport test does not validate the sensitive-data hint; that remains a target-host acceptance item. The checklist below contains the remaining target-host acceptance work. This document is an acceptance gate, not a feature changelog.
+Passflick is pre-release until the following checks are run against its real Linux/Wayland target. Automated tests use fictional `example.test` credentials exclusively. CI has already validated the X11 search/Enter/Shift+Enter/Escape lifecycle under Xvfb and the first native Wayland frame plus a synthetic byte-exact clipboard round-trip under nested Weston. The Rust workflow's synthetic CLI recovery and multi-source import smoke test passed on [October 9, 2026](https://github.com/sguzman/passflick/actions/runs/37946564944), alongside 72 Rust tests, locked CLI checks, formatting, and strict Clippy. The CI runner uses an older `wl-copy`, so its transport test does not validate the sensitive-data hint; that remains a target-host acceptance item. The checklist below contains the remaining target-host acceptance work. This document is an acceptance gate, not a feature changelog.
 
 ## 1. Synthetic graphical picker
 
@@ -34,7 +34,7 @@ Use isolated temporary XDG data directories and synthetic CSV exports for all fo
 - Reject malformed rows, missing required columns, and oversized exports without changing a valid snapshot.
 - Reject two different CSV header aliases for one field (such as `password` and `pass`, or `url` and `website`) before source replacement. Also reject a missing username header without rejecting rows whose username value is blank.
 - Test unusually small snapshots and the explicit `--allow-shrink` override.
-- Verify private file and directory permissions, encrypted contents, and authenticated decryption failure after tampering.
+- Verify private file and directory permissions, effective-user ownership of active vault/lock/managed-backup paths, encrypted contents, and authenticated decryption failure after tampering.
 - Confirm an active vault refuses unlock from a shared or symlinked immediate directory even if its file is mode 0600; confirm encrypted snapshots remain verifiable from an external directory when the snapshot file itself is private.
 - Substitute named pipes for the vault file and the write-lock file in isolated synthetic directories. Both operations must reject them without blocking for a counterpart process.
 - Exercise two simultaneous imports and verify that the exclusive write lock preserves both updates.

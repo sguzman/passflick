@@ -478,9 +478,9 @@ pub enum VaultError {
     UnsupportedKdf(u8),
     #[error("invalid vault header")]
     InvalidHeader,
-    #[error("vault file must be a private regular file, not a symlink or shared file")]
+    #[error("vault file must be a private regular file owned by the current user")]
     UnsafeFile,
-    #[error("vault directory must be private and must not be a symlink")]
+    #[error("vault or backup directory must be private, owned by the current user, and not a symlink")]
     UnsafeDirectory,
     #[error("vault exceeds 64 MiB safety limit")]
     TooLarge,

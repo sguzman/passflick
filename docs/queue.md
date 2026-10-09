@@ -13,7 +13,7 @@
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Rust CI verified at [`b1e7d5e`](https://github.com/sguzman/passflick/actions/runs/37945324870): 71 passed tests, locked CLI checks, formatting, desktop installation smoke, synthetic encrypted recovery/import smoke, and strict Clippy
+- [x] Rust CI verified at [`77c0a66`](https://github.com/sguzman/passflick/actions/runs/37946564944): 72 passed tests, locked CLI checks, formatting, desktop installation smoke, synthetic encrypted recovery/import smoke, and strict Clippy
 - [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
 - [x] Synthetic CLI source refresh passed: adding Firefox then replacing Edge preserves Firefox and retains the encrypted pre-refresh backup
 - [x] Synthetic filesystem regression tests passed in Rust CI
@@ -46,7 +46,7 @@
 - [x] Synthetic complete-format Firefox and Apple exports; Apple OTPAuth and Notes are not persisted
 - [x] Require sensitive clipboard support instead of silently copying password values into unmarked history
 - [x] CI passed synthetic regression tests for early-exiting legacy `wl-copy` and exact bytes with a supported helper
-- [x] Reject named-pipe vault and lock paths without blocking; require private active-vault parent at unlock while keeping external encrypted snapshots verifiable
+- [x] Reject named-pipe vault and lock paths without blocking; require private effective-user-owned active vault, lock, and managed backup paths while keeping external encrypted snapshots verifiable
 - [ ] More security review: symlink races, keyring lifecycle, clipboard history, import edge cases
 - [x] Checksummed Linux x86_64 pre-release binary build workflow
 - [ ] Keyboard latency profiling, target-host packaging validation, and MVP acceptance
