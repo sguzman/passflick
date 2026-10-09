@@ -218,7 +218,39 @@ def main() -> None:
         assert len(list((root / "backups").glob("*.passvault"))) == 2
         assert b"Smoke Example" in run_cli(executable, environment, "list")
 
-    print("Synthetic Passflick CLI recovery smoke test passed")
+        # An Edge refresh must replace only Edge's projection, leaving Firefox
+        # intact. The previous Edge ciphertext gets a fresh encrypted backup.
+        firefox_export = root / "fictional-firefox-export.csv"
+        firefox_export.write_bytes(
+            b"url,username,password,httpRealm,formActionOrigin\\n"
+            b"https://firefox.example.test,fox-user,fictional-firefox-password,,\\n"
+        )
+        run_cli(executable, environment, "import", "firefox", str(firefox_export))
+        before_refresh = run_cli(executable, environment, "list")
+        assert b"Smoke Example" in before_refresh
+        assert b"https://firefox.example.test" in before_refresh
+        assert b"fox-user" in before_refresh
+
+        edge_refresh = root / "fictional-edge-refresh.csv"
+        edge_refresh.write_bytes(
+            b"name,url,username,password\\n"
+            b"Updated Edge,https://updated.example.test,new-edge-user,fictional-refreshed-password\\n"
+        )
+        run_cli(executable, environment, "import", "edge", str(edge_refresh))
+        after_refresh = run_cli(executable, environment, "list")
+        assert b"Updated Edge" in after_refresh
+        assert b"new-edge-user" in after_refresh
+        assert b"Smoke Example" not in after_refresh
+        assert b"https://firefox.example.test" in after_refresh
+        assert b"fox-user" in after_refresh
+        assert b"fictional-refreshed-password" not in after_refresh
+        assert b"fictional-firefox-password" not in after_refresh
+        source_status = run_cli(executable, environment, "sources")
+        assert b"Edge: 1 credentials" in source_status
+        assert b"Firefox: 1 credentials" in source_status
+        assert len(list((root / "backups").glob("*.passvault"))) == 3
+
+    print("Synthetic Passflick CLI recovery and import smoke tests passed")
 
 
 if __name__ == "__main__":
