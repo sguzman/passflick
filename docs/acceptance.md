@@ -16,7 +16,8 @@ Use the project's existing `passflick demo` command. It does not access the real
 - Escape exits without modifying the current clipboard.
 - A second invocation can retrieve the other field without session unlock.
 - First launch with no vault offers masked passphrase creation inside the picker, without a terminal. Short or mismatched entries must not create a vault; valid entries create a private encrypted file.
-- If the session key is absent, the picker presents a masked vault unlock field; a correct passphrase unlocks for the session, an incorrect one never exposes records, and Escape closes without copying.
+- If the session key is absent, the picker presents a masked vault unlock field; a correct passphrase opens the picker, an incorrect one never exposes records, and Escape closes without copying.
+- If the Linux session keyring is unavailable, a correctly entered passphrase still permits one-shot picker use; the next launch must require another unlock and provide a clear explanation.
 - Test focus, resize behavior, and keyboard repeat using the real compositor and application class.
 
 Record startup latency from process entry to first visible, focused frame. No numerical performance guarantee is asserted until it has been measured.
