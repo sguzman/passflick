@@ -43,7 +43,7 @@ cargo run --release --locked -- demo
 
 This runs without unlocking, reading, or writing the real vault. It exercises search, provider grouping, conflicts, **Enter** to copy a synthetic password, and **Shift+Enter** to copy a synthetic username. Both actions close the window.
 
-On first launch, Passflick offers to create its own encrypted vault using a masked passphrase and confirmation field. Initial setup does **not** require a terminal. The original password managers are never changed.
+On first launch, Passflick offers to create its own encrypted vault using a masked passphrase and confirmation field. New vaults require at least 12 characters (up to 1024); older vault passphrases remain valid for unlocking. Initial setup does **not** require a terminal. The original password managers are never changed.
 
 For optional command-line setup and desktop Secret Service integration, the equivalent maintenance commands remain:
 
