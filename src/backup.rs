@@ -72,6 +72,19 @@ pub fn create(vault_path: &Path) -> Result<PathBuf, VaultError> {
     Ok(destination)
 }
 
+/// Authenticate an encrypted snapshot under this vault's key, without
+/// changing any files or exposing credential contents. This does not prove
+/// future readability of the storage medium; it verifies this file now.
+pub fn verify_snapshot(snapshot: &Path, live: &Vault) -> Result<usize, VaultError> {
+    Ok(open_verified_snapshot(snapshot, live)?.records().len())
+}
+
+fn open_verified_snapshot(snapshot: &Path, live: &Vault) -> Result<Vault, VaultError> {
+    let mut key_bytes = [0_u8; 32];
+    key_bytes.copy_from_slice(live.key().as_bytes());
+    Vault::open_with_key(snapshot, VaultKey::from_bytes(key_bytes))
+}
+
 /// Restore a verified backup from this vault's encryption lineage.
 /// The caller must hold the exclusive vault write lock. Before any replacement,
 /// preserve the current encrypted vault as a fresh backup. The source snapshot
@@ -85,9 +98,7 @@ pub fn restore_into(
         return Err(VaultError::InvalidPath(snapshot.to_path_buf()));
     }
 
-    let mut key_bytes = [0_u8; 32];
-    key_bytes.copy_from_slice(live.key().as_bytes());
-    let validated = Vault::open_with_key(snapshot, VaultKey::from_bytes(key_bytes))?;
+    let validated = open_verified_snapshot(snapshot, live)?;
 
     // A restore can only become destructive after this encrypted safety backup
     // completes; if backup creation fails, the live vault is left unchanged.
@@ -126,6 +137,7 @@ mod tests {
         ));
         vault.save(&path).unwrap();
         let saved = create(&path).unwrap();
+        assert_eq!(verify_snapshot(&saved, &vault).unwrap(), 1);
 
         vault.records_mut().push(Credential::new(
             Source::Firefox,
@@ -149,6 +161,7 @@ mod tests {
         fs::write(&broken, saved_bytes).unwrap();
         fs::set_permissions(&broken, fs::Permissions::from_mode(0o600)).unwrap();
         let live_before = fs::read(&path).unwrap();
+        assert!(verify_snapshot(&broken, &vault).is_err());
         assert!(restore_into(&path, &broken, &mut vault).is_err());
         assert_eq!(fs::read(&path).unwrap(), live_before);
         fs::remove_dir_all(&root).unwrap();
