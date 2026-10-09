@@ -82,8 +82,7 @@ impl PickerApp {
         // Keep both entry fields in zeroizing storage and clear them even when
         // creation fails. Never call an external terminal or shell for setup.
         let first = std::mem::replace(&mut self.passphrase, Zeroizing::new(String::new()));
-        let confirmation =
-            std::mem::replace(&mut self.confirmation, Zeroizing::new(String::new()));
+        let confirmation = std::mem::replace(&mut self.confirmation, Zeroizing::new(String::new()));
         self.unlock_focused = false;
         if first.is_empty() {
             self.error = Some("A non-empty vault passphrase is required.".to_owned());
@@ -112,7 +111,9 @@ impl PickerApp {
             // The encrypted vault was successfully created and must never be
             // overwritten on retry. Offer the normal unlock flow instead.
             self.locked = true;
-            self.error = Some("Vault created; session unlock failed. Enter your passphrase to retry.".to_owned());
+            self.error = Some(
+                "Vault created; session unlock failed. Enter your passphrase to retry.".to_owned(),
+            );
             return;
         }
         self.ready(vault.into_records());
