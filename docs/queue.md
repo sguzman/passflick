@@ -15,6 +15,7 @@
 - [x] Commit Cargo.lock and enforce locked builds in CI
 - [x] Locked Linux CI baseline: build, 59 tests, CLI smoke checks, formatting, and strict Clippy
 - [x] Added synthetic CLI encrypted-recovery smoke workflow (passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, safety snapshot); latest workflow result still awaiting independent confirmation
+- [x] Extend CLI recovery smoke coverage to source isolation and refresh: adding Firefox then replacing Edge must preserve Firefox, replace only Edge, and retain an encrypted pre-refresh backup (workflow validation pending)
 - [ ] Confirm the newly added filesystem regression tests with CI and target-host acceptance
 - [x] Automated X11 keyboard/copy/close smoke tests under Xvfb
 - [x] Automated native Wayland first-frame and exact synthetic clipboard transport under nested Weston (Xvfb)
