@@ -697,7 +697,10 @@ mod tests {
         // SAFETY: name is a valid NUL-terminated pathname and mkfifo does
         // not retain this pointer after returning.
         assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
-        assert!(matches!(read_private_vault(&fifo), Err(VaultError::UnsafeFile)));
+        assert!(matches!(
+            read_private_vault(&fifo),
+            Err(VaultError::UnsafeFile)
+        ));
         fs::remove_dir_all(&dir).unwrap();
     }
 

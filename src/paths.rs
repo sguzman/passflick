@@ -76,7 +76,7 @@ mod tests {
     #[test]
     fn cache_identity_is_stable_across_missing_vault_and_symlinked_parent() {
         use std::fs;
-        use std::os::unix::fs::{symlink, PermissionsExt};
+        use std::os::unix::fs::{PermissionsExt, symlink};
 
         let mut entropy = [0_u8; 8];
         getrandom::fill(&mut entropy).unwrap();

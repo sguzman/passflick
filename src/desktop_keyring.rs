@@ -124,8 +124,12 @@ mod tests {
     fn non_utf8_vault_paths_have_distinct_desktop_keyring_ids() {
         use std::ffi::OsStr;
 
-        let first = Path::new(OsStr::from_bytes(b"/fictional/credentials-\xff/vault.passvault"));
-        let second = Path::new(OsStr::from_bytes(b"/fictional/credentials-\xfe/vault.passvault"));
+        let first = Path::new(OsStr::from_bytes(
+            b"/fictional/credentials-\xff/vault.passvault",
+        ));
+        let second = Path::new(OsStr::from_bytes(
+            b"/fictional/credentials-\xfe/vault.passvault",
+        ));
         assert_ne!(vault_id(first), vault_id(second));
         assert!(vault_id(first).starts_with("nonutf8:"));
         assert_eq!(
