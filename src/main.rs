@@ -225,7 +225,7 @@ fn load_picker_records(
     let key = match load_vault_key(&path) {
         Ok(Some(key)) => key,
         Ok(None) => return (Vec::new(), None, true, false),
-        Err(error) => return (Vec::new(), Some(error.to_string()), false, false),
+        Err(error) => return (Vec::new(), Some(error.to_string()), true, false),
     };
     trace.mark("session-key-loaded");
     match Vault::open_with_key(&path, key) {
@@ -314,8 +314,10 @@ fn status() -> Result<(), Box<dyn Error>> {
     let path = paths::vault_path()?;
     println!("Vault: {}", path.display());
     println!("Exists: {}", path.exists());
-    println!("Session unlocked: {}", session::load(&path)?.is_some());
-    println!("Manual lock: {}", session::is_manually_locked(&path)?);
+    let manually_locked = session::is_manually_locked(&path)?;
+    let session_unlocked = !manually_locked && session::load(&path)?.is_some();
+    println!("Session unlocked: {session_unlocked}");
+    println!("Manual lock: {manually_locked}");
     match desktop_keyring::exists(&path) {
         Ok(enabled) => println!("Desktop keyring: {enabled}"),
         Err(error) => println!("Desktop keyring: unavailable ({error})"),
