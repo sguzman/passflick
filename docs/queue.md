@@ -31,6 +31,8 @@
 - [ ] Evaluate authorized read-only browser credential adapters
 - [x] Add bounds to import and vault parsing, private filesystem permissions, write locking, and encrypted backups
 - [x] Authenticated encrypted restore with pre-restore safety backup
+- [x] Read-only encrypted backup authentication command (`passflick verify FILE`)
+- [x] Failed source refresh restores original in-memory projection without cloning secrets
 - [x] Automatic encrypted pre-refresh backups for existing credential sources
 - [x] Atomically published backups with no overwrite and safe temporary-file cleanup
 - [x] Provider-signature and duplicate-header checks for CSV import snapshots
