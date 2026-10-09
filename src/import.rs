@@ -665,24 +665,24 @@ mod tests {
     fn ambiguous_alias_columns_fail_before_any_credentials_are_replaced() {
         for (csv, role) in [
             (
-                "url,username,password,pass\\nhttps://example.test,user,correct,wrong\\n",
+                "url,username,password,pass\nhttps://example.test,user,correct,wrong\n",
                 "password",
             ),
             (
-                "url,website,username,password\\nhttps://example.test,https://other.example.test,user,secret\\n",
+                "url,website,username,password\nhttps://example.test,https://other.example.test,user,secret\n",
                 "site URL",
             ),
             (
-                "name,title,username,password\\nFirst,Second,user,secret\\n",
+                "name,title,username,password\nFirst,Second,user,secret\n",
                 "site title",
             ),
             (
-                "url,username,user,password\\nhttps://example.test,alice,bob,secret\\n",
+                "url,username,user,password\nhttps://example.test,alice,bob,secret\n",
                 "username",
             ),
         ] {
             assert!(matches!(
-                parse_csv(csv.replace("\\\\n", "\\n").as_bytes(), Source::Edge, 0),
+                parse_csv(csv.as_bytes(), Source::Edge, 0),
                 Err(ImportError::AmbiguousColumn { role: found }) if found == role
             ));
         }
