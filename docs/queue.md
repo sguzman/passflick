@@ -13,7 +13,7 @@
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Locked Linux CI: build, 52 tests, CLI smoke checks, formatting, and strict Clippy
+- [x] Locked Linux CI: build, 59 tests, CLI smoke checks, formatting, and strict Clippy
 - [x] Automated X11 keyboard/copy/close smoke tests under Xvfb
 - [x] Automated native Wayland first-frame and exact synthetic clipboard transport under nested Weston (Xvfb)
 - [ ] Complete [synthetic target-host acceptance](acceptance.md) on EndeavourOS/Hyprland
