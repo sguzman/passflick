@@ -33,6 +33,8 @@ Use isolated temporary XDG data directories and synthetic CSV exports for all fo
 - Reject malformed rows, missing required columns, and oversized exports without changing a valid snapshot.
 - Test unusually small snapshots and the explicit `--allow-shrink` override.
 - Verify private file and directory permissions, encrypted contents, and authenticated decryption failure after tampering.
+- Confirm an active vault refuses unlock from a shared or symlinked immediate directory even if its file is mode 0600; confirm encrypted snapshots remain verifiable from an external directory when the snapshot file itself is private.
+- Substitute named pipes for the vault file and the write-lock file in isolated synthetic directories. Both operations must reject them without blocking for a counterpart process.
 - Exercise two simultaneous imports and verify that the exclusive write lock preserves both updates.
 - Create and reopen a byte-exact encrypted backup.
 - Verify session unlock, explicit lock, failed unlock, and the optional Secret Service integration.
