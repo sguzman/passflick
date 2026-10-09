@@ -34,6 +34,7 @@ def run_cli(
     *args: str,
     passphrase: bytes = PASSPHRASE,
     success: bool = True,
+    expected_error: bytes | None = None,
 ) -> bytes:
     pid, terminal = pty.fork()
     if pid == 0:
@@ -45,20 +46,27 @@ def run_cli(
     output = bytearray()
     scanned = 0
     exit_status = None
+    terminal_eof = False
     deadline = time.monotonic() + 45
     try:
-        while True:
+        # A child can exit before its PTY output is fully read. Drain the
+        # terminal to EOF before inspecting the exit code or parsed output.
+        while exit_status is None or not terminal_eof:
             if time.monotonic() >= deadline:
-                raise AssertionError(f"Passflick {' '.join(args)} exceeded 45 seconds")
+                raise AssertionError(
+                    f"Passflick {' '.join(args)} exceeded the smoke-test deadline"
+                )
             ready, _, _ = select.select([terminal], [], [], 0.1)
-            if ready:
+            if ready and not terminal_eof:
                 try:
                     piece = os.read(terminal, 4096)
                 except OSError as error:
                     if error.errno != errno.EIO:
                         raise
                     piece = b""
-                if piece:
+                if not piece:
+                    terminal_eof = True
+                else:
                     output.extend(piece)
                     while True:
                         matches = [
@@ -75,10 +83,10 @@ def run_cli(
                         position, length = min(matches)
                         scanned = position + length
                         os.write(terminal, passphrase + b"\n")
-            finished, status = os.waitpid(pid, os.WNOHANG)
-            if finished:
-                exit_status = status
-                break
+            if exit_status is None:
+                finished, status = os.waitpid(pid, os.WNOHANG)
+                if finished:
+                    exit_status = status
     finally:
         os.close(terminal)
         if exit_status is None:
@@ -88,6 +96,11 @@ def run_cli(
     assert os.WIFEXITED(exit_status), f"CLI crashed for {args}"
     result = os.WEXITSTATUS(exit_status)
     assert (result == 0) == success, f"Unexpected CLI exit ({result}) for {args}"
+    if expected_error is not None:
+        assert not success, "An expected error requires an intentionally failing invocation"
+        assert expected_error in output, (
+            f"CLI failed for the wrong reason: {' '.join(args)}"
+        )
     return bytes(output)
 
 
@@ -118,6 +131,7 @@ def main() -> None:
         run_cli(
             executable, environment, "import", "edge", str(ambiguous_export),
             success=False,
+            expected_error=b"ambiguous password columns",
         )
         assert vault.read_bytes() == prior_to_rejected_imports
 
@@ -130,6 +144,7 @@ def main() -> None:
         run_cli(
             executable, environment, "import", "edge", str(incomplete_export),
             success=False,
+            expected_error=b"no username column",
         )
         assert vault.read_bytes() == prior_to_rejected_imports
         run_cli(executable, environment, "backup")
@@ -148,6 +163,7 @@ def main() -> None:
         run_cli(
             executable, environment, "recover", str(snapshot), "--confirm",
             passphrase=b"fictional-wrong-recovery-passphrase", success=False,
+            expected_error=b"vault decryption failed",
         )
         assert vault.read_bytes() == corrupted, "Failed recovery overwrote primary"
 
