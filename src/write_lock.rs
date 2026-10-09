@@ -4,6 +4,8 @@ use std::os::fd::AsRawFd;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 
+use crate::vault::owned_by_current_user;
+
 /// Hold this guard through the entire load, replace, and encrypted save.
 pub struct VaultWriteGuard {
     _lock_file: File,
@@ -14,7 +16,10 @@ pub fn acquire(vault_path: &Path) -> io::Result<VaultWriteGuard> {
         .parent()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid vault path"))?;
     let directory = fs::symlink_metadata(parent)?;
-    if !directory.is_dir() || directory.permissions().mode() & 0o077 != 0 {
+    if !directory.is_dir()
+        || directory.permissions().mode() & 0o077 != 0
+        || !owned_by_current_user(&directory)
+    {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "vault directory must be private",
@@ -34,7 +39,7 @@ pub fn acquire(vault_path: &Path) -> io::Result<VaultWriteGuard> {
         .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(&lock_path)?;
     let info = file.metadata()?;
-    if !info.is_file() || info.permissions().mode() & 0o077 != 0 {
+    if !info.is_file() || info.permissions().mode() & 0o077 != 0 || !owned_by_current_user(&info) {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "vault lock file must be private",

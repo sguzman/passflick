@@ -4,7 +4,7 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::vault::{Vault, VaultError, VaultKey, read_private_vault};
+use crate::vault::{Vault, VaultError, VaultKey, owned_by_current_user, read_private_vault};
 
 /// Create an encrypted backup without ever serializing or exposing plaintext.
 /// Fail rather than overwrite any existing backup, including symlinks.
@@ -17,14 +17,20 @@ pub fn create(vault_path: &Path) -> Result<PathBuf, VaultError> {
     // A caller invoking backup directly should receive the same filesystem
     // protections as an operation that already holds the write lock.
     let parent_metadata = fs::symlink_metadata(parent)?;
-    if !parent_metadata.is_dir() || parent_metadata.permissions().mode() & 0o077 != 0 {
+    if !parent_metadata.is_dir()
+        || parent_metadata.permissions().mode() & 0o077 != 0
+        || !owned_by_current_user(&parent_metadata)
+    {
         return Err(VaultError::UnsafeDirectory);
     }
     let directory = parent.join("backups");
 
     match fs::symlink_metadata(&directory) {
         Ok(metadata) => {
-            if !metadata.is_dir() || metadata.permissions().mode() & 0o077 != 0 {
+            if !metadata.is_dir()
+                || metadata.permissions().mode() & 0o077 != 0
+                || !owned_by_current_user(&metadata)
+            {
                 return Err(VaultError::UnsafeDirectory);
             }
         }

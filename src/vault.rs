@@ -1,6 +1,6 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use argon2::{Algorithm, Argon2, Params, Version};
@@ -338,12 +338,21 @@ fn fill_random(bytes: &mut [u8]) -> Result<(), VaultError> {
 /// The active vault must live in a private directory even during read-only
 /// unlock. A private file inside a shared directory can be replaced or rolled
 /// back by another user with directory write permission.
+/// Vault and managed-backup paths must belong to the effective user, not
+/// merely have private mode bits. This also rejects unexpected ownership when
+/// launched with elevated credentials.
+/// SAFETY: geteuid reads the process's effective UID without dereferencing
+/// pointers or changing process state.
+pub(crate) fn owned_by_current_user(metadata: &fs::Metadata) -> bool {
+    metadata.uid() == unsafe { libc::geteuid() }
+}
+
 fn ensure_private_vault_parent(path: &Path) -> Result<(), VaultError> {
     let parent = path
         .parent()
         .ok_or_else(|| VaultError::InvalidPath(path.to_path_buf()))?;
     let metadata = fs::symlink_metadata(parent)?;
-    if !metadata.is_dir() || metadata.permissions().mode() & 0o077 != 0 {
+    if !metadata.is_dir() || metadata.permissions().mode() & 0o077 != 0 || !owned_by_current_user(&metadata) {
         return Err(VaultError::UnsafeDirectory);
     }
     Ok(())
@@ -358,7 +367,7 @@ pub(crate) fn read_private_vault(path: &Path) -> Result<Vec<u8>, VaultError> {
         .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(path)?;
     let metadata = file.metadata()?;
-    if !metadata.is_file() || metadata.permissions().mode() & 0o077 != 0 {
+    if !metadata.is_file() || metadata.permissions().mode() & 0o077 != 0 || !owned_by_current_user(&metadata) {
         return Err(VaultError::UnsafeFile);
     }
 
@@ -383,7 +392,10 @@ fn write_atomic(path: &Path, bytes: &[u8], create_only: bool) -> Result<(), Vaul
     }
 
     let parent_metadata = fs::symlink_metadata(parent)?;
-    if !parent_metadata.is_dir() || parent_metadata.permissions().mode() & 0o077 != 0 {
+    if !parent_metadata.is_dir()
+        || parent_metadata.permissions().mode() & 0o077 != 0
+        || !owned_by_current_user(&parent_metadata)
+    {
         return Err(VaultError::UnsafeDirectory);
     }
 
@@ -419,7 +431,11 @@ fn write_atomic(path: &Path, bytes: &[u8], create_only: bool) -> Result<(), Vaul
         } else {
             // Existing target paths must already be private regular files.
             match fs::symlink_metadata(path) {
-                Ok(meta) if !meta.is_file() || meta.permissions().mode() & 0o077 != 0 => {
+                Ok(meta)
+                    if !meta.is_file()
+                        || meta.permissions().mode() & 0o077 != 0
+                        || !owned_by_current_user(&meta) =>
+                {
                     return Err(VaultError::UnsafeFile);
                 }
                 Ok(_) => {}
@@ -678,6 +694,23 @@ mod tests {
         symlink(&file, &link).unwrap();
         assert!(read_private_vault(&link).is_err());
         fs::remove_dir_all(&temp).unwrap();
+    }
+
+    #[test]
+    fn vault_metadata_requires_the_effective_owner() {
+        let mut entropy = [0_u8; 8];
+        fill_random(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-vault-owner-check-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&root).unwrap();
+        let path = root.join("synthetic-vault");
+        fs::write(&path, b"fictional ciphertext").unwrap();
+        let metadata = fs::symlink_metadata(&path).unwrap();
+        assert!(owned_by_current_user(&metadata));
+        assert_ne!(metadata.uid(), metadata.uid().wrapping_add(1));
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
