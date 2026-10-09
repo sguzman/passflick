@@ -423,12 +423,23 @@ fn import_csv(source: Source, path: &Path, allow_shrink: bool) -> Result<(), Box
     let _guard = write_lock::acquire(&write_path)?;
     let (vault_path, mut vault) = open_unlocked_vault()?;
     r#import::validate_snapshot_refresh(vault.records(), source, imported.len(), allow_shrink)?;
+    // A syntactically valid file can still be an outdated or incorrect export.
+    // Preserve the old encrypted vault before replacing an existing source.
+    // Retain the same exclusive lock through backup, replacement, and save.
+    let previous = if vault.records().iter().any(|record| record.source == source) {
+        Some(backup::create(&vault_path)?)
+    } else {
+        None
+    };
     let count = r#import::replace_snapshot(vault.records_mut(), source, imported);
     vault.save(&vault_path)?;
     println!(
         "Imported {count} {} credential(s) into encrypted projection.",
         source
     );
+    if let Some(snapshot) = previous {
+        println!("Previous encrypted projection preserved at {}", snapshot.display());
+    }
     if path != Path::new("-") {
         println!("Remove the plaintext export from its original location.");
     }
