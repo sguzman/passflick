@@ -84,7 +84,7 @@ passflick status
 passflick backup
 ```
 
-Passflick disables Linux process core dumps and ptrace attachment before loading vault secrets. Clipboard history behavior remains environment-dependent. Imported secrets are stored only in the local encrypted vault. The ordinary picker never contacts a network service. `passflick backup` creates a private, encrypted, no-overwrite snapshot beside the vault, under `backups/`. To restore a previous snapshot from the same vault encryption lineage, use `passflick restore /path/to/backup.passvault --confirm`. Passflick authenticates the snapshot before modifying anything, preserves the current encrypted vault as a separate safety backup, and never writes a plaintext restore file.
+Passflick disables Linux process core dumps and ptrace attachment before loading vault secrets. Clipboard history behavior remains environment-dependent. Imported secrets are stored only in the local encrypted vault. The ordinary picker never contacts a network service. `passflick backup` creates a private, encrypted, no-overwrite snapshot beside the vault, under `backups/`. To restore a previous snapshot from the same vault encryption lineage, use `passflick restore /path/to/backup.passvault --confirm`. Passflick authenticates the snapshot before modifying anything, preserves the current encrypted vault as a separate safety backup, and never writes a plaintext restore file. Before a restore, `passflick verify /path/to/backup.passvault` performs read-only authenticated verification under the current vault key. Corrupted or foreign-vault backups fail without modifying the active vault.
 
 ## How the projection works
 
