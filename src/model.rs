@@ -47,6 +47,29 @@ impl FromStr for Source {
     }
 }
 
+/// Render account metadata without executable terminal escapes or bidi
+/// spoofing controls. Stored data and values copied with Shift+Enter retain
+/// their original exact bytes.
+pub fn safe_display_text(raw: &str) -> String {
+    raw.chars()
+        .map(|ch| {
+            if ch.is_control()
+                || matches!(
+                    ch,
+                    '\u{061c}'
+                        | '\u{200e}'..='\u{200f}'
+                        | '\u{202a}'..='\u{202e}'
+                        | '\u{2066}'..='\u{2069}'
+                )
+            {
+                '\u{fffd}'
+            } else {
+                ch
+            }
+        })
+        .collect()
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Credential {
     pub source: Source,
@@ -85,10 +108,11 @@ impl Credential {
         }
     }
     pub fn display_label(&self) -> String {
+        let title = safe_display_text(self.title());
         if self.username.is_empty() {
-            format!("{}  ·  {}", self.title(), self.source)
+            format!("{}  ·  {}", title, self.source)
         } else {
-            format!("{}  ·  {}  ·  {}", self.title(), self.username, self.source)
+            format!("{}  ·  {}  ·  {}", title, safe_display_text(&self.username), self.source)
         }
     }
     /// Key borrows the original secret rather than creating another plaintext
@@ -120,6 +144,25 @@ mod tests {
         );
         assert_eq!(c.password(), "  möt de passe  ");
     }
+    #[test]
+    fn account_labels_cannot_emit_terminal_escapes_or_direction_controls() {
+        let record = Credential::new(
+            Source::Edge,
+            "Site\u{001b}[31m",
+            "https://example.test",
+            "alice\u{202e}resu",
+            "secret\u{001b}[0m",
+            0,
+        );
+        let visible = record.display_label();
+        assert!(visible.contains("Site\u{fffd}[31m"));
+        assert!(visible.contains("alice\u{fffd}resu"));
+        assert!(!visible.contains('\u{001b}'));
+        assert!(!visible.contains('\u{202e}'));
+        assert_eq!(record.password(), "secret\u{001b}[0m");
+        assert_eq!(record.username, "alice\u{202e}resu");
+    }
+
     #[test]
     fn url_path_case_is_not_silently_folded() {
         let upper = Credential::new(
