@@ -1,6 +1,6 @@
 # Acceptance plan
 
-Passflick is pre-release until the following checks are run against its real Linux/Wayland target. Automated tests use fictional `example.test` credentials exclusively. CI has already validated the X11 search/Enter/Shift+Enter/Escape lifecycle under Xvfb and the first native Wayland frame under headless Weston. The checklist below contains the remaining target-host acceptance work. This document is an acceptance gate, not a feature changelog.
+Passflick is pre-release until the following checks are run against its real Linux/Wayland target. Automated tests use fictional `example.test` credentials exclusively. CI has already validated the X11 search/Enter/Shift+Enter/Escape lifecycle under Xvfb and the first native Wayland frame plus a synthetic byte-exact clipboard round-trip under nested Weston. The CI runner uses an older `wl-copy`, so its transport test does not validate the sensitive-data hint; that remains a target-host acceptance item. The checklist below contains the remaining target-host acceptance work. This document is an acceptance gate, not a feature changelog.
 
 ## 1. Synthetic graphical picker
 
