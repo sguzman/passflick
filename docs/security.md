@@ -20,7 +20,7 @@ Password copying requires `wl-clipboard` 2.3+ and uses `wl-copy --sensitive`, pr
 
 Source imports parse and validate the full CSV before changing a source snapshot. Suspicious bulk reductions require `--allow-shrink`. Updates take an exclusive file lock; refreshing an existing source first creates an encrypted rollback snapshot.
 
-`passflick backup` creates a private encrypted snapshot without overwriting previous backups. `passflick verify FILE` authenticates a selected backup with the active vault key without changing either file. The backup directory must itself be private, and unsafe vault directories are rejected. `passflick restore FILE --confirm` authenticates the selected backup against the current vault key, acquires the write lock, and preserves another encrypted safety backup before replacing the live records. Vault initialization never silently overwrites an existing path.
+`passflick backup` creates a private encrypted snapshot without overwriting previous backups. `passflick verify FILE` authenticates a selected backup with the active vault key without changing either file. These commands require the active vault to be unlocked; recovery when the primary vault is missing or corrupted is not yet implemented. The backup directory must itself be private, and unsafe vault directories are rejected. `passflick restore FILE --confirm` authenticates the selected backup against the current vault key, acquires the write lock, and preserves another encrypted safety backup before replacing the live records. Vault initialization never silently overwrites an existing path.
 
 ## Source boundaries
 
