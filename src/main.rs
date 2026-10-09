@@ -386,13 +386,32 @@ fn recover_encrypted_vault(snapshot: &Path) -> Result<(), Box<dyn Error>> {
     let passphrase = Zeroizing::new(rpassword::prompt_password("Backup passphrase: ")?);
     let result = backup::recover_into(&path, snapshot, passphrase.as_bytes())?;
 
-    // The recovered snapshot might originate from a different salt/key. Do
-    // not allow old cached keys to masquerade as successful authentication.
-    let _ = session::mark_locked(&path);
-    let _ = session::clear(&path);
-    if let Err(error) = desktop_keyring::remove(&path) {
-        eprintln!("passflick: previous desktop key could not be removed: {error}");
-    }
+    // A recovered backup may use an entirely different encryption key, even
+    // when installed at the same path. An explicit lock marker prevents
+    // automatic Secret Service rehydration while the old session key is
+    // cleared. Cache cleanup is best-effort, but failed cleanup is reported:
+    // recovery has already completed and must not appear to have failed.
+    let locked = match session::mark_locked(&path) {
+        Ok(()) => true,
+        Err(error) => {
+            eprintln!("passflick: could not mark recovered vault locked: {error}");
+            false
+        }
+    };
+    let session_cleared = match session::clear(&path) {
+        Ok(_) => true,
+        Err(error) => {
+            eprintln!("passflick: could not clear previous session key: {error}");
+            false
+        }
+    };
+    let desktop_cleared = match desktop_keyring::remove(&path) {
+        Ok(_) => true,
+        Err(error) => {
+            eprintln!("passflick: previous desktop key could not be removed: {error}");
+            false
+        }
+    };
 
     println!(
         "Recovered authenticated encrypted backup ({} credentials).",
@@ -404,7 +423,13 @@ fn recover_encrypted_vault(snapshot: &Path) -> Result<(), Box<dyn Error>> {
             previous.display()
         );
     }
-    println!("Unlock with the backup passphrase on your next picker launch.");
+    if locked && session_cleared && desktop_cleared {
+        println!("Unlock with the backup passphrase on your next picker launch.");
+    } else {
+        eprintln!(
+            "passflick: recovery succeeded, but previous cached credentials could not all be invalidated. Do not assume that the next launch will require a passphrase."
+        );
+    }
     Ok(())
 }
 
