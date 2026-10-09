@@ -46,6 +46,7 @@ Use isolated temporary XDG data directories and synthetic CSV exports for all fo
 - Verify an encrypted backup with `passflick verify FILE` before any restore; corrupt or incompatible backups must fail without changing live data.
 - Restore a compatible encrypted snapshot with `--confirm`; verify automatic pre-restore backup and that a corrupted snapshot leaves the live vault unchanged.
 - Corrupt or delete the primary vault in a synthetic environment, then run `passflick recover FILE --confirm`: require the backup passphrase, preserve existing raw ciphertext, reconstruct a private encrypted file, and require a fresh session unlock. An incorrect passphrase must leave existing primary bytes unchanged.
+- In CLI smoke automation, verify `recover` without `--confirm` is refused without changing the primary, and restoring a missing primary does not create a spurious displaced-primary safety snapshot.
 - Confirm no plaintext CSV remains in Passflick-controlled storage.
 
 ## 3. Clipboard and input boundary
