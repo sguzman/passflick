@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Passflick
+GenericName=Password Picker
+Comment=Search, copy, and close your encrypted password projection
+Exec=passflick
+TryExec=passflick
+Icon=dialog-password
+Terminal=false
+Categories=Utility;Security;
+Keywords=password;credentials;vault;picker;
+StartupNotify=true
