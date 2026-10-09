@@ -352,7 +352,10 @@ fn ensure_private_vault_parent(path: &Path) -> Result<(), VaultError> {
         .parent()
         .ok_or_else(|| VaultError::InvalidPath(path.to_path_buf()))?;
     let metadata = fs::symlink_metadata(parent)?;
-    if !metadata.is_dir() || metadata.permissions().mode() & 0o077 != 0 || !owned_by_current_user(&metadata) {
+    if !metadata.is_dir()
+        || metadata.permissions().mode() & 0o077 != 0
+        || !owned_by_current_user(&metadata)
+    {
         return Err(VaultError::UnsafeDirectory);
     }
     Ok(())
@@ -367,7 +370,10 @@ pub(crate) fn read_private_vault(path: &Path) -> Result<Vec<u8>, VaultError> {
         .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(path)?;
     let metadata = file.metadata()?;
-    if !metadata.is_file() || metadata.permissions().mode() & 0o077 != 0 || !owned_by_current_user(&metadata) {
+    if !metadata.is_file()
+        || metadata.permissions().mode() & 0o077 != 0
+        || !owned_by_current_user(&metadata)
+    {
         return Err(VaultError::UnsafeFile);
     }
 
@@ -709,7 +715,6 @@ mod tests {
         fs::write(&path, b"fictional ciphertext").unwrap();
         let metadata = fs::symlink_metadata(&path).unwrap();
         assert!(owned_by_current_user(&metadata));
-        assert_ne!(metadata.uid(), metadata.uid().wrapping_add(1));
         fs::remove_dir_all(&root).unwrap();
     }
 
