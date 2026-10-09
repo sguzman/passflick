@@ -240,6 +240,16 @@ fn vault_file_presence(path: &Path) -> io::Result<bool> {
     }
 }
 
+/// A failed decrypt is not proof that the stale session key was removed.
+/// Keep the user-facing notice truthful even if the kernel keyring is down.
+fn session_key_cleanup_notice(result: Result<bool, session::SessionError>) -> &'static str {
+    match result {
+        Ok(true) => "Cached session key removed; unlock again.",
+        Ok(false) => "No cached session key to remove; unlock again.",
+        Err(_) => "Session key cleanup failed; a stale key may remain. Unlock again.",
+    }
+}
+
 fn load_picker_records(
     trace: &startup::StartupTrace,
 ) -> (Vec<Credential>, Option<String>, bool, bool) {
@@ -276,13 +286,8 @@ fn load_picker_records(
             (vault.into_records(), None, false, false)
         }
         Err(error) => {
-            let _ = session::clear(&path);
-            (
-                Vec::new(),
-                Some(format!("{error}. Session key cleared; unlock again.")),
-                true,
-                false,
-            )
+            let notice = session_key_cleanup_notice(session::clear(&path));
+            (Vec::new(), Some(format!("{error}. {notice}")), true, false)
         }
     }
 }
@@ -611,6 +616,16 @@ fn print_help() {
 #[cfg(test)]
 mod demo_tests {
     use super::*;
+
+    #[test]
+    fn failed_session_key_cleanup_never_claims_invalidation() {
+        assert!(session_key_cleanup_notice(Ok(true)).contains("removed"));
+        assert!(session_key_cleanup_notice(Ok(false)).contains("No cached"));
+        let failed = session_key_cleanup_notice(Err(session::SessionError::InvalidKeyLength));
+        assert!(failed.contains("failed"));
+        assert!(failed.contains("may remain"));
+        assert!(!failed.contains("removed"));
+    }
 
     #[test]
     fn first_run_distinguishes_missing_vault_from_dangling_symlink() {
