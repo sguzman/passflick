@@ -137,6 +137,15 @@ pub fn parse_csv(
                 reason: "password field is empty",
             });
         }
+        // The Wayland text clipboard is not a binary transport. Embedded NUL
+        // can be truncated by clipboard consumers, silently copying the wrong
+        // password or username. Fail the entire snapshot before any writes.
+        if secret.contains('\0') || login.contains('\0') {
+            return Err(ImportError::InvalidRow {
+                row: row_number,
+                reason: "password or username contains a NUL byte",
+            });
+        }
         if site_url.is_empty() && site_name.is_empty() {
             return Err(ImportError::InvalidRow {
                 row: row_number,
@@ -312,6 +321,22 @@ mod tests {
         replace_snapshot(&mut existing, Source::Edge, replacement);
         assert_eq!(existing.len(), 2);
         assert_eq!(existing[0].source, Source::Apple);
+    }
+
+    #[test]
+    fn nul_in_password_or_username_cannot_commit_a_partial_export() {
+        let valid = "name,url,username,password\nValid,https://one.example.test,me,valid\n";
+        for malformed in [
+            "Invalid,https://two.example.test,me,ab\0cd\n",
+            "Invalid,https://two.example.test,m\0e,valid\n",
+        ] {
+            let mut csv = String::from(valid);
+            csv.push_str(malformed);
+            assert!(matches!(
+                parse_csv(csv.as_bytes(), Source::Edge, 1),
+                Err(ImportError::InvalidRow { row: 3, .. })
+            ));
+        }
     }
 
     #[test]
