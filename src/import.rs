@@ -32,6 +32,11 @@ pub enum ImportError {
     InvalidRow { row: usize, reason: &'static str },
     #[error("CSV contains no credentials; previous snapshot is unchanged")]
     Empty,
+    #[error("import credential {position} is invalid: {reason}; previous snapshot is unchanged")]
+    InvalidCredential {
+        position: usize,
+        reason: &'static str,
+    },
     #[error(
         "import batch includes credentials attributed to a different source; previous snapshot is unchanged"
     )]
@@ -253,6 +258,26 @@ pub fn commit_snapshot(
     }
     if incoming.iter().any(|record| record.source != source) {
         return Err(ImportError::MismatchedSource);
+    }
+    // CSV parsing is not the only possible entrypoint. Apply the same
+    // non-destructive record checks to future authorized source adapters,
+    // before preserving a backup or replacing any encrypted credentials.
+    for (index, record) in incoming.iter().enumerate() {
+        let invalid = if record.password().is_empty() {
+            Some("password field is empty")
+        } else if record.password().contains('\0') || record.username.contains('\0') {
+            Some("password or username contains a NUL byte")
+        } else if record.url.trim().is_empty() && record.label.trim().is_empty() {
+            Some("both website and title are empty")
+        } else {
+            None
+        };
+        if let Some(reason) = invalid {
+            return Err(ImportError::InvalidCredential {
+                position: index + 1,
+                reason,
+            });
+        }
     }
     validate_snapshot_refresh(vault.records(), source, incoming.len(), allow_shrink)?;
     let previous_backup = if vault.records().iter().any(|record| record.source == source) {
@@ -528,6 +553,57 @@ mod tests {
         let current = Vault::unlock(&path, passphrase).unwrap();
         assert_eq!(previous.records()[0].password(), "old-test-password");
         assert_eq!(current.records()[0].password(), "new-test-password");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn direct_snapshot_callers_cannot_replace_valid_records_with_invalid_values() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-direct-import-validation-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let path = root.join("vault.passvault");
+        let passphrase = b"fictional-import-validation-passphrase";
+        let mut vault = Vault::create(&path, passphrase).unwrap();
+        vault.records_mut().push(Credential::new(
+            Source::Edge,
+            "Preserved entry",
+            "https://example.test",
+            "fictional-user",
+            "fictional-old-password",
+            1,
+        ));
+        vault.save(&path).unwrap();
+        let ciphertext = std::fs::read(&path).unwrap();
+
+        for (label, url, username, password) in [
+            ("Missing secret", "https://example.test", "user", ""),
+            ("Has NUL", "https://example.test", "user", "ab\0cd"),
+            ("Has NUL", "https://example.test", "user\0other", "secret"),
+            ("  ", "  ", "user", "secret"),
+        ] {
+            let incoming = vec![Credential::new(
+                Source::Edge,
+                "Valid first",
+                "https://first.example.test",
+                "first",
+                "good-value",
+                2,
+            ), Credential::new(
+                Source::Edge, label, url, username, password, 2,
+            )];
+            assert!(matches!(
+                commit_snapshot(&path, &mut vault, Source::Edge, incoming, false),
+                Err(ImportError::InvalidCredential { position: 2, .. })
+            ));
+            assert_eq!(std::fs::read(&path).unwrap(), ciphertext);
+            assert_eq!(vault.records().len(), 1);
+            assert_eq!(vault.records()[0].password(), "fictional-old-password");
+            assert!(!root.join("backups").exists());
+        }
+
         std::fs::remove_dir_all(&root).unwrap();
     }
 
