@@ -15,7 +15,7 @@
 - [x] Commit Cargo.lock and enforce locked builds in CI
 - [x] Locked Linux CI: build, 52 tests, CLI smoke checks, formatting, and strict Clippy
 - [x] Automated X11 keyboard/copy/close smoke tests under Xvfb
-- [x] Automated native Wayland first-frame smoke test under headless Weston
+- [x] Automated native Wayland first-frame and exact synthetic clipboard transport under nested Weston (Xvfb)
 - [ ] Complete [synthetic target-host acceptance](acceptance.md) on EndeavourOS/Hyprland
 - [ ] Test actual Edge, Chrome, Firefox, and Apple export variants
 - [ ] Confirm clipboard exit behavior and source import refresh
