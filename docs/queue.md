@@ -9,7 +9,9 @@
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Locked Linux CI: build, 38 tests, CLI smoke checks, formatting, and strict Clippy
+- [x] Locked Linux CI: build, 39 tests, CLI smoke checks, formatting, and strict Clippy
+- [x] Automated X11 keyboard/copy/close smoke tests under Xvfb
+- [x] Automated native Wayland first-frame smoke test under headless Weston
 - [ ] Complete [synthetic target-host acceptance](acceptance.md) on EndeavourOS/Hyprland
 - [ ] Test actual Edge, Chrome, Firefox, and Apple export variants
 - [ ] Confirm clipboard exit behavior and source import refresh
@@ -28,6 +30,7 @@
 - [x] Atomically published backups with no overwrite and safe temporary-file cleanup
 - [x] Provider-signature and duplicate-header checks for CSV import snapshots
 - [ ] More security review: symlink races, keyring lifecycle, clipboard history, import edge cases
-- [ ] Keyboard latency profiling, release packaging, and MVP acceptance
+- [x] Checksummed Linux x86_64 pre-release binary build workflow
+- [ ] Keyboard latency profiling, target-host packaging validation, and MVP acceptance
 
 Initial code is **experimental** until the security and target-host validation gates pass.
