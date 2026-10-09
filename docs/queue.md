@@ -5,6 +5,7 @@
 - [x] Identity, architecture, and interaction contract
 - [x] Multi-source credential schema and CSV parsing
 - [x] Encrypted vault, masked in-window unlock, and session-key caching adapted from OTPick
+- [x] Standalone first-run vault setup in the graphical picker
 - [x] Per-vault session-key/explicit-lock isolation for safe independent testing
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
