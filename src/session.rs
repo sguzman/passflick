@@ -5,7 +5,7 @@ use std::path::Path;
 use linux_keyutils::{KeyError, KeyPermissionsBuilder, KeyRing, KeyRingIdentifier, Permission};
 use zeroize::Zeroize;
 
-use crate::vault::VaultKey;
+use crate::{paths, vault::VaultKey};
 
 const KEY_NAMESPACE: &str = "passflick:vault-key:v2";
 const LOCK_NAMESPACE: &str = "passflick:manual-lock:v2";
@@ -26,11 +26,9 @@ pub enum SessionError {
 /// The hash is intentionally not persisted in the vault format. A Rust upgrade
 /// changing DefaultHasher would at worst require one extra session unlock.
 fn description(namespace: &str, vault_path: &Path) -> String {
-    let canonical = vault_path
-        .canonicalize()
-        .unwrap_or_else(|_| vault_path.to_path_buf());
+    let identity = paths::vault_identity_path(vault_path);
     let mut hash = DefaultHasher::new();
-    canonical.hash(&mut hash);
+    identity.hash(&mut hash);
     format!("{namespace}:{:016x}", hash.finish())
 }
 
