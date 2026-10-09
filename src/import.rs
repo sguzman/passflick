@@ -285,6 +285,29 @@ mod tests {
     }
 
     #[test]
+    fn complete_firefox_csv_export_with_timestamp_metadata() {
+        let data = b"\"url\",\"username\",\"password\",\"httpRealm\",\"formActionOrigin\",\"guid\",\"timeCreated\",\"timeLastUsed\",\"timePasswordChanged\"\r\n\"https://firefox.example.test\",\"fox-user\",\"fictional-firefox-password\",\"\",\"https://firefox.example.test/login\",\"{synthetic-guid}\",\"123456\",\"234567\",\"345678\"\r\n";
+        let records = parse_csv(data, Source::Firefox, 42).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].source, Source::Firefox);
+        assert_eq!(records[0].username, "fox-user");
+        assert_eq!(records[0].password(), "fictional-firefox-password");
+        assert_eq!(records[0].imported_at, 42);
+    }
+
+    #[test]
+    fn apple_export_ignores_notes_and_otp_auth_secrets() {
+        let data = b"Title,URL,Username,Password,Notes,OTPAuth\r\n\"Example, Apple\",https://apple.example.test,apple-user,fictional-apple-password,\"first note\nsecond note\",\"otpauth://totp/example?secret=FAKEOTPONLY\"\r\n";
+        let records = parse_csv(data, Source::Apple, 13).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].label, "Example, Apple");
+        assert_eq!(records[0].password(), "fictional-apple-password");
+        let stored = serde_json::to_string(&records).unwrap();
+        assert!(!stored.contains("FAKEOTPONLY"));
+        assert!(!stored.contains("first note"));
+    }
+
+    #[test]
     fn malformed_export_is_rejected_before_snapshot_mutation() {
         let mut existing = vec![
             Credential::new(
