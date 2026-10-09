@@ -4,7 +4,7 @@ Passflick holds high-value credentials. It is **pre-release** and has not underg
 
 ## Encrypted vault
 
-Passflick stores a local, versioned encrypted projection using Argon2id and XChaCha20-Poly1305 authenticated encryption. It enforces private vault-file permissions (0600) and private vault directories (0700). The derived key can be cached in the Linux session keyring, separately for each vault. Desktop Secret Service integration is optional.
+Passflick stores a local, versioned encrypted projection using Argon2id and XChaCha20-Poly1305 authenticated encryption. It enforces private vault-file permissions (0600) and private vault directories (0700). The derived key can be cached in the Linux session keyring, separately for each vault. Desktop Secret Service integration is optional. A successful passphrase unlock can also proceed for one picker invocation when kernel session caching fails, without persisting any new unencrypted secret.
 
 New vaults require a passphrase between 12 and 1024 characters. Passphrases do not require arbitrary combinations of character classes. Existing vaults remain unlockable with their original passphrases, including shorter values created by earlier versions.
 
