@@ -2,6 +2,13 @@ name: Linux Snapshot
 on:
   push:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'LICENSE'
+      - '.github/workflows/linux-snapshot.yml'
   workflow_dispatch:
 
 concurrency:
