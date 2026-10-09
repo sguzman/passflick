@@ -54,6 +54,27 @@ mod tests {
     use std::sync::mpsc;
 
     #[test]
+    fn lock_file_symlink_cannot_redirect_writes() {
+        use std::os::unix::fs::symlink;
+
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "passflick-symlink-lock-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&dir).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
+        let target = dir.join("other-file");
+        fs::write(&target, b"do-not-touch").unwrap();
+        symlink(&target, dir.join(".passflick.write-lock")).unwrap();
+        let vault = dir.join("vault.passvault");
+        assert!(acquire(&vault).is_err());
+        assert_eq!(fs::read(&target).unwrap(), b"do-not-touch");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn independent_file_handles_serialize_writes() {
         let mut entropy = [0_u8; 8];
         getrandom::fill(&mut entropy).unwrap();
