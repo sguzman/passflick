@@ -125,6 +125,33 @@ exit 2
     }
 
     #[test]
+    fn sensitive_copy_preserves_exact_synthetic_text_with_supported_helper() {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "passflick-clipboard-success-test-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&dir).unwrap();
+        let executable = dir.join("new-wl-copy");
+        let destination = dir.join("copied-synthetic-text");
+        let script = format!(
+            "#!/bin/sh\\ncase \\" $* \\" in *\\" --sensitive \\"*) ;; *) exit 4 ;; esac\\ncat > '{}'\\n",
+            destination.display()
+        );
+        fs::write(&executable, script).unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+
+        let synthetic = "  fictional secret with newline\\n";
+        copy_sensitive_using(synthetic, executable.as_os_str()).unwrap();
+        assert_eq!(fs::read(destination).unwrap(), synthetic.as_bytes());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn clipboard_command_never_trims_password_newlines() {
         let command = wl_copy_command(OsStr::new("wl-copy"));
         let args: Vec<_> = command.get_args().collect();
