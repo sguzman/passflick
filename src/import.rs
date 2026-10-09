@@ -28,7 +28,9 @@ pub enum ImportError {
     InvalidRow { row: usize, reason: &'static str },
     #[error("CSV contains no credentials; previous snapshot is unchanged")]
     Empty,
-    #[error("import batch includes credentials attributed to a different source; previous snapshot is unchanged")]
+    #[error(
+        "import batch includes credentials attributed to a different source; previous snapshot is unchanged"
+    )]
     MismatchedSource,
     #[error(
         "suspicious {provider} snapshot shrink: {existing} saved vs {incoming} imported; repeat with --allow-shrink if intentional"
