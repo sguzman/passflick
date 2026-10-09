@@ -93,8 +93,19 @@ xdotool key --clearmodifiers Escape
 await_exit
 cmp "$root/expected" "$PASSFLICK_TEST_CLIPBOARD"
 
-echo "Synthetic GUI test: first-run setup rejects mismatched passphrases"
+echo "Synthetic GUI test: first-run setup rejects short passphrases"
 export PASSFLICK_VAULT="$root/new-vault.passvault"
+launch_picker normal >/dev/null
+xdotool type --clearmodifiers --delay 25 'short'
+xdotool key --clearmodifiers Tab
+xdotool type --clearmodifiers --delay 25 'short'
+xdotool key --clearmodifiers Return
+sleep 0.4
+test ! -e "$PASSFLICK_VAULT"
+xdotool key --clearmodifiers Escape
+await_exit
+
+echo "Synthetic GUI test: first-run setup rejects mismatched passphrases"
 launch_picker normal >/dev/null
 xdotool type --clearmodifiers --delay 25 'fictional-test-passphrase-42'
 xdotool key --clearmodifiers Tab
