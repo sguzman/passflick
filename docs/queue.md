@@ -13,7 +13,8 @@
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Locked Linux CI: build, 59 tests, CLI smoke checks, formatting, and strict Clippy
+- [x] Locked Linux CI baseline: build, 59 tests, CLI smoke checks, formatting, and strict Clippy
+- [x] Added synthetic CLI encrypted-recovery smoke workflow (passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, safety snapshot); latest workflow result still awaiting independent confirmation
 - [ ] Confirm the newly added filesystem regression tests with CI and target-host acceptance
 - [x] Automated X11 keyboard/copy/close smoke tests under Xvfb
 - [x] Automated native Wayland first-frame and exact synthetic clipboard transport under nested Weston (Xvfb)
