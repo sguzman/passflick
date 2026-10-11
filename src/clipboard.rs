@@ -172,7 +172,7 @@ exit 2
         let destination = dir.join("copied-synthetic-text");
         let script = format!(
             r#"#!/bin/sh
-if [ "${1:-}" = "--help" ]; then echo '--type --sensitive'; exit 0; fi
+if [ "${{1:-}}" = "--help" ]; then echo '--type --sensitive'; exit 0; fi
 case " $* " in *" --sensitive "*) ;; *) exit 4 ;; esac
 cat > '{}'
 "#,
