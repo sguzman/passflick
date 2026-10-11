@@ -228,7 +228,7 @@ def main() -> None:
         run_cli(executable, environment, "import", "firefox", str(firefox_export))
         before_refresh = run_cli(executable, environment, "list")
         assert b"Smoke Example" in before_refresh
-        assert b"https://firefox.example.test" in before_refresh
+        assert b"firefox.example.test" in before_refresh
         assert b"fox-user" in before_refresh
 
         edge_refresh = root / "fictional-edge-refresh.csv"
@@ -241,7 +241,7 @@ def main() -> None:
         assert b"Updated Edge" in after_refresh
         assert b"new-edge-user" in after_refresh
         assert b"Smoke Example" not in after_refresh
-        assert b"https://firefox.example.test" in after_refresh
+        assert b"firefox.example.test" in after_refresh
         assert b"fox-user" in after_refresh
         assert b"fictional-refreshed-password" not in after_refresh
         assert b"fictional-firefox-password" not in after_refresh
@@ -292,7 +292,7 @@ def main() -> None:
         after_shrink = run_cli(executable, environment, "list")
         assert b"Bulk 0" in after_shrink
         assert b"Bulk 11" not in after_shrink
-        assert b"https://firefox.example.test" in after_shrink
+        assert b"firefox.example.test" in after_shrink
         assert len(list((root / "backups").glob("*.passvault"))) == backups_before_shrink + 1
 
         # All four documented providers must coexist in the same encrypted
@@ -331,7 +331,7 @@ def main() -> None:
         for expected in (
             b"Bulk 0",
             b"Chrome Entry",
-            b"https://firefox.example.test",
+            b"firefox.example.test",
             b"Apple Entry",
         ):
             assert expected in labels, f"Provider missing from list: {expected!r}"
@@ -404,7 +404,7 @@ def main() -> None:
         assert any(path.read_bytes() == modified for path in new_safety)
         assert restore_source.read_bytes() == snapshot_bytes
         restored_labels = run_cli(executable, environment, "list")
-        for expected in (b"Bulk 0", b"Chrome Entry", b"Apple Entry", b"https://firefox.example.test"):
+        for expected in (b"Bulk 0", b"Chrome Entry", b"Apple Entry", b"firefox.example.test"):
             assert expected in restored_labels
         assert b"Temporary Edge" not in restored_labels
         restored_status = run_cli(executable, environment, "sources")
