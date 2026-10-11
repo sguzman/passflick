@@ -23,7 +23,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use app::PickerApp;
 use eframe::egui;
-use model::{Credential, Source};
+use model::{Credential, Source, safe_display_text};
 use vault::Vault;
 use zeroize::Zeroizing;
 
@@ -31,7 +31,7 @@ fn main() {
     let trace = startup::StartupTrace::from_env();
     trace.mark("process-entry");
     if let Err(error) = run(&trace) {
-        eprintln!("passflick: {error}");
+        eprintln!("passflick: {}", safe_display_text(&error.to_string()));
         std::process::exit(1);
     }
 }
@@ -134,6 +134,12 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
         None => run_picker(trace.clone())?,
     }
     Ok(())
+}
+
+/// Terminal paths are untrusted visible metadata. Keep the actual
+/// filesystem Path unchanged for every open, save, and backup operation.
+fn safe_cli_path(path: &Path) -> String {
+    safe_display_text(&path.to_string_lossy())
 }
 
 fn no_extra_args(args: &mut impl Iterator<Item = String>) -> Result<(), Box<dyn Error>> {
@@ -313,9 +319,9 @@ fn init_vault() -> Result<(), Box<dyn Error>> {
     passphrase::validate_new(first.as_str(), confirm.as_str())?;
     let vault = Vault::create(&path, first.as_bytes())?;
     if session::store(&path, vault.key()).is_ok() {
-        println!("Initialized and unlocked {}.", path.display());
+        println!("Initialized and unlocked {}.", safe_cli_path(&path));
     } else {
-        println!("Initialized encrypted vault at {}.", path.display());
+        println!("Initialized encrypted vault at {}.", safe_cli_path(&path));
         println!("Session cache unavailable; enter your passphrase in the picker when needed.");
     }
     Ok(())
@@ -383,7 +389,7 @@ fn cached_key_opens_vault(path: &Path, key: vault::VaultKey) -> bool {
 
 fn status() -> Result<(), Box<dyn Error>> {
     let path = paths::vault_path()?;
-    println!("Vault: {}", path.display());
+    println!("Vault: {}", safe_cli_path(&path));
     // exists() follows symlinks and reports a dangling symlink as absent.
     // Status must not encourage initializing over an unsafe vault path.
     println!("Exists: {}", vault_file_presence(&path)?);
@@ -493,7 +499,7 @@ fn recover_encrypted_vault(snapshot: &Path) -> Result<(), Box<dyn Error>> {
     if let Some(previous) = result.previous_raw_snapshot {
         println!(
             "Previous primary ciphertext preserved, unverified, at {}",
-            previous.display()
+            safe_cli_path(&previous)
         );
     }
     if locked && session_cleared && desktop_cleared {
@@ -520,7 +526,7 @@ fn restore_encrypted_vault(snapshot: &Path) -> Result<(), Box<dyn Error>> {
     let (_, mut live) = open_unlocked_vault()?;
     let saved_current = backup::restore_into(&path, snapshot, &mut live)?;
     println!("Restored verified encrypted snapshot.");
-    println!("Previous vault preserved at {}", saved_current.display());
+    println!("Previous vault preserved at {}", safe_cli_path(&saved_current));
     Ok(())
 }
 
@@ -532,7 +538,7 @@ fn backup_encrypted_vault() -> Result<(), Box<dyn Error>> {
     // Demand a successful decrypt before preserving a vault snapshot.
     let (_, _) = open_unlocked_vault()?;
     let destination = backup::create(&path)?;
-    println!("Created encrypted backup at {}", destination.display());
+    println!("Created encrypted backup at {}", safe_cli_path(&destination));
     Ok(())
 }
 
@@ -589,7 +595,7 @@ fn import_csv(source: Source, path: &Path, allow_shrink: bool) -> Result<(), Box
     if let Some(snapshot) = result.previous_backup {
         println!(
             "Previous encrypted projection preserved at {}",
-            snapshot.display()
+            safe_cli_path(&snapshot)
         );
     }
     if path != Path::new("-") {
@@ -825,6 +831,24 @@ mod demo_tests {
         assert!(failed.contains("failed"));
         assert!(failed.contains("may remain"));
         assert!(!failed.contains("removed"));
+    }
+
+    #[test]
+    fn cli_paths_and_error_text_neutralize_terminal_control_characters() {
+        let raw = PathBuf::from("/tmp/passflick-\u{001b}[2J\u{202e}-vault.passvault");
+        let visible = safe_cli_path(&raw);
+        assert_eq!(
+            visible,
+            "/tmp/passflick-\u{fffd}[2J\u{fffd}-vault.passvault"
+        );
+        assert!(!visible.contains('\u{001b}'));
+        assert!(!visible.contains('\u{202e}'));
+
+        let error = vault::VaultError::AlreadyExists(raw).to_string();
+        let safe_error = safe_display_text(&error);
+        assert!(!safe_error.contains('\u{001b}'));
+        assert!(!safe_error.contains('\u{202e}'));
+        assert!(safe_error.contains("\u{fffd}[2J"));
     }
 
     #[test]
