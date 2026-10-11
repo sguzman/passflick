@@ -323,12 +323,14 @@ fn derive_key(passphrase: &[u8], header: &Header) -> Result<VaultKey, VaultError
     .map_err(|error| VaultError::Kdf(error.to_string()))?;
 
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    let mut key = [0_u8; KEY_LEN];
+    // Derive straight into zeroizing storage, including when Argon2 fails.
+    // Avoid leaving a separate unprotected key array on the stack.
+    let mut key = Zeroizing::new([0_u8; KEY_LEN]);
     argon2
         .hash_password_into(passphrase, &header.salt, &mut key)
         .map_err(|error| VaultError::Kdf(error.to_string()))?;
 
-    Ok(VaultKey::from_bytes(key))
+    Ok(VaultKey(key))
 }
 
 fn fill_random(bytes: &mut [u8]) -> Result<(), VaultError> {
@@ -602,6 +604,45 @@ mod tests {
             Err(VaultError::AlreadyExists(_))
         ));
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn simultaneous_vault_initialization_never_overwrites_the_winner() {
+        use std::sync::{Arc, Barrier};
+        use std::thread;
+
+        let mut entropy = [0_u8; 8];
+        fill_random(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-simultaneous-init-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&root).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+        let path = root.join("vault.passvault");
+        let start = Arc::new(Barrier::new(3));
+        let mut workers = Vec::new();
+        for password in [b"fictional-first-passphrase".as_slice(), b"fictional-second-passphrase".as_slice()] {
+            let path = path.clone();
+            let start = Arc::clone(&start);
+            workers.push(thread::spawn(move || {
+                start.wait();
+                Vault::create(&path, password).map(|_| password)
+            }));
+        }
+
+        start.wait();
+        let results: Vec<_> = workers.into_iter().map(|worker| worker.join().unwrap()).collect();
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(
+            results.iter().filter(|result| matches!(result, Err(VaultError::AlreadyExists(_)))).count(),
+            1
+        );
+        let winning_passphrase = *results.into_iter().find_map(Result::ok).as_ref().unwrap();
+        let opened = Vault::unlock(&path, winning_passphrase).unwrap();
+        assert!(opened.records().is_empty());
+        assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o077, 0);
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
