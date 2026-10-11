@@ -5,7 +5,22 @@ use crate::startup::StartupTrace;
 use crate::vault::Vault;
 use crate::{passphrase, paths, session};
 use eframe::egui;
+use std::collections::HashMap;
 use zeroize::Zeroizing;
+
+/// Compute each visible row only when it is first visited. A label scans
+/// credential metadata to gather sources, conflicts and hidden URL variants;
+/// doing that on every egui redraw causes avoidable work on large vaults.
+fn cached_label<'a>(
+    labels: &'a mut HashMap<usize, String>,
+    records: &[Credential],
+    index: usize,
+) -> &'a str {
+    labels
+        .entry(index)
+        .or_insert_with(|| display_label_with_sources(records, index))
+        .as_str()
+}
 
 /// Validate the exact bytes before giving text to the Wayland clipboard.
 fn value_to_copy(record: &Credential, username: bool) -> Result<&str, &'static str> {
@@ -31,6 +46,7 @@ pub struct PickerApp {
     records: Vec<Credential>,
     query: String,
     ranked: Vec<usize>,
+    display_labels: HashMap<usize, String>,
     selected: usize,
     focused: bool,
     locked: bool,
@@ -71,6 +87,7 @@ impl PickerApp {
             records,
             query: String::new(),
             ranked,
+            display_labels: HashMap::new(),
             selected: 0,
             focused: false,
             locked,
@@ -87,6 +104,9 @@ impl PickerApp {
 
     fn ready(&mut self, records: Vec<Credential>) {
         self.records = records;
+        // Cached labels belong to the old credential projection, not the
+        // matching indices in this newly unlocked or created vault.
+        self.display_labels.clear();
         self.locked = false;
         self.setup_required = false;
         self.unlock_focused = false;
@@ -328,13 +348,8 @@ impl eframe::App for PickerApp {
                     .skip(first_visible)
                     .take(8)
                 {
-                    if ui
-                        .selectable_label(
-                            row == self.selected,
-                            display_label_with_sources(&self.records, index),
-                        )
-                        .clicked()
-                    {
+                    let label = cached_label(&mut self.display_labels, &self.records, index);
+                    if ui.selectable_label(row == self.selected, label).clicked() {
                         self.selected = row;
                     }
                 }
@@ -364,6 +379,37 @@ impl eframe::App for PickerApp {
 mod tests {
     use super::*;
     use crate::model::Source;
+
+    #[test]
+    fn picker_labels_are_cached_until_the_vault_projection_changes() {
+        let before = vec![Credential::new(
+            Source::Edge,
+            "First account",
+            "https://example.test",
+            "fictional-user",
+            "fictional-secret",
+            1,
+        )];
+        let after = vec![Credential::new(
+            Source::Firefox,
+            "Replacement account",
+            "https://different.example.test",
+            "fictional-user",
+            "different-fictional-secret",
+            2,
+        )];
+        let mut labels = HashMap::new();
+        let first = cached_label(&mut labels, &before, 0).to_owned();
+        assert!(first.contains("First account"));
+        assert_eq!(labels.len(), 1);
+        assert_eq!(cached_label(&mut labels, &before, 0), first);
+        // Swapping projections requires invalidation, even when index 0 exists
+        // in both. PickerApp::ready clears this cache on every vault load.
+        labels.clear();
+        let changed = cached_label(&mut labels, &after, 0);
+        assert!(changed.contains("Replacement account"));
+        assert!(!changed.contains("First account"));
+    }
 
     #[test]
     fn clipboard_rejects_empty_and_nul_values_from_old_vaults() {
