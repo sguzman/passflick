@@ -153,7 +153,10 @@ mod tests {
         assert_eq!(profiles.len(), 1);
         assert_eq!(profiles[0].profile, raw_name);
         assert_eq!(profiles[0].path, firefox);
-        assert_eq!(profiles[0].display_profile(), "example\u{fffd}[2J\u{fffd}.default");
+        assert_eq!(
+            profiles[0].display_profile(),
+            "example\u{fffd}[2J\u{fffd}.default"
+        );
         fs::remove_dir_all(&root).unwrap();
     }
 
