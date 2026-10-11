@@ -14,7 +14,7 @@
 - [x] One-shot keyboard picker with Enter/Shift+Enter; cache visible row labels between egui redraws and clear cached labels after a vault projection change; zeroize owned search text on close or reload, cached picker row labels on drop, and case-folded search query, indexed field, and sort-key temporaries; normalize one zeroizing title sort key per matched search result instead of per comparator call
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Rust CI verified at [`fbfde30`](https://github.com/sguzman/passflick/actions/runs/38180798941): 110 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy; [synthetic GUI checks](https://github.com/sguzman/passflick/actions/runs/38180798931) also passed
+- [x] Rust CI verified at [`7cb7ad6`](https://github.com/sguzman/passflick/actions/runs/38183944814): 110 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy; [synthetic GUI checks](https://github.com/sguzman/passflick/actions/runs/38183944774) also passed
 - [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
 - [x] Synthetic ordinary restore smoke passed: explicit confirmation, corrupted and hard-linked snapshot rejection, four-source restoration, and encrypted pre-restore safety backup
 - [x] Synthetic CLI source refresh passed: Firefox survives Edge replacement; a large accidental Edge shrink is rejected without vault mutation, and `--allow-shrink` preserves Firefox
