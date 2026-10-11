@@ -14,6 +14,8 @@ pub enum ClipboardError {
     Wait(#[source] io::Error),
     #[error("wl-copy exited unsuccessfully")]
     Failed,
+    #[error("value contains a NUL byte; refusing unsafe clipboard copy")]
+    NulByte,
     #[error(
         "wl-clipboard 2.3 or newer is needed for sensitive password copying; upgrade wl-clipboard"
     )]
@@ -39,6 +41,12 @@ pub fn copy_sensitive(text: &str) -> Result<(), ClipboardError> {
 }
 
 fn copy_sensitive_using(text: &str, executable: &OsStr) -> Result<(), ClipboardError> {
+    // Import validates new records, but old vaults and future adapters can
+    // still reach this public boundary. Embedded NUL can be truncated by
+    // clipboard consumers and silently copy a different password.
+    if text.contains('\0') {
+        return Err(ClipboardError::NulByte);
+    }
     let mut child = wl_copy_command(executable)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -90,6 +98,20 @@ mod tests {
         ));
         assert!(has_sensitive_flag(
             b"wl-copy --type --sensitive --paste-once"
+        ));
+    }
+
+    #[test]
+    fn nul_values_are_rejected_before_invoking_any_clipboard_helper() {
+        // The absent helper would report Spawn if the content guard ran too late.
+        let missing = OsStr::new("/fictional/passflick/missing-wl-copy");
+        assert!(matches!(
+            copy_sensitive_using("fictional\0secret", missing),
+            Err(ClipboardError::NulByte)
+        ));
+        assert!(matches!(
+            copy_sensitive_using("fictional\0username", missing),
+            Err(ClipboardError::NulByte)
         ));
     }
 
