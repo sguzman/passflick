@@ -31,20 +31,13 @@ fn wl_copy_command(executable: &OsStr) -> Command {
 }
 
 fn has_sensitive_flag(output: &[u8]) -> bool {
-    // A mention of the flag somewhere in prose is not a capability claim.
-    // Recognize a documented option at the start of its help line, optionally
-    // preceded by the short-option form used by wl-clipboard.
+    // Actual wl-copy help lists this long, no-argument option at the start
+    // of its indented help line. A prose mention or similarly named option
+    // is not enough to authorize transmitting credential bytes.
     output.split(|byte| matches!(byte, b'\n' | b'\r')).any(|line| {
-        let line = line.trim_ascii_start();
-        let option = line
-            .strip_prefix(b"-s,")
-            .map(|rest| rest.trim_ascii_start())
-            .unwrap_or(line);
-        option.strip_prefix(b"--sensitive").is_some_and(|tail| {
-            tail.is_empty()
-                || tail[0].is_ascii_whitespace()
-                || matches!(tail[0], b',' | b'=')
-        })
+        line.trim_ascii_start()
+            .strip_prefix(b"--sensitive")
+            .is_some_and(|tail| tail.is_empty() || tail[0].is_ascii_whitespace())
     })
 }
 
@@ -117,7 +110,7 @@ mod tests {
             b"wl-copy --type --paste-once --trim-newline"
         ));
         assert!(has_sensitive_flag(
-            b"  -s, --sensitive   Hint that clipboard data is sensitive"
+            b"\t --sensitive\t\tHint that the content is sensitive"
         ));
         assert!(has_sensitive_flag(
             b"  --sensitive\tDo not save to history"
