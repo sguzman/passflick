@@ -646,8 +646,7 @@ mod demo_tests {
             Err(r#import::ImportError::TooLarge)
         ));
 
-        let payload =
-            b"name,url,username,password\nExample,https://example.test,user,fictional\n";
+        let payload = b"name,url,username,password\nExample,https://example.test,user,fictional\n";
         let copied = read_import_bytes(io::Cursor::new(&payload[..])).unwrap();
         assert_eq!(copied.as_slice(), payload);
     }
