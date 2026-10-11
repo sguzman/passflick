@@ -46,8 +46,16 @@ struct Header {
 pub struct VaultKey(Zeroizing<[u8; KEY_LEN]>);
 
 impl VaultKey {
-    pub(crate) fn from_bytes(bytes: [u8; KEY_LEN]) -> Self {
-        Self(Zeroizing::new(bytes))
+    /// Copy only validated key material directly into a zeroizing buffer.
+    /// A keyring or backup caller cannot accidentally retain a second raw
+    /// key array on its stack.
+    pub(crate) fn from_slice(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() != KEY_LEN {
+            return None;
+        }
+        let mut key = Zeroizing::new([0_u8; KEY_LEN]);
+        key.copy_from_slice(bytes);
+        Some(Self(key))
     }
 
     pub(crate) fn as_bytes(&self) -> &[u8] {
@@ -530,6 +538,15 @@ mod tests {
                 1234,
             )],
         }
+    }
+
+    #[test]
+    fn vault_key_constructor_validates_length_and_copies_into_zeroizing_storage() {
+        let input = [42_u8; KEY_LEN];
+        let loaded = VaultKey::from_slice(&input).unwrap();
+        assert_eq!(loaded.as_bytes(), &input);
+        assert!(VaultKey::from_slice(&input[..KEY_LEN - 1]).is_none());
+        assert!(VaultKey::from_slice(&[42_u8; KEY_LEN + 1]).is_none());
     }
 
     #[test]

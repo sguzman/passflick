@@ -3,13 +3,12 @@ use std::hash::{Hash, Hasher};
 use std::path::Path;
 
 use linux_keyutils::{KeyError, KeyPermissionsBuilder, KeyRing, KeyRingIdentifier, Permission};
-use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 use crate::{paths, vault::VaultKey};
 
 const KEY_NAMESPACE: &str = "passflick:vault-key:v2";
 const LOCK_NAMESPACE: &str = "passflick:manual-lock:v2";
-const KEY_LEN: usize = 32;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SessionError {
@@ -41,17 +40,9 @@ pub fn load(vault_path: &Path) -> Result<Option<VaultKey>, SessionError> {
         Err(error) => return Err(error.into()),
     };
 
-    let mut payload = key.read_to_vec()?;
-    if payload.len() != KEY_LEN {
-        payload.zeroize();
-        return Err(SessionError::InvalidKeyLength);
-    }
-
-    let mut bytes = [0_u8; KEY_LEN];
-    bytes.copy_from_slice(&payload);
-    payload.zeroize();
-
-    Ok(Some(VaultKey::from_bytes(bytes)))
+    let payload = Zeroizing::new(key.read_to_vec()?);
+    let vault_key = VaultKey::from_slice(&payload).ok_or(SessionError::InvalidKeyLength)?;
+    Ok(Some(vault_key))
 }
 
 pub fn store(vault_path: &Path, key: &VaultKey) -> Result<(), SessionError> {

@@ -86,9 +86,8 @@ pub fn verify_snapshot(snapshot: &Path, live: &Vault) -> Result<usize, VaultErro
 }
 
 fn open_verified_snapshot(snapshot: &Path, live: &Vault) -> Result<Vault, VaultError> {
-    let mut key_bytes = [0_u8; 32];
-    key_bytes.copy_from_slice(live.key().as_bytes());
-    Vault::open_snapshot_with_key(snapshot, VaultKey::from_bytes(key_bytes))
+    let key = VaultKey::from_slice(live.key().as_bytes()).ok_or(VaultError::CipherKey)?;
+    Vault::open_snapshot_with_key(snapshot, key)
 }
 
 /// Two different paths can address the same inode through hard links.

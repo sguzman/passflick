@@ -5,7 +5,7 @@ use std::path::Path;
 
 use secret_service::EncryptionType;
 use secret_service::blocking::SecretService;
-use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 use crate::{paths, vault::VaultKey};
 
@@ -29,10 +29,8 @@ pub fn load(vault_path: &Path) -> Result<Option<VaultKey>, DesktopKeyringError> 
         return Ok(None);
     };
 
-    let mut secret = item.get_secret()?;
-    let result = decode_key(&secret);
-    secret.zeroize();
-    result.map(Some)
+    let secret = Zeroizing::new(item.get_secret()?);
+    decode_key(&secret).map(Some)
 }
 
 pub fn store(vault_path: &Path, key: &VaultKey) -> Result<(), DesktopKeyringError> {
@@ -99,13 +97,7 @@ fn vault_id(path: &Path) -> String {
 }
 
 fn decode_key(secret: &[u8]) -> Result<VaultKey, DesktopKeyringError> {
-    if secret.len() != KEY_LEN {
-        return Err(DesktopKeyringError::InvalidKeyLength(secret.len()));
-    }
-
-    let mut bytes = [0_u8; KEY_LEN];
-    bytes.copy_from_slice(secret);
-    Ok(VaultKey::from_bytes(bytes))
+    VaultKey::from_slice(secret).ok_or(DesktopKeyringError::InvalidKeyLength(secret.len()))
 }
 
 #[derive(Debug, thiserror::Error)]
