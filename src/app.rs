@@ -3,7 +3,7 @@ use crate::model::{Credential, safe_display_text};
 use crate::search::{display_label_with_sources, rank_credentials};
 use crate::startup::StartupTrace;
 use crate::vault::Vault;
-use crate::{passphrase, paths, session};
+use crate::{passphrase, paths, session, source_status};
 use eframe::egui;
 use std::collections::HashMap;
 use zeroize::{Zeroize, Zeroizing};
@@ -57,6 +57,8 @@ pub struct PickerApp {
     query: Zeroizing<String>,
     ranked: Vec<usize>,
     display_labels: HashMap<usize, Zeroizing<String>>,
+    source_snapshots: [source_status::SourceSnapshot; 4],
+    source_status_at: u64,
     selected: usize,
     focused: bool,
     locked: bool,
@@ -93,11 +95,15 @@ impl PickerApp {
         cc.egui_ctx.set_style_of(egui::Theme::Dark, style);
         startup_trace.mark("egui-app-created");
         let ranked = rank_credentials(&records, "");
+        let source_snapshots = source_status::summarize(&records);
+        let source_status_at = source_status::now_epoch();
         Self {
             records,
             query: Zeroizing::new(String::new()),
             ranked,
             display_labels: HashMap::new(),
+            source_snapshots,
+            source_status_at,
             selected: 0,
             focused: false,
             locked,
@@ -113,6 +119,8 @@ impl PickerApp {
     }
 
     fn ready(&mut self, records: Vec<Credential>) {
+        self.source_snapshots = source_status::summarize(&records);
+        self.source_status_at = source_status::now_epoch();
         self.records = records;
         // Cached labels belong to the old credential projection, not the
         // matching indices in this newly unlocked or created vault.
@@ -339,6 +347,18 @@ impl eframe::App for PickerApp {
             ui.separator();
             ui.add_space(4.0);
 
+            if !self.records.is_empty() {
+                let (caption, details, stale) =
+                    source_status::picker_preview(&self.source_snapshots, self.source_status_at);
+                let mut text = egui::RichText::new(caption).size(12.0);
+                if stale {
+                    text = text.color(ui.visuals().warn_fg_color);
+                } else {
+                    text = text.weak();
+                }
+                ui.label(text).on_hover_text(details);
+                ui.add_space(4.0);
+            }
             if let Some(notice) = &self.notice {
                 ui.label(safe_ui_notice(notice));
             }

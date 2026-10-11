@@ -28,7 +28,7 @@ Record startup latency from process entry to first visible, focused frame. No nu
 Use isolated temporary XDG data directories and synthetic CSV exports for all four providers.
 
 - Initialize and unlock a fresh vault, import a source, then reopen successfully. CI also verifies that two simultaneous first-run initializations cannot overwrite each other.
-- Show source counts and snapshot age without printing any secret.
+- Show source counts and snapshot age without printing any secret. The picker displays a compact, cached source-status row with optional hover details and warns at 30 days since the most recent import for a provider. A missing source, unknown timestamp (0), or future timestamp is not labelled stale. This reflects imports, not live browser state.
 - Import the same source twice; confirm its snapshot updates rather than accumulating duplicates, and the original encrypted snapshot is automatically saved under `backups/` before replacement.
 - Import two sources and refresh one; verify the other is preserved. Synthetic CLI checks verified Firefox/Edge isolation, then loaded all four sources in one vault. Target-host acceptance remains a separate gate.
 - Reject malformed rows, missing required columns, and oversized exports without changing a valid snapshot. Future source adapters supplying distinct titled credentials with whitespace-only URL fields must preserve both identities through encrypted save/reopen and search; synthetic Rust CI verifies this without real data. Direct snapshot commits, including future non-CSV adapters, must independently reject empty passwords, NUL-containing usernames/passwords, and entries without a usable website or title before creating a backup.

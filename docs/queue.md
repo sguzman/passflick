@@ -38,10 +38,10 @@
 ## Follow-on
 
 - [x] Show source counts and snapshot age in the CLI (`passflick sources`)
-- [ ] Show optional source refresh details in the picker without clutter
+- [x] Show compact per-source snapshot counts and refresh ages in the picker via a minimal hover detail, computed once on load (never synced browser state)
 - [x] Group identical credentials with combined source labels; keep conflicts separate
 - [x] Highlight competing password values for the same credential identity
-- [ ] Highlight potentially stale source snapshots in the picker
+- [x] Highlight source snapshots whose latest import is 30 or more full days old without treating unknown/future import times as stale; status metadata never contains usernames, URLs or secrets
 - [x] Add non-secret local browser profile discovery (`passflick discover`), with terminal-safe rendering of untrusted Firefox profile names
 - [ ] Evaluate authorized read-only browser credential adapters
 - [x] Add bounds to import and vault parsing, private filesystem permissions, write locking, and encrypted backups; reject oversized regular vault files from metadata before the bounded read, including sparse files

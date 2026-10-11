@@ -11,6 +11,7 @@ mod process_security;
 mod search;
 mod session;
 mod startup;
+mod source_status;
 mod vault;
 mod write_lock;
 
@@ -564,29 +565,13 @@ fn backup_encrypted_vault() -> Result<(), Box<dyn Error>> {
 fn list_source_status() -> Result<(), Box<dyn Error>> {
     let (_, vault) = open_unlocked_vault()?;
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    for source in [Source::Edge, Source::Chrome, Source::Firefox, Source::Apple] {
-        let matching = vault
-            .records()
-            .iter()
-            .filter(|record| record.source == source);
-        let count = matching.clone().count();
-        let latest = matching.map(|record| record.imported_at).max();
-        let age = match latest {
-            None => "never imported".to_owned(),
-            Some(0) => "import age unknown".to_owned(),
-            Some(time) if time > now => "future timestamp".to_owned(),
-            Some(time) => {
-                let elapsed = now - time;
-                if elapsed < 3_600 {
-                    format!("refreshed {} minutes ago", elapsed / 60)
-                } else if elapsed < 86_400 {
-                    format!("refreshed {} hours ago", elapsed / 3_600)
-                } else {
-                    format!("refreshed {} days ago", elapsed / 86_400)
-                }
-            }
-        };
-        println!("{source}: {count} credentials ({age})");
+    for snapshot in source_status::summarize(vault.records()) {
+        println!(
+            "{}: {} credentials ({})",
+            snapshot.source,
+            snapshot.count,
+            snapshot.age_label(now)
+        );
     }
     Ok(())
 }
