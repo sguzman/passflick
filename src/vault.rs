@@ -738,7 +738,7 @@ mod tests {
             Err(VaultError::UnsafeDirectory)
         ));
         assert!(matches!(
-            Vault::open_with_key(&path, VaultKey::from_bytes(key_bytes)),
+            Vault::open_with_key(&path, VaultKey::from_slice(&key_bytes).unwrap()),
             Err(VaultError::UnsafeDirectory)
         ));
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
