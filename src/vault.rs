@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use argon2::{Algorithm, Argon2, Params, Version};
 use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
-    aead::{Aead, KeyInit, Payload},
+    aead::{Aead, AeadInPlace, KeyInit, Payload},
 };
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
@@ -179,17 +179,12 @@ impl Vault {
         let cipher =
             XChaCha20Poly1305::new_from_slice(key.as_bytes()).map_err(|_| VaultError::CipherKey)?;
         let nonce = XNonce::from(header.nonce);
-        let plaintext = cipher
-            .decrypt(
-                &nonce,
-                Payload {
-                    msg: &bytes[HEADER_LEN..],
-                    aad: &header_bytes,
-                },
-            )
+        // Decrypt directly inside a zeroizing buffer. The AEAD API otherwise
+        // returns an unprotected plaintext Vec before we can wrap it.
+        let mut plaintext = Zeroizing::new(bytes[HEADER_LEN..].to_vec());
+        cipher
+            .decrypt_in_place(&nonce, &header_bytes, &mut *plaintext)
             .map_err(|_| VaultError::Decrypt)?;
-
-        let plaintext = Zeroizing::new(plaintext);
         let document: PlainVault = serde_json::from_slice(&plaintext)?;
         if document.schema_version != PLAINTEXT_SCHEMA_VERSION {
             return Err(VaultError::UnsupportedSchema(document.schema_version));
@@ -820,6 +815,29 @@ mod tests {
         let wrong_key = derive_key(b"wrong", &header).unwrap();
         assert!(matches!(
             Vault::decode(bytes, header, wrong_key),
+            Err(VaultError::Decrypt)
+        ));
+    }
+
+    #[test]
+    fn ciphertext_tampering_is_rejected_without_decoding_records() {
+        let mut original = test_vault(b"fictional-tamper-passphrase");
+        original.records_mut().push(Credential::new(
+            crate::model::Source::Edge,
+            "Example",
+            "https://example.test",
+            "fictional-user",
+            "fictional-secret-value",
+            1,
+        ));
+        original.header.rotate_nonce().unwrap();
+        let mut bytes = original.encode().unwrap();
+        let index = bytes.len() - 1;
+        bytes[index] ^= 1;
+        let header = Header::parse(&bytes).unwrap();
+        let key = derive_key(b"fictional-tamper-passphrase", &header).unwrap();
+        assert!(matches!(
+            Vault::decode(bytes, header, key),
             Err(VaultError::Decrypt)
         ));
     }
