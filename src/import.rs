@@ -155,10 +155,8 @@ pub fn parse_csv(
     // into the deduplication index, and avoid quadratic scanning of entire exports.
     // These index keys duplicate potentially sensitive site titles, URLs and
     // usernames. Wipe the owned copies when parsing succeeds or aborts.
-    let mut seen: HashMap<
-        (Zeroizing<String>, Zeroizing<String>, Zeroizing<String>),
-        Vec<usize>,
-    > = HashMap::new();
+    let mut seen: HashMap<(Zeroizing<String>, Zeroizing<String>, Zeroizing<String>), Vec<usize>> =
+        HashMap::new();
     for (index, row) in reader.records().enumerate() {
         let row_number = index + 2; // Header is the first line for ordinary CSV exports.
         let row = row?;
