@@ -121,8 +121,15 @@ fn is_url_shaped_title(value: &str) -> bool {
         return true;
     }
     [
-        "http:", "https:", "data:", "javascript:", "mailto:", "otpauth:",
-        "file:", "blob:", "about:",
+        "http:",
+        "https:",
+        "data:",
+        "javascript:",
+        "mailto:",
+        "otpauth:",
+        "file:",
+        "blob:",
+        "about:",
     ]
     .into_iter()
     .any(|prefix| {
@@ -389,11 +396,23 @@ mod tests {
         let cases = [
             ("DATA:text/plain,fictional-token", "(local site)"),
             ("javascript:fictional-private-token", "(local site)"),
-            ("mailto:fictional-private-token@example.test", "(local site)"),
+            (
+                "mailto:fictional-private-token@example.test",
+                "(local site)",
+            ),
             ("file:///home/fictional-user/private-file", "(local site)"),
-            ("otpauth://alice:fictional-secret@example.test/private", "example.test"),
-            ("FTP://alice:fictional-secret@example.test/private", "example.test"),
-            ("data:text/plain,fictional-secret://private-payload", "(local site)"),
+            (
+                "otpauth://alice:fictional-secret@example.test/private",
+                "example.test",
+            ),
+            (
+                "FTP://alice:fictional-secret@example.test/private",
+                "example.test",
+            ),
+            (
+                "data:text/plain,fictional-secret://private-payload",
+                "(local site)",
+            ),
         ];
         for (title, expected) in cases {
             let record = Credential::new(
