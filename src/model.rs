@@ -78,19 +78,29 @@ pub fn safe_display_text(raw: &str) -> String {
 /// dropping userinfo and all URL path/query/fragment components must never
 /// alter stored credentials or the keys used for duplicate detection.
 fn public_site_preview(url: &str) -> &str {
-    let remainder = if let Some((_, rest)) = url.split_once("://") {
+    let head = url.split(&['/', '?', '#'][..]).next().unwrap_or("");
+    let host_port = head.split_once(':').is_some_and(|(host, port)| {
+        (host.contains('.') || host.eq_ignore_ascii_case("localhost"))
+            && port.parse::<u16>().is_ok()
+    });
+    // A scheme-only URL may include "://" in its *payload*, rather than
+    // directly after its scheme. Never interpret such a payload as an
+    // authority to display.
+    let remainder = if host_port {
+        url
+    } else if let Some((scheme, rest)) = url.split_once("://") {
+        if scheme.is_empty()
+            || !scheme.starts_with(|ch: char| ch.is_ascii_alphabetic())
+            || !scheme
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'.' | b'-'))
+        {
+            return "(local site)";
+        }
         rest
     } else {
-        // A scheme without an authority can put an entire secret in the
-        // leading component (for example, data: or javascript:). Do not
-        // mistake its payload for a harmless hostname.
-        let head = url.split(&['/', '?', '#'][..]).next().unwrap_or("");
-        if let Some((host, port)) = head.split_once(':') {
-            let numeric_host_port = (host.contains('.') || host.eq_ignore_ascii_case("localhost"))
-                && port.parse::<u16>().is_ok();
-            if !numeric_host_port {
-                return "(local site)";
-            }
+        if head.contains(':') {
+            return "(local site)";
         }
         url
     };
@@ -103,8 +113,19 @@ fn public_site_preview(url: &str) -> &str {
     }
 }
 
-fn is_web_url(value: &str) -> bool {
-    ["http://", "https://"].into_iter().any(|prefix| {
+fn is_url_shaped_title(value: &str) -> bool {
+    // Many provider exports use a full address as their account title.
+    // Handle scheme-only values, not just HTTP(S), without redacting ordinary
+    // colon-separated names that are not recognizable URI schemes.
+    if value.contains("://") {
+        return true;
+    }
+    [
+        "http:", "https:", "data:", "javascript:", "mailto:", "otpauth:",
+        "file:", "blob:", "about:",
+    ]
+    .into_iter()
+    .any(|prefix| {
         value
             .get(..prefix.len())
             .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
@@ -156,7 +177,7 @@ impl Credential {
         let stripped = self.label.trim();
         let visible = if stripped.is_empty() {
             public_site_preview(&self.url)
-        } else if is_web_url(stripped) {
+        } else if is_url_shaped_title(stripped) {
             public_site_preview(stripped)
         } else {
             &self.label
@@ -361,6 +382,40 @@ mod tests {
             );
             assert_eq!(record.display_title(), site);
         }
+    }
+
+    #[test]
+    fn non_http_url_shaped_titles_never_expose_uri_payloads() {
+        let cases = [
+            ("DATA:text/plain,fictional-token", "(local site)"),
+            ("javascript:fictional-private-token", "(local site)"),
+            ("mailto:fictional-private-token@example.test", "(local site)"),
+            ("file:///home/fictional-user/private-file", "(local site)"),
+            ("otpauth://alice:fictional-secret@example.test/private", "example.test"),
+            ("FTP://alice:fictional-secret@example.test/private", "example.test"),
+            ("data:text/plain,fictional-secret://private-payload", "(local site)"),
+        ];
+        for (title, expected) in cases {
+            let record = Credential::new(
+                Source::Apple,
+                title,
+                "https://elsewhere.example.test",
+                "synthetic-user",
+                "fictional-password",
+                1,
+            );
+            assert_eq!(record.display_title(), expected, "source title: {title}");
+            assert_eq!(record.label, title);
+        }
+        let normal = Credential::new(
+            Source::Edge,
+            "Project: Production",
+            "https://example.test",
+            "synthetic-user",
+            "fictional-password",
+            1,
+        );
+        assert_eq!(normal.display_title(), "Project: Production");
     }
 
     #[test]

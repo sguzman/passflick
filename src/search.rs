@@ -20,10 +20,11 @@ pub fn rank_credentials(records: &[Credential], query: &str) -> Vec<usize> {
                     .cmp(&records[*b].source.priority())
             })
             .then_with(|| {
-                records[*a]
-                    .title()
-                    .to_lowercase()
-                    .cmp(&records[*b].title().to_lowercase())
+                // Full URL titles can carry sensitive tokens. Wipe temporary
+                // case-folded sort keys rather than leaving them in freed memory.
+                let left = Zeroizing::new(records[*a].title().to_lowercase());
+                let right = Zeroizing::new(records[*b].title().to_lowercase());
+                left.as_str().cmp(right.as_str())
             })
             .then_with(|| records[*a].username.cmp(&records[*b].username))
     });
@@ -126,7 +127,10 @@ fn score(rec: &Credential, query: &str) -> Option<i32> {
         (rec.username.as_str(), 0),
     ]
     .iter()
-    .filter_map(|(field, weight)| field_score(&field.to_lowercase(), query).map(|s| s + weight))
+    .filter_map(|(field, weight)| {
+        let lowered = Zeroizing::new(field.to_lowercase());
+        field_score(lowered.as_str(), query).map(|s| s + weight)
+    })
     .max()
 }
 
