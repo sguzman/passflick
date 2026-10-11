@@ -13,8 +13,7 @@ pub fn rank_credentials(records: &[Credential], query: &str) -> Vec<usize> {
         .iter()
         .enumerate()
         .filter_map(|(i, rec)| {
-            score(rec, needle.as_str())
-                .map(|s| (i, s, Zeroizing::new(rec.title().to_lowercase())))
+            score(rec, needle.as_str()).map(|s| (i, s, Zeroizing::new(rec.title().to_lowercase())))
         })
         .collect();
     ranked.sort_by(|(a, sa, ta), (b, sb, tb)| {
@@ -34,9 +33,7 @@ pub fn rank_credentials(records: &[Credential], query: &str) -> Vec<usize> {
     let mut seen = HashSet::new();
     ranked
         .into_iter()
-        .filter_map(|(index, _, _)| {
-            seen.insert(records[index].identity_key()).then_some(index)
-        })
+        .filter_map(|(index, _, _)| seen.insert(records[index].identity_key()).then_some(index))
         .collect()
 }
 
@@ -206,10 +203,31 @@ mod tests {
     #[test]
     fn ranking_preserves_source_priority_and_case_insensitive_title_ties() {
         let records = vec![
-            Credential::new(Source::Firefox, "zulu", "https://a.example.test", "u", "a", 0),
-            Credential::new(Source::Firefox, "Alpha", "https://b.example.test", "u", "b", 0),
+            Credential::new(
+                Source::Firefox,
+                "zulu",
+                "https://a.example.test",
+                "u",
+                "a",
+                0,
+            ),
+            Credential::new(
+                Source::Firefox,
+                "Alpha",
+                "https://b.example.test",
+                "u",
+                "b",
+                0,
+            ),
             Credential::new(Source::Edge, "zulu", "https://c.example.test", "u", "c", 0),
-            Credential::new(Source::Firefox, "alpha", "https://d.example.test", "v", "d", 0),
+            Credential::new(
+                Source::Firefox,
+                "alpha",
+                "https://d.example.test",
+                "v",
+                "d",
+                0,
+            ),
         ];
         // All results have the same empty-query score. Source priority sorts
         // first; within Firefox titles compare case-insensitively, and equal
