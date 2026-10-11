@@ -78,7 +78,22 @@ pub fn safe_display_text(raw: &str) -> String {
 /// dropping userinfo and all URL path/query/fragment components must never
 /// alter stored credentials or the keys used for duplicate detection.
 fn public_site_preview(url: &str) -> &str {
-    let remainder = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let remainder = if let Some((_, rest)) = url.split_once("://") {
+        rest
+    } else {
+        // A scheme without an authority can put an entire secret in the
+        // leading component (for example, data: or javascript:). Do not
+        // mistake its payload for a harmless hostname.
+        let head = url.split(&['/', '?', '#'][..]).next().unwrap_or("");
+        if let Some((host, port)) = head.split_once(':') {
+            let numeric_host_port = (host.contains('.') || host.eq_ignore_ascii_case("localhost"))
+                && port.parse::<u16>().is_ok();
+            if !numeric_host_port {
+                return "(local site)";
+            }
+        }
+        url
+    };
     let authority = remainder.split(&['/', '?', '#'][..]).next().unwrap_or("");
     let host = authority.rsplit('@').next().unwrap_or("");
     if host.is_empty() {
@@ -311,6 +326,41 @@ mod tests {
             1,
         );
         assert_eq!(local.display_title(), "(local site)");
+    }
+
+    #[test]
+    fn schemeless_authorities_are_safe_but_scheme_payloads_are_hidden() {
+        for site in [
+            "data:text/plain;base64,fictional-private-token",
+            "javascript:fictional-private-token",
+            "mailto:fictional-private-token@example.test",
+            "file:/home/fictional-user/private-password-file",
+            "otpauth:fictional-private-token",
+            "api:123456789",
+        ] {
+            let record = Credential::new(
+                Source::Apple,
+                "",
+                site,
+                "test-user",
+                "fictional-password",
+                1,
+            );
+            assert_eq!(record.display_title(), "(local site)");
+            assert_eq!(record.url, site);
+        }
+
+        for site in ["example.test:8443", "localhost:3000"] {
+            let record = Credential::new(
+                Source::Chrome,
+                "",
+                site,
+                "test-user",
+                "fictional-password",
+                1,
+            );
+            assert_eq!(record.display_title(), site);
+        }
     }
 
     #[test]
