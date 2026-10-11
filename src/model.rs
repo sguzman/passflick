@@ -115,9 +115,15 @@ fn public_site_preview(url: &str) -> &str {
 
 fn is_url_shaped_title(value: &str) -> bool {
     // Many provider exports use a full address as their account title.
-    // Handle scheme-only values, not just HTTP(S), without redacting ordinary
-    // colon-separated names that are not recognizable URI schemes.
-    if value.contains("://") {
+    // Do not classify ordinary colon-separated titles ("Data: Science") as
+    // URI payloads simply because their first word matches a scheme.
+    if value.split_once("://").is_some_and(|(scheme, _)| {
+        !scheme.is_empty()
+            && scheme.starts_with(|ch: char| ch.is_ascii_alphabetic())
+            && scheme
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'.' | b'-'))
+    }) {
         return true;
     }
     [
@@ -136,6 +142,10 @@ fn is_url_shaped_title(value: &str) -> bool {
         value
             .get(..prefix.len())
             .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+            && value
+                .get(prefix.len()..)
+                .and_then(|tail| tail.chars().next())
+                .is_some_and(|ch| !ch.is_whitespace())
     })
 }
 
@@ -435,6 +445,22 @@ mod tests {
             1,
         );
         assert_eq!(normal.display_title(), "Project: Production");
+        for ordinary in [
+            "Data: Science",
+            "JavaScript: A Guide",
+            "About: Credentials",
+            "Anything: Reference:// example",
+        ] {
+            let titled = Credential::new(
+                Source::Edge,
+                ordinary,
+                "https://example.test",
+                "synthetic-user",
+                "fictional-password",
+                1,
+            );
+            assert_eq!(titled.display_title(), ordinary);
+        }
     }
 
     #[test]
