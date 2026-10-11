@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use argon2::{Algorithm, Argon2, Params, Version};
 use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
-    aead::{Aead, AeadInPlace, KeyInit, Payload},
+    aead::{Aead, AeadInOut, KeyInit, Payload},
 };
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
