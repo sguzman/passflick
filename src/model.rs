@@ -56,10 +56,14 @@ pub fn safe_display_text(raw: &str) -> String {
             if ch.is_control()
                 || matches!(
                     ch,
-                    '\u{061c}'
-                        | '\u{200e}'..='\u{200f}'
-                        | '\u{202a}'..='\u{202e}'
-                        | '\u{2066}'..='\u{2069}'
+                    '\u{00ad}' // soft hyphen
+                        | '\u{034f}' // combining grapheme joiner
+                        | '\u{061c}' // Arabic letter mark
+                        | '\u{180e}' // Mongolian vowel separator
+                        | '\u{200b}'..='\u{200f}' // zero-width and bidi marks
+                        | '\u{202a}'..='\u{202e}' // bidi embeddings and overrides
+                        | '\u{2060}'..='\u{206f}' // word joiner, isolates and old bidi controls
+                        | '\u{feff}' // zero-width no-break space
                 )
             {
                 '\u{fffd}'
@@ -166,6 +170,27 @@ mod tests {
         assert!(!visible.contains('\u{202e}'));
         assert_eq!(record.password(), "secret\u{001b}[0m");
         assert_eq!(record.username, "alice\u{202e}resu");
+    }
+
+    #[test]
+    fn invisible_format_marks_cannot_disguise_account_metadata() {
+        let hidden = "\u{200b}\u{200d}\u{206a}\u{206f}\u{034f}\u{feff}\u{00ad}";
+        let label = format!("example{hidden}.test");
+        let username = format!("alice{hidden}");
+        let record = Credential::new(
+            Source::Chrome,
+            &label,
+            "https://example.test",
+            &username,
+            "fictional-secret",
+            1,
+        );
+        let visible = record.display_label();
+        assert!(visible.contains("example\u{fffd}\u{fffd}\u{fffd}\u{fffd}\u{fffd}\u{fffd}\u{fffd}.test"));
+        assert!(!visible.contains(hidden));
+        assert_eq!(record.label, label);
+        assert_eq!(record.username, username);
+        assert_eq!(record.password(), "fictional-secret");
     }
 
     #[test]
