@@ -80,14 +80,17 @@ echo "Passflick reached its first native Wayland frame with synthetic credential
 # Exercise the same MIME type, sensitive hint, and byte-preserving clipboard
 # transport as Passflick. Do not run this with a real vault or user clipboard.
 printf 'fictional-wayland-password  \n\n' > "$tmp/clipboard.expected"
-# Ubuntu 24.04 ships wl-clipboard 2.2.1, which lacks --sensitive.
-# Test raw Wayland byte transport on that runner, while the application
-# deliberately fails closed rather than silently copying without the hint.
+# The GUI workflow builds pinned wl-clipboard 2.3.0 from upstream, so
+# native sensitive transport is mandatory there. Local developers can still
+# run this script on an older helper for a transport-only smoke check.
 flags=()
-if wl-copy --help 2>&1 | grep -q -- '--sensitive'; then
+if wl-copy --help 2>&1 | grep -q -- '^[[:space:]]*--sensitive[[:space:]]'; then
   flags+=(--sensitive)
+elif [[ "${PASSFLICK_EXPECT_SENSITIVE:-0}" == "1" ]]; then
+  echo "Pinned wl-copy did not advertise the required --sensitive option." >&2
+  exit 1
 else
-  echo "Runner lacks wl-copy --sensitive; testing clipboard transport only."
+  echo "Local wl-copy lacks --sensitive; testing clipboard transport only."
 fi
 wl-copy "${flags[@]}" --type 'text/plain;charset=utf-8' < "$tmp/clipboard.expected"
 timeout 10s wl-paste --no-newline --type 'text/plain;charset=utf-8' > "$tmp/clipboard.actual"
