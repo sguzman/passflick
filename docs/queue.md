@@ -14,7 +14,7 @@
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Rust CI verified at [`b528a7c`](https://github.com/sguzman/passflick/actions/runs/38168564004): 93 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy; [synthetic GUI checks](https://github.com/sguzman/passflick/actions/runs/38168564003) also passed
+- [x] Rust CI verified at [`b5f2488`](https://github.com/sguzman/passflick/actions/runs/38169776374): 94 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy; [synthetic GUI checks](https://github.com/sguzman/passflick/actions/runs/38169776405) also passed
 - [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
 - [x] Synthetic ordinary restore smoke passed: explicit confirmation, corrupted and hard-linked snapshot rejection, four-source restoration, and encrypted pre-restore safety backup
 - [x] Synthetic CLI source refresh passed: Firefox survives Edge replacement; a large accidental Edge shrink is rejected without vault mutation, and `--allow-shrink` preserves Firefox
@@ -25,7 +25,7 @@
 - [x] Session, desktop keyring, and encrypted backup key loading avoid temporary raw-key arrays; malformed key lengths are rejected
 - [x] Vault AEAD decrypts inside zeroizing memory, and tampered ciphertext is rejected before record decoding
 - [x] Stale cached keys trigger a CLI passphrase retry instead of blocking maintenance; non-decryption failures still fail closed
-- [x] `passflick status` authenticates cached session keys against the current encrypted vault before claiming it is unlocked
+- [x] `passflick status` authenticates cached session keys against the current encrypted vault before claiming it is unlocked, and rejects unsafe vault-file kinds instead of treating dangling symlinks as absent
 - [x] Picker startup clears a cached session key only on authentication failure; filesystem, header and schema errors preserve the key
 - [x] Synthetic filesystem regression tests passed in Rust CI
 - [ ] Confirm filesystem edge cases on target EndeavourOS/Hyprland
@@ -42,7 +42,7 @@
 - [x] Group identical credentials with combined source labels; keep conflicts separate
 - [x] Highlight competing password values for the same credential identity
 - [ ] Highlight potentially stale source snapshots in the picker
-- [x] Add non-secret local browser profile discovery (`passflick discover`)
+- [x] Add non-secret local browser profile discovery (`passflick discover`), with terminal-safe rendering of untrusted Firefox profile names
 - [ ] Evaluate authorized read-only browser credential adapters
 - [x] Add bounds to import and vault parsing, private filesystem permissions, write locking, and encrypted backups
 - [x] Authenticated encrypted restore with pre-restore safety backup; reject hard-link aliases to the active vault using device/inode identity
@@ -59,7 +59,7 @@
 - [x] Detect Apple Title + OTPAuth exports without Notes, rejecting wrong-source imports
 - [x] Require sensitive clipboard support instead of silently copying password values into unmarked history
 - [x] Clipboard transport itself rejects NUL-containing legacy values before launching `wl-copy`
-- [x] CI passed synthetic regression tests for early-exiting legacy `wl-copy` and exact bytes with a supported helper
+- [x] CI passed synthetic regression tests for early-exiting legacy `wl-copy` and exact bytes with a supported helper; GUI smoke also verifies legacy helpers leave the picker open and existing clipboard untouched
 - [x] Reject named-pipe vault and lock paths without blocking; require private effective-user-owned active vault, lock, and managed backup paths while keeping external encrypted snapshots verifiable
 - [x] Reject named pipes and non-regular CSV import paths without blocking; preserve regular-file symlink imports and explicit stdin streaming
 - [x] Bound never-ending stdin streams at the 32 MiB import limit plus one byte before parsing
