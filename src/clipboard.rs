@@ -34,11 +34,13 @@ fn has_sensitive_flag(output: &[u8]) -> bool {
     // Actual wl-copy help lists this long, no-argument option at the start
     // of its indented help line. A prose mention or similarly named option
     // is not enough to authorize transmitting credential bytes.
-    output.split(|byte| matches!(byte, b'\n' | b'\r')).any(|line| {
-        line.trim_ascii_start()
-            .strip_prefix(b"--sensitive")
-            .is_some_and(|tail| tail.is_empty() || tail[0].is_ascii_whitespace())
-    })
+    output
+        .split(|byte| matches!(byte, b'\n' | b'\r'))
+        .any(|line| {
+            line.trim_ascii_start()
+                .strip_prefix(b"--sensitive")
+                .is_some_and(|tail| tail.is_empty() || tail[0].is_ascii_whitespace())
+        })
 }
 
 /// Probe the installed helper *before* passing it any credential bytes.
@@ -112,9 +114,7 @@ mod tests {
         assert!(has_sensitive_flag(
             b"\t --sensitive\t\tHint that the content is sensitive"
         ));
-        assert!(has_sensitive_flag(
-            b"  --sensitive\tDo not save to history"
-        ));
+        assert!(has_sensitive_flag(b"  --sensitive\tDo not save to history"));
         assert!(!has_sensitive_flag(
             b"Warning: --sensitive is unsupported by this build"
         ));
