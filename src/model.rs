@@ -94,6 +94,19 @@ fn public_site_preview(url: &str) -> &str {
             || !scheme
                 .bytes()
                 .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'.' | b'-'))
+            // Non-web URI payloads can themselves contain ://. A syntactically
+            // valid scheme does not guarantee the following text is a public
+            // host. Keep these sensitive payloads out of row labels.
+            || [
+                "data",
+                "javascript",
+                "file",
+                "blob",
+                "about",
+                "mailto",
+            ]
+            .iter()
+            .any(|blocked| scheme.eq_ignore_ascii_case(blocked))
         {
             return "(local site)";
         }
@@ -455,6 +468,42 @@ mod tests {
                 1,
             );
             assert_eq!(record.display_title(), site);
+        }
+    }
+
+    #[test]
+    fn non_web_authority_shaped_uri_payloads_are_not_displayed() {
+        let payloads = [
+            "data://private-auth-token",
+            "JAVASCRIPT://fictional-session-token",
+            "file://private-disk-name/home/fictional-secret",
+            "blob://private-identifier",
+            "about://fictional-secret",
+            "MAILTO://fictional-secret@example.test",
+        ];
+        for url in payloads {
+            let url_only = Credential::new(
+                Source::Edge,
+                "",
+                url,
+                "fictional-user",
+                "fictional-password",
+                1,
+            );
+            assert_eq!(url_only.display_title(), "(local site)", "{url}");
+            assert_eq!(url_only.url, url);
+            assert_eq!(url_only.identity_key().1, url);
+
+            let title_only = Credential::new(
+                Source::Apple,
+                url,
+                "https://example.test",
+                "fictional-user",
+                "fictional-password",
+                1,
+            );
+            assert_eq!(title_only.display_title(), "(local site)", "{url}");
+            assert_eq!(title_only.label, url);
         }
     }
 
