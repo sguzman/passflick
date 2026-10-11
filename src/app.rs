@@ -6,7 +6,7 @@ use crate::vault::Vault;
 use crate::{passphrase, paths, session};
 use eframe::egui;
 use std::collections::HashMap;
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 /// Compute each visible row only when it is first visited. A label scans
 /// credential metadata to gather sources, conflicts and hidden URL variants;
@@ -44,7 +44,9 @@ fn value_to_copy(record: &Credential, username: bool) -> Result<&str, &'static s
 
 pub struct PickerApp {
     records: Vec<Credential>,
-    query: String,
+    // Search can include secret-bearing URL components; wipe the owned text
+    // on drop and whenever a different vault projection becomes active.
+    query: Zeroizing<String>,
     ranked: Vec<usize>,
     display_labels: HashMap<usize, String>,
     selected: usize,
@@ -85,7 +87,7 @@ impl PickerApp {
         let ranked = rank_credentials(&records, "");
         Self {
             records,
-            query: String::new(),
+            query: Zeroizing::new(String::new()),
             ranked,
             display_labels: HashMap::new(),
             selected: 0,
@@ -111,7 +113,7 @@ impl PickerApp {
         self.setup_required = false;
         self.unlock_focused = false;
         self.focused = false;
-        self.query.clear();
+        self.query.zeroize();
         self.notice = None;
         self.error = None;
         self.selected = 0;
@@ -312,7 +314,7 @@ impl eframe::App for PickerApp {
         egui::CentralPanel::default().show(ui, |ui| {
             ui.add_space(10.0);
             let response = ui.add(
-                egui::TextEdit::singleline(&mut self.query)
+                egui::TextEdit::singleline(&mut *self.query)
                     .desired_width(f32::INFINITY)
                     .hint_text("Search passwords..."),
             );

@@ -1,12 +1,15 @@
 use crate::model::{Credential, safe_display_text};
 use std::collections::HashSet;
+use zeroize::Zeroizing;
 
 pub fn rank_credentials(records: &[Credential], query: &str) -> Vec<usize> {
-    let needle = query.trim().to_lowercase();
+    // URL searches may themselves contain private reset or session tokens.
+    // Avoid leaving the temporary case-folded query in an ordinary String.
+    let needle = Zeroizing::new(query.trim().to_lowercase());
     let mut ranked: Vec<(usize, i32)> = records
         .iter()
         .enumerate()
-        .filter_map(|(i, rec)| score(rec, &needle).map(|s| (i, s)))
+        .filter_map(|(i, rec)| score(rec, needle.as_str()).map(|s| (i, s)))
         .collect();
     ranked.sort_by(|(a, sa), (b, sb)| {
         sb.cmp(sa)
@@ -169,6 +172,31 @@ mod tests {
     fn record(source: Source, name: &str, password: &str) -> Credential {
         Credential::new(source, name, "https://example.test", "me", password, 0)
     }
+    #[test]
+    fn searches_with_full_url_query_remain_exact_after_zeroizing_normalization() {
+        let records = vec![
+            Credential::new(
+                Source::Edge,
+                "",
+                "https://example.test/reset/fictional-token-a",
+                "person",
+                "synthetic-secret",
+                1,
+            ),
+            Credential::new(
+                Source::Firefox,
+                "",
+                "https://example.test/reset/fictional-token-b",
+                "person",
+                "different-synthetic-secret",
+                1,
+            ),
+        ];
+        assert_eq!(rank_credentials(&records, "  FICTIONAL-TOKEN-B  "), vec![1]);
+        let label = display_label_with_sources(&records, 1);
+        assert!(!label.contains("fictional-token-b"));
+    }
+
     #[test]
     fn edge_wins_exact_duplicate() {
         let records = vec![
