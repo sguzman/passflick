@@ -251,6 +251,13 @@ fn session_key_cleanup_notice(result: Result<bool, session::SessionError>) -> &'
     }
 }
 
+/// Only a failed authenticated decrypt suggests that a cached key is stale.
+/// A filesystem, header, or schema problem should never silently invalidate a
+/// still-valid key; those errors require their own remediation.
+fn picker_should_clear_cached_key(error: &vault::VaultError) -> bool {
+    matches!(error, vault::VaultError::Decrypt)
+}
+
 fn load_picker_records(
     trace: &startup::StartupTrace,
 ) -> (Vec<Credential>, Option<String>, bool, bool) {
@@ -286,10 +293,16 @@ fn load_picker_records(
             trace.mark("vault-decrypted");
             (vault.into_records(), None, false, false)
         }
-        Err(error) => {
+        Err(error) if picker_should_clear_cached_key(&error) => {
             let notice = session_key_cleanup_notice(session::clear(&path));
             (Vec::new(), Some(format!("{error}. {notice}")), true, false)
         }
+        Err(error) => (
+            Vec::new(),
+            Some(format!("{error}. Cached session key was not changed.")),
+            true,
+            false,
+        ),
     }
 }
 
@@ -782,6 +795,22 @@ mod demo_tests {
         assert!(denied.is_err());
         assert_eq!(fs::read(&path).unwrap(), original);
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn picker_only_invalidates_session_key_after_failed_authentication() {
+        assert!(picker_should_clear_cached_key(&vault::VaultError::Decrypt));
+        for error in [
+            vault::VaultError::UnsafeFile,
+            vault::VaultError::UnsafeDirectory,
+            vault::VaultError::Truncated,
+            vault::VaultError::BadMagic,
+            vault::VaultError::InvalidHeader,
+            vault::VaultError::TooLarge,
+            vault::VaultError::UnsupportedFormat(42),
+        ] {
+            assert!(!picker_should_clear_cached_key(&error));
+        }
     }
 
     #[test]
