@@ -79,10 +79,7 @@ pub fn safe_display_text(raw: &str) -> String {
 /// alter stored credentials or the keys used for duplicate detection.
 fn public_site_preview(url: &str) -> &str {
     let remainder = url.split_once("://").map_or(url, |(_, rest)| rest);
-    let authority = remainder
-        .split(&['/', '?', '#'][..])
-        .next()
-        .unwrap_or("");
+    let authority = remainder.split(&['/', '?', '#'][..]).next().unwrap_or("");
     let host = authority.rsplit('@').next().unwrap_or("");
     if host.is_empty() {
         "(local site)"
@@ -260,7 +257,10 @@ mod tests {
             1,
         );
         assert_eq!(titled.display_title(), "example.test");
-        assert_eq!(titled.title(), "https://bob:fictional-secret@example.test/token?private=value");
+        assert_eq!(
+            titled.title(),
+            "https://bob:fictional-secret@example.test/token?private=value"
+        );
 
         let plain = Credential::new(
             Source::Firefox,
