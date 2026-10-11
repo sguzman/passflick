@@ -103,7 +103,9 @@ pub fn parse_csv(
         .iter()
         .any(|header| matches!(header.as_str(), "httprealm" | "formactionorigin" | "guid"));
     let looks_apple = headers.iter().any(|header| header == "title")
-        && headers.iter().any(|header| header == "notes");
+        && headers
+            .iter()
+            .any(|header| matches!(header.as_str(), "notes" | "otpauth"));
     if looks_firefox && source != Source::Firefox {
         return Err(ImportError::WrongSource {
             detected: "Firefox",
@@ -798,6 +800,28 @@ mod tests {
         ));
         assert_eq!(parse_csv(apple, Source::Apple, 0).unwrap().len(), 1);
         assert_eq!(parse_csv(firefox, Source::Firefox, 0).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn apple_otp_column_is_a_source_signature_even_without_notes() {
+        let data = b"Title,URL,Username,Password,OTPAuth\nApple,https://apple.example.test,synthetic-user,fictional-apple-secret,otpauth://totp/example?secret=FAKEOTPONLY\n";
+        assert!(matches!(
+            parse_csv(data, Source::Edge, 42),
+            Err(ImportError::WrongSource {
+                detected: "Apple Passwords"
+            })
+        ));
+        assert!(matches!(
+            parse_csv(data, Source::Firefox, 42),
+            Err(ImportError::WrongSource {
+                detected: "Apple Passwords"
+            })
+        ));
+        let entries = parse_csv(data, Source::Apple, 42).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].password(), "fictional-apple-secret");
+        let serialized = serde_json::to_string(&entries).unwrap();
+        assert!(!serialized.contains("FAKEOTPONLY"));
     }
 
     #[test]
