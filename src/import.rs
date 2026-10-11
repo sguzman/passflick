@@ -648,6 +648,56 @@ mod tests {
     }
 
     #[test]
+    fn adapter_blank_urls_keep_distinct_sites_after_encrypted_import() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-adapter-blank-urls-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let path = root.join("vault.passvault");
+        let passphrase = b"fictional-adapter-identity-passphrase";
+        let mut vault = Vault::create(&path, passphrase).unwrap();
+
+        // A future adapter can supply the original provider fields directly,
+        // bypassing the CSV parser's URL trimming. Two titles with the same
+        // blank URL must remain distinct across encrypted serialization and
+        // search deduplication, even with identical usernames and passwords.
+        let records = vec![
+            Credential::new(
+                Source::Edge,
+                "First fictional site",
+                "   ",
+                "shared-user",
+                "fictional-identical-secret",
+                1,
+            ),
+            Credential::new(
+                Source::Edge,
+                "Second fictional site",
+                "   ",
+                "shared-user",
+                "fictional-identical-secret",
+                1,
+            ),
+        ];
+        let imported = commit_snapshot(&path, &mut vault, Source::Edge, records, false).unwrap();
+        assert_eq!(imported.count, 2);
+        assert!(imported.previous_backup.is_none());
+
+        let reopened = Vault::unlock(&path, passphrase).unwrap();
+        assert_eq!(reopened.records().len(), 2);
+        assert_eq!(crate::search::rank_credentials(reopened.records(), "").len(), 2);
+        assert_eq!(
+            crate::search::rank_credentials(reopened.records(), "Second fictional"),
+            vec![1]
+        );
+        assert_eq!(reopened.records()[0].url, "   ");
+        assert_eq!(reopened.records()[1].url, "   ");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn replacing_a_source_preserves_its_old_encrypted_vault() {
         let mut entropy = [0_u8; 8];
         getrandom::fill(&mut entropy).unwrap();
