@@ -36,6 +36,24 @@ fn has_sensitive_flag(output: &[u8]) -> bool {
         .any(|window| window == b"--sensitive")
 }
 
+/// Probe the installed helper *before* passing it any credential bytes.
+/// An old or incompatible wl-copy must never get a chance to place an
+/// unmarked secret on the clipboard, even if it tolerates unknown options.
+fn require_sensitive_support(executable: &OsStr) -> Result<(), ClipboardError> {
+    let help = Command::new(executable)
+        .arg("--help")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(ClipboardError::Spawn)?;
+    if !help.status.success()
+        || !(has_sensitive_flag(&help.stdout) || has_sensitive_flag(&help.stderr))
+    {
+        return Err(ClipboardError::SensitiveUnsupported);
+    }
+    Ok(())
+}
+
 pub fn copy_sensitive(text: &str) -> Result<(), ClipboardError> {
     copy_sensitive_using(text, OsStr::new("wl-copy"))
 }
@@ -47,6 +65,9 @@ fn copy_sensitive_using(text: &str, executable: &OsStr) -> Result<(), ClipboardE
     if text.contains('\0') {
         return Err(ClipboardError::NulByte);
     }
+    // This adds one short local helper invocation per copy. Password safety
+    // takes precedence over avoiding that invocation.
+    require_sensitive_support(executable)?;
     let mut child = wl_copy_command(executable)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -63,21 +84,8 @@ fn copy_sensitive_using(text: &str, executable: &OsStr) -> Result<(), ClipboardE
 
     let status = child.wait().map_err(ClipboardError::Wait)?;
     if !status.success() {
-        // Fail closed rather than silently using the ordinary clipboard.
-        // wl-clipboard <2.3 does not understand --sensitive; dropping the
-        // flag without an explicit decision risks persistent secret history.
-        if let Ok(help) = Command::new(executable)
-            .arg("--help")
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-        {
-            let supports_hint =
-                has_sensitive_flag(&help.stdout) || has_sensitive_flag(&help.stderr);
-            if !supports_hint {
-                return Err(ClipboardError::SensitiveUnsupported);
-            }
-        }
+        // The helper advertised --sensitive during preflight, but a runtime
+        // failure still must not trigger a fallback to an ordinary copy.
         if let Err(error) = write_result {
             return Err(ClipboardError::Write(error));
         }
@@ -133,6 +141,7 @@ mod tests {
             &executable,
             br#"#!/bin/sh
 if [ "$1" = "--help" ]; then echo '--type --trim-newline'; exit 0; fi
+printf 'unsafe invocation' > "$(dirname "$0")/unexpected-copy"
 exit 2
 "#,
         )
@@ -143,6 +152,7 @@ exit 2
             copy_sensitive_using("fictional-clipboard-secret", executable.as_os_str()),
             Err(ClipboardError::SensitiveUnsupported)
         ));
+        assert!(!dir.join("unexpected-copy").exists());
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -162,6 +172,7 @@ exit 2
         let destination = dir.join("copied-synthetic-text");
         let script = format!(
             r#"#!/bin/sh
+if [ "${1:-}" = "--help" ]; then echo '--type --sensitive'; exit 0; fi
 case " $* " in *" --sensitive "*) ;; *) exit 4 ;; esac
 cat > '{}'
 "#,
