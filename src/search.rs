@@ -6,12 +6,18 @@ pub fn rank_credentials(records: &[Credential], query: &str) -> Vec<usize> {
     // URL searches may themselves contain private reset or session tokens.
     // Avoid leaving the temporary case-folded query in an ordinary String.
     let needle = Zeroizing::new(query.trim().to_lowercase());
-    let mut ranked: Vec<(usize, i32)> = records
+    // Normalize each matched title once rather than allocating lowercase
+    // URL copies inside every sorting comparison. Titles may contain private
+    // URL components, so the per-result sort keys remain zeroizing.
+    let mut ranked: Vec<(usize, i32, Zeroizing<String>)> = records
         .iter()
         .enumerate()
-        .filter_map(|(i, rec)| score(rec, needle.as_str()).map(|s| (i, s)))
+        .filter_map(|(i, rec)| {
+            score(rec, needle.as_str())
+                .map(|s| (i, s, Zeroizing::new(rec.title().to_lowercase())))
+        })
         .collect();
-    ranked.sort_by(|(a, sa), (b, sb)| {
+    ranked.sort_by(|(a, sa, ta), (b, sb, tb)| {
         sb.cmp(sa)
             .then_with(|| {
                 records[*a]
@@ -19,13 +25,7 @@ pub fn rank_credentials(records: &[Credential], query: &str) -> Vec<usize> {
                     .priority()
                     .cmp(&records[*b].source.priority())
             })
-            .then_with(|| {
-                // Full URL titles can carry sensitive tokens. Wipe temporary
-                // case-folded sort keys rather than leaving them in freed memory.
-                let left = Zeroizing::new(records[*a].title().to_lowercase());
-                let right = Zeroizing::new(records[*b].title().to_lowercase());
-                left.as_str().cmp(right.as_str())
-            })
+            .then_with(|| ta.as_str().cmp(tb.as_str()))
             .then_with(|| records[*a].username.cmp(&records[*b].username))
     });
     // Borrow identity and secret references from the encrypted-vault records.
@@ -34,7 +34,9 @@ pub fn rank_credentials(records: &[Credential], query: &str) -> Vec<usize> {
     let mut seen = HashSet::new();
     ranked
         .into_iter()
-        .filter_map(|(index, _)| seen.insert(records[index].identity_key()).then_some(index))
+        .filter_map(|(index, _, _)| {
+            seen.insert(records[index].identity_key()).then_some(index)
+        })
         .collect()
 }
 
@@ -199,6 +201,20 @@ mod tests {
         assert_eq!(rank_credentials(&records, "  FICTIONAL-TOKEN-B  "), vec![1]);
         let label = display_label_with_sources(&records, 1);
         assert!(!label.contains("fictional-token-b"));
+    }
+
+    #[test]
+    fn ranking_preserves_source_priority_and_case_insensitive_title_ties() {
+        let records = vec![
+            Credential::new(Source::Firefox, "zulu", "https://a.example.test", "u", "a", 0),
+            Credential::new(Source::Firefox, "Alpha", "https://b.example.test", "u", "b", 0),
+            Credential::new(Source::Edge, "zulu", "https://c.example.test", "u", "c", 0),
+            Credential::new(Source::Firefox, "alpha", "https://d.example.test", "v", "d", 0),
+        ];
+        // All results have the same empty-query score. Source priority sorts
+        // first; within Firefox titles compare case-insensitively, and equal
+        // lowercase titles fall back to username.
+        assert_eq!(rank_credentials(&records, ""), vec![2, 1, 3, 0]);
     }
 
     #[test]
