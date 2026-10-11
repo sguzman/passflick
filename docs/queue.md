@@ -57,7 +57,7 @@
 - [x] Synthetic complete-format Firefox and Apple exports; Apple OTPAuth and Notes are not persisted
 - [x] Lossless encrypted import round trip preserves Unicode usernames, quoted site titles, and multiline passwords with leading/trailing whitespace
 - [x] Detect Apple Title + OTPAuth exports without Notes, rejecting wrong-source imports
-- [x] Require sensitive clipboard support instead of silently copying password values into unmarked history
+- [x] Require sensitive clipboard support instead of silently copying password values into unmarked history; probe helper capabilities *before* sending credential bytes, with synthetic CLI/GUI regression coverage for preflight refusal
 - [x] Clipboard transport itself rejects NUL-containing legacy values before launching `wl-copy`
 - [x] CI passed synthetic regression tests for early-exiting legacy `wl-copy` and exact bytes with a supported helper; GUI smoke also verifies legacy helpers leave the picker open and existing clipboard untouched
 - [x] Reject named-pipe vault and lock paths without blocking; require private effective-user-owned active vault, lock, and managed backup paths while keeping external encrypted snapshots verifiable
