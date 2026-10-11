@@ -14,7 +14,7 @@
 - [x] One-shot keyboard picker with Enter/Shift+Enter; cache visible row labels between egui redraws and clear cached labels after a vault projection change; zeroize owned search text on close or reload, cached picker row labels on drop, and case-folded search query, indexed field, and sort-key temporaries; normalize one zeroizing title sort key per matched search result instead of per comparator call
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Rust CI verified at [`7cb7ad6`](https://github.com/sguzman/passflick/actions/runs/38183944814): 110 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy; [synthetic GUI checks](https://github.com/sguzman/passflick/actions/runs/38183944774) also passed
+- [x] [Rust CI](https://github.com/sguzman/passflick/actions/runs/38184567861) passed 111 tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy; [synthetic GUI and real pinned wl-clipboard 2.3.0 transport](https://github.com/sguzman/passflick/actions/runs/38184570677) also passed
 - [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
 - [x] Synthetic ordinary restore smoke passed: explicit confirmation, corrupted and hard-linked snapshot rejection, four-source restoration, and encrypted pre-restore safety backup
 - [x] Synthetic CLI source refresh passed: Firefox survives Edge replacement; a large accidental Edge shrink is rejected without vault mutation, and `--allow-shrink` preserves Firefox
@@ -59,7 +59,8 @@
 - [x] Detect Apple Title + OTPAuth exports without Notes, rejecting wrong-source imports
 - [x] Require sensitive clipboard support instead of silently copying password values into unmarked history; probe helper capabilities *before* sending credential bytes, with synthetic CLI/GUI regression coverage for preflight refusal
 - [x] Clipboard transport itself rejects NUL-containing legacy values before launching `wl-copy`
-- [x] CI passed synthetic regression tests for early-exiting legacy `wl-copy` and exact bytes with a supported helper; GUI smoke also verifies legacy helpers leave the picker open and existing clipboard untouched
+- [x] CI passed synthetic regression tests for early-exiting legacy `wl-copy`, misleading help text, and exact bytes with a supported helper; GUI smoke also verifies legacy helpers leave the picker open and existing clipboard untouched
+- [x] CI builds pinned upstream `wl-clipboard` 2.3.0 and verifies a real `--sensitive` Wayland clipboard round-trip with fictional data under nested Weston; host clipboard-manager behavior remains unverified
 - [x] Reject named-pipe vault and lock paths without blocking; require private effective-user-owned active vault, lock, and managed backup paths while keeping external encrypted snapshots verifiable
 - [x] Reject named pipes and non-regular CSV import paths without blocking; preserve regular-file symlink imports and explicit stdin streaming
 - [x] Bound never-ending stdin streams at the 32 MiB import limit plus one byte before parsing; reject oversized regular CSV files from metadata before buffer allocation, including sparse files
