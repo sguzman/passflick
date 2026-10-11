@@ -88,6 +88,14 @@ fn public_site_preview(url: &str) -> &str {
     }
 }
 
+fn is_web_url(value: &str) -> bool {
+    ["http://", "https://"].into_iter().any(|prefix| {
+        value
+            .get(..prefix.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(prefix))
+    })
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Credential {
     pub source: Source,
@@ -132,7 +140,7 @@ impl Credential {
     pub fn display_title(&self) -> String {
         let visible = if self.label.is_empty() {
             public_site_preview(&self.url)
-        } else if self.label.starts_with("https://") || self.label.starts_with("http://") {
+        } else if is_web_url(&self.label) {
             public_site_preview(&self.label)
         } else {
             &self.label
@@ -257,6 +265,15 @@ mod tests {
             1,
         );
         assert_eq!(titled.display_title(), "example.test");
+        let mixed_case = Credential::new(
+            Source::Apple,
+            "HTTPS://bob:fictional-secret@example.test/token?private=value",
+            "",
+            "bob",
+            "fictional-password",
+            1,
+        );
+        assert_eq!(mixed_case.display_title(), "example.test");
         assert_eq!(
             titled.title(),
             "https://bob:fictional-secret@example.test/token?private=value"
