@@ -445,7 +445,9 @@ fn discover_browser_profiles() {
     for profile in candidates {
         println!(
             "{}: {} / {} (read-only discovery)",
-            profile.source, profile.browser, profile.display_profile()
+            profile.source,
+            profile.browser,
+            profile.display_profile()
         );
     }
     println!("Discovery does not import, decrypt, or sync browser credentials.");
