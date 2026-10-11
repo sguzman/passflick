@@ -367,11 +367,11 @@ fn enable_keyring() -> Result<(), Box<dyn Error>> {
     let vault = open_with_cached_key_or_passphrase(&path, cached, || {
         rpassword::prompt_password("Passflick passphrase: ").map(Zeroizing::new)
     })?;
-    // Secret Service can still work when the Linux session keyring is
-    // unavailable. A successful authenticated enrollment can refresh the
-    // session key, but failing to cache it must not prevent enrollment.
-    let _ = session::store(&path, vault.key());
+    // Do not change a manual lock or session cache when desktop enrollment
+    // fails. Secret Service must accept the authenticated key first; afterward
+    // kernel session caching is optional and cannot invalidate enrollment.
     desktop_keyring::store(&path, vault.key())?;
+    let _ = session::store(&path, vault.key());
     println!("Desktop keyring integration enabled.");
     Ok(())
 }
