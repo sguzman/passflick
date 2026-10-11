@@ -54,7 +54,7 @@ pub fn display_label_with_sources(records: &[Credential], selected: usize) -> St
         .collect::<Vec<_>>()
         .join(" + ");
 
-    let title = safe_display_text(credential.title());
+    let title = credential.display_title();
     let mut label = if credential.username.is_empty() {
         format!("{title}  ·  {source_labels}")
     } else {
@@ -156,6 +156,33 @@ mod tests {
         let label = display_label_with_sources(&records, 1);
         assert!(label.contains("Edge + Firefox"));
         assert!(!label.contains("password-that-must-not-appear"));
+    }
+
+    #[test]
+    fn picker_rows_do_not_render_url_embedded_secrets() {
+        let url = "https://alice:fictional-userinfo@example.test/reset-token?token=fictional-query#fictional-fragment";
+        let records = vec![Credential::new(
+            Source::Edge,
+            "",
+            url,
+            "alice",
+            "fictional-password",
+            1,
+        )];
+        let visible = display_label_with_sources(&records, 0);
+        assert!(visible.contains("example.test"));
+        for hidden in [
+            "fictional-userinfo",
+            "reset-token",
+            "fictional-query",
+            "fictional-fragment",
+            "fictional-password",
+        ] {
+            assert!(!visible.contains(hidden), "picker exposed {hidden}");
+        }
+        assert_eq!(records[0].url, url);
+        // Search is intentionally against the original URL identity.
+        assert_eq!(rank_credentials(&records, "reset-token"), vec![0]);
     }
 
     #[test]
