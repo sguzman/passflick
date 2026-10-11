@@ -745,7 +745,7 @@ mod demo_tests {
         let denied = open_with_cached_key_or_passphrase(&path, Some(valid), || {
             panic!("unsafe vault must fail closed without prompting")
         });
-        assert!(matches!(denied, Err(_)));
+        assert!(denied.is_err());
         assert_eq!(fs::read(&path).unwrap(), original);
         fs::remove_dir_all(&root).unwrap();
     }
