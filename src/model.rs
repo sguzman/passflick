@@ -74,6 +74,23 @@ pub fn safe_display_text(raw: &str) -> String {
         .collect()
 }
 
+/// This is a display-only projection, not a URL normalizer. In particular,
+/// dropping userinfo and all URL path/query/fragment components must never
+/// alter stored credentials or the keys used for duplicate detection.
+fn public_site_preview(url: &str) -> &str {
+    let remainder = url.split_once("://").map_or(url, |(_, rest)| rest);
+    let authority = remainder
+        .split(&['/', '?', '#'][..])
+        .next()
+        .unwrap_or("");
+    let host = authority.rsplit('@').next().unwrap_or("");
+    if host.is_empty() {
+        "(local site)"
+    } else {
+        host
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Credential {
     pub source: Source,
@@ -111,8 +128,22 @@ impl Credential {
             &self.label
         }
     }
+    /// Use the site authority rather than URL paths, query parameters, or
+    /// fragments in visible picker/CLI labels. Some browser exports include
+    /// session or password-reset tokens in URLs; full URLs are kept unchanged
+    /// in the encrypted vault for identity and search.
+    pub fn display_title(&self) -> String {
+        let visible = if self.label.is_empty() {
+            public_site_preview(&self.url)
+        } else if self.label.starts_with("https://") || self.label.starts_with("http://") {
+            public_site_preview(&self.label)
+        } else {
+            &self.label
+        };
+        safe_display_text(visible)
+    }
     pub fn display_label(&self) -> String {
-        let title = safe_display_text(self.title());
+        let title = self.display_title();
         if self.username.is_empty() {
             format!("{}  ·  {}", title, self.source)
         } else {
@@ -194,6 +225,61 @@ mod tests {
         assert_eq!(record.label, label);
         assert_eq!(record.username, username);
         assert_eq!(record.password(), "fictional-secret");
+    }
+
+    #[test]
+    fn visible_site_title_omits_url_userinfo_path_and_tokens() {
+        let url = "https://alice:fictional-userinfo@example.test/private/reset-token?access_token=fictional-query#fictional-fragment";
+        let record = Credential::new(Source::Edge, "", url, "alice", "fictional-password", 1);
+        let label = record.display_label();
+        assert!(label.contains("example.test"));
+        for hidden in [
+            "fictional-userinfo",
+            "private",
+            "reset-token",
+            "fictional-query",
+            "fictional-fragment",
+            "fictional-password",
+        ] {
+            assert!(!label.contains(hidden), "visible label exposed {hidden}");
+        }
+        // Only the display changes. URL-based identity and vault serialization
+        // must retain the originally exported URL exactly.
+        assert_eq!(record.url, url);
+        assert_eq!(record.identity_key().1, url);
+    }
+
+    #[test]
+    fn url_shaped_export_titles_are_redacted_without_changing_plain_titles() {
+        let titled = Credential::new(
+            Source::Apple,
+            "https://bob:fictional-secret@example.test/token?private=value",
+            "https://example.test",
+            "bob",
+            "fictional-password",
+            1,
+        );
+        assert_eq!(titled.display_title(), "example.test");
+        assert_eq!(titled.title(), "https://bob:fictional-secret@example.test/token?private=value");
+
+        let plain = Credential::new(
+            Source::Firefox,
+            "Example / Accounts",
+            "https://example.test",
+            "bob",
+            "fictional-password",
+            1,
+        );
+        assert_eq!(plain.display_title(), "Example / Accounts");
+        let local = Credential::new(
+            Source::Chrome,
+            "",
+            "file:///home/fictional-user/secret-file",
+            "bob",
+            "fictional-password",
+            1,
+        );
+        assert_eq!(local.display_title(), "(local site)");
     }
 
     #[test]
