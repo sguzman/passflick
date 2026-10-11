@@ -17,11 +17,16 @@ mkdir -p "$root/bin"
 cat > "$root/bin/wl-copy" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ "${PASSFLICK_TEST_OLD_CLIPBOARD:-}" == "1" ]]; then
-  if [[ "${1:-}" == "--help" ]]; then
+if [[ "${1:-}" == "--help" ]]; then
+  if [[ "${PASSFLICK_TEST_OLD_CLIPBOARD:-}" == "1" ]]; then
     echo 'wl-copy --type --trim-newline'
-    exit 0
+  else
+    echo 'wl-copy --type --sensitive --trim-newline'
   fi
+  exit 0
+fi
+if [[ "${PASSFLICK_TEST_OLD_CLIPBOARD:-}" == "1" ]]; then
+  printf 'unsafe invocation' > "${PASSFLICK_TEST_CLIPBOARD}.unexpected"
   exit 2
 fi
 case " $* " in *" --sensitive "*) ;; *) exit 23 ;; esac
@@ -127,6 +132,7 @@ xdotool key --clearmodifiers Return
 sleep 0.4
 kill -0 "$picker_pid"
 cmp "$root/expected" "$PASSFLICK_TEST_CLIPBOARD"
+test ! -e "${PASSFLICK_TEST_CLIPBOARD}.unexpected"
 xdotool key --clearmodifiers Escape
 await_exit
 unset PASSFLICK_TEST_OLD_CLIPBOARD
