@@ -1,5 +1,5 @@
 use crate::clipboard::copy_sensitive;
-use crate::model::Credential;
+use crate::model::{Credential, safe_display_text};
 use crate::search::{display_label_with_sources, rank_credentials};
 use crate::startup::StartupTrace;
 use crate::vault::Vault;
@@ -7,6 +7,13 @@ use crate::{passphrase, paths, session};
 use eframe::egui;
 use std::collections::HashMap;
 use zeroize::{Zeroize, Zeroizing};
+
+/// Notices may include filesystem-derived error text. Render them without
+/// invisible direction controls or terminal escape characters, while leaving
+/// the underlying error messages and path operations unchanged.
+fn safe_ui_notice(message: &str) -> String {
+    safe_display_text(message)
+}
 
 /// Compute each visible row only when it is first visited. A label scans
 /// credential metadata to gather sources, conflicts and hidden URL variants;
@@ -263,7 +270,7 @@ impl eframe::App for PickerApp {
                 let create = ui.button("Create encrypted vault").clicked()
                     || ctx.input(|input| input.key_pressed(egui::Key::Enter));
                 if let Some(error) = &self.error {
-                    ui.label(error);
+                    ui.label(safe_ui_notice(error));
                 }
                 if create {
                     self.attempt_setup();
@@ -277,7 +284,7 @@ impl eframe::App for PickerApp {
                 ui.heading("Unlock Passflick");
                 ui.label("Enter your vault passphrase once for this login session.");
                 if let Some(notice) = &self.notice {
-                    ui.label(notice);
+                    ui.label(safe_ui_notice(notice));
                 }
                 ui.add_space(8.0);
                 let response = ui.add(
@@ -296,7 +303,7 @@ impl eframe::App for PickerApp {
                 let should_unlock = ui.button("Unlock").clicked()
                     || ctx.input(|input| input.key_pressed(egui::Key::Enter));
                 if let Some(error) = &self.error {
-                    ui.label(error);
+                    ui.label(safe_ui_notice(error));
                 }
                 if should_unlock {
                     self.attempt_unlock();
@@ -332,7 +339,7 @@ impl eframe::App for PickerApp {
             ui.add_space(4.0);
 
             if let Some(notice) = &self.notice {
-                ui.label(notice);
+                ui.label(safe_ui_notice(notice));
             }
             if self.records.is_empty() {
                 if self.notice.is_none() {
@@ -359,7 +366,7 @@ impl eframe::App for PickerApp {
             if let Some(error) = &self.error {
                 ui.add_space(8.0);
                 ui.separator();
-                ui.label(format!("Copy failed: {error}"));
+                ui.label(safe_ui_notice(&format!("Copy failed: {error}")));
             }
             ui.add_space(6.0);
             ui.label(
@@ -411,6 +418,19 @@ mod tests {
         let changed = cached_label(&mut labels, &after, 0);
         assert!(changed.contains("Replacement account"));
         assert!(!changed.contains("First account"));
+    }
+
+    #[test]
+    fn picker_error_messages_sanitize_path_and_direction_controls() {
+        let untrusted = "Unsafe vault /tmp/vault-\u{001b}[2J\u{202e}.passvault";
+        let visible = safe_ui_notice(untrusted);
+        assert_eq!(
+            visible,
+            "Unsafe vault /tmp/vault-\u{fffd}[2J\u{fffd}.passvault"
+        );
+        assert!(!visible.contains('\u{001b}'));
+        assert!(!visible.contains('\u{202e}'));
+        assert_eq!(safe_ui_notice("No matches."), "No matches.");
     }
 
     #[test]
