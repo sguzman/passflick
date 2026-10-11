@@ -18,14 +18,15 @@ fn safe_ui_notice(message: &str) -> String {
 /// Compute each visible row only when it is first visited. A label scans
 /// credential metadata to gather sources, conflicts and hidden URL variants;
 /// doing that on every egui redraw causes avoidable work on large vaults.
+/// These derived labels can include usernames, so cached copies must be wiped.
 fn cached_label<'a>(
-    labels: &'a mut HashMap<usize, String>,
+    labels: &'a mut HashMap<usize, Zeroizing<String>>,
     records: &[Credential],
     index: usize,
 ) -> &'a str {
     labels
         .entry(index)
-        .or_insert_with(|| display_label_with_sources(records, index))
+        .or_insert_with(|| Zeroizing::new(display_label_with_sources(records, index)))
         .as_str()
 }
 
@@ -55,7 +56,7 @@ pub struct PickerApp {
     // on drop and whenever a different vault projection becomes active.
     query: Zeroizing<String>,
     ranked: Vec<usize>,
-    display_labels: HashMap<usize, String>,
+    display_labels: HashMap<usize, Zeroizing<String>>,
     selected: usize,
     focused: bool,
     locked: bool,

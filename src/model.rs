@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -232,6 +232,19 @@ impl Credential {
         self.identity_key() == other.identity_key()
     }
 }
+
+impl Drop for Credential {
+    fn drop(&mut self) {
+        // Browser URLs can include reset tokens, usernames can be sensitive,
+        // and imported labels can themselves be URL payloads. The password
+        // is already held by Zeroizing<String>, but these other owned fields
+        // must not be left as ordinary heap allocations on record drop.
+        self.label.zeroize();
+        self.url.zeroize();
+        self.username.zeroize();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
