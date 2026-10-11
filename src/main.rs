@@ -575,15 +575,34 @@ fn import_csv(source: Source, path: &Path, allow_shrink: bool) -> Result<(), Box
 
 fn open_unlocked_vault() -> Result<(PathBuf, Vault), Box<dyn Error>> {
     let path = paths::vault_path()?;
-    match load_vault_key(&path) {
-        Ok(Some(key)) => Ok((path.clone(), Vault::open_with_key(&path, key)?)),
-        Ok(None) | Err(_) => {
-            // Explicit CLI maintenance may ask for a passphrase, but never
-            // passes one in argv or silently assumes a password was cached.
-            let passphrase = Zeroizing::new(rpassword::prompt_password("Passflick passphrase: ")?);
-            Ok((path.clone(), Vault::unlock(&path, passphrase.as_bytes())?))
+    let cached = load_vault_key(&path).ok().flatten();
+    let vault = open_with_cached_key_or_passphrase(&path, cached, || {
+        rpassword::prompt_password("Passflick passphrase: ").map(Zeroizing::new)
+    })?;
+    Ok((path, vault))
+}
+
+/// A stale session or desktop key must not strand CLI maintenance commands.
+/// Retry with the passphrase only after an authentication failure; permission,
+/// format, and filesystem errors must not be mistaken for stale credentials.
+fn open_with_cached_key_or_passphrase(
+    path: &Path,
+    cached: Option<vault::VaultKey>,
+    prompt: impl FnOnce() -> io::Result<Zeroizing<String>>,
+) -> Result<Vault, Box<dyn Error>> {
+    if let Some(key) = cached {
+        match Vault::open_with_key(path, key) {
+            Ok(vault) => return Ok(vault),
+            Err(vault::VaultError::Decrypt) => {
+                eprintln!("passflick: cached key failed authentication; enter vault passphrase");
+            }
+            Err(error) => return Err(error.into()),
         }
     }
+    // A passphrase is never placed in argv or a log. Do not silently restore
+    // failed cached key material or change session lock state here.
+    let passphrase = prompt()?;
+    Ok(Vault::unlock(path, passphrase.as_bytes())?)
 }
 
 fn load_vault_key(path: &Path) -> Result<Option<vault::VaultKey>, Box<dyn Error>> {
@@ -685,6 +704,49 @@ mod demo_tests {
         let alias = root.join("export-link.csv");
         symlink(&csv, &alias).unwrap();
         assert_eq!(read_import_file(&alias).unwrap().as_slice(), payload);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn stale_cached_cli_key_retries_passphrase_but_unsafe_file_does_not() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-stale-cli-key-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let path = root.join("vault.passvault");
+        let initial = Vault::create(&path, b"fictional-correct-passphrase").unwrap();
+        let current = vault::VaultKey::from_slice(initial.key().as_bytes()).unwrap();
+        drop(initial);
+        let original = fs::read(&path).unwrap();
+
+        let wrong = vault::VaultKey::from_slice(&[0x42_u8; 32]).unwrap();
+        let mut prompts = 0;
+        let opened = open_with_cached_key_or_passphrase(&path, Some(wrong), || {
+            prompts += 1;
+            Ok(Zeroizing::new("fictional-correct-passphrase".to_owned()))
+        })
+        .unwrap();
+        assert_eq!(prompts, 1);
+        assert!(opened.records().is_empty());
+        assert_eq!(fs::read(&path).unwrap(), original);
+
+        let opened = open_with_cached_key_or_passphrase(&path, Some(current), || {
+            panic!("valid cache must not prompt")
+        })
+        .unwrap();
+        assert!(opened.records().is_empty());
+
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        let valid = vault::VaultKey::from_slice(opened.key().as_bytes()).unwrap();
+        let denied = open_with_cached_key_or_passphrase(&path, Some(valid), || {
+            panic!("unsafe vault must fail closed without prompting")
+        });
+        assert!(matches!(denied, Err(_)));
+        assert_eq!(fs::read(&path).unwrap(), original);
         fs::remove_dir_all(&root).unwrap();
     }
 
