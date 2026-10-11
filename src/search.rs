@@ -288,8 +288,22 @@ mod tests {
         assert!(display_label_with_sources(&records, 1).contains("Variant 1/2"));
         assert!(display_label_with_sources(&records, 2).contains("Variant 2/2"));
         let unrelated = vec![
-            Credential::new(Source::Edge, "Example", "https://example.test", "one", "first", 1),
-            Credential::new(Source::Edge, "Example", "https://example.test", "two", "second", 1),
+            Credential::new(
+                Source::Edge,
+                "Example",
+                "https://example.test",
+                "one",
+                "first",
+                1,
+            ),
+            Credential::new(
+                Source::Edge,
+                "Example",
+                "https://example.test",
+                "two",
+                "second",
+                1,
+            ),
         ];
         assert!(!display_label_with_sources(&unrelated, 0).contains("Variant"));
     }
