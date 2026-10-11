@@ -3,7 +3,7 @@
 ## Initial product
 
 - [x] Identity, architecture, and interaction contract
-- [x] Multi-source credential schema and CSV parsing
+- [x] Multi-source credential schema and CSV parsing; future direct source adapters use site titles rather than whitespace-only URLs as identities, preserving distinct accounts after encrypted import and reopen
 - [x] Encrypted vault, masked in-window unlock, and session-key caching adapted from OTPick
 - [x] Standalone first-run vault setup in the graphical picker
 - [x] Per-vault session-key/explicit-lock isolation for safe independent testing; report cleanup failures accurately after cached-key decryption errors
@@ -11,10 +11,10 @@
 - [x] Reject empty/mixed-provider import batches and NUL-containing clipboard values before committing; enforce the same empty-password, NUL, and missing-site checks at the transaction boundary for future source adapters
 - [x] Neutralize terminal escape, bidirectional controls, and additional invisible Unicode format marks in visible metadata, CLI filesystem path output, top-level error text, and graphical error/notice display without modifying stored values or actual paths
 - [x] Hide URL userinfo, paths, query strings, and fragments in URL-only or HTTP(S)-title picker and CLI labels without modifying stored URLs or search identities; trim surrounding title whitespace for URL detection and number otherwise-indistinguishable credential variants; suppress scheme-only URL payloads (`data:`, `javascript:`, etc.) in URL-only and URL-shaped-title displays, retain ordinary host:port labels and colon-separated titles
-- [x] One-shot keyboard picker with Enter/Shift+Enter; cache visible row labels between egui redraws and clear cached labels after a vault projection change; zeroize owned search text on close or reload and case-folded search query, indexed field, and sort-key temporaries
+- [x] One-shot keyboard picker with Enter/Shift+Enter; cache visible row labels between egui redraws and clear cached labels after a vault projection change; zeroize owned search text on close or reload, cached picker row labels on drop, and case-folded search query, indexed field, and sort-key temporaries
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Rust CI verified at [`8208ec3`](https://github.com/sguzman/passflick/actions/runs/38176507141): 104 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy; [synthetic GUI checks](https://github.com/sguzman/passflick/actions/runs/38176507132) also passed
+- [x] Rust CI verified at [`32c3113`](https://github.com/sguzman/passflick/actions/runs/38178852033): 107 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy; [synthetic GUI checks](https://github.com/sguzman/passflick/actions/runs/38178851992) also passed
 - [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
 - [x] Synthetic ordinary restore smoke passed: explicit confirmation, corrupted and hard-linked snapshot rejection, four-source restoration, and encrypted pre-restore safety backup
 - [x] Synthetic CLI source refresh passed: Firefox survives Edge replacement; a large accidental Edge shrink is rejected without vault mutation, and `--allow-shrink` preserves Firefox
@@ -23,7 +23,7 @@
 - [x] Synthetic concurrent source imports passed: two writers race, serialize using the persistent write lock, and preserve both providers after reopening
 - [x] Simultaneous initial vault creations never overwrite one another; Argon2 derives its key directly into zeroizing storage
 - [x] Session, desktop keyring, and encrypted backup key loading avoid temporary raw-key arrays; malformed key lengths are rejected
-- [x] Vault AEAD decrypts inside zeroizing memory, and tampered ciphertext is rejected before record decoding
+- [x] Vault AEAD decrypts inside zeroizing memory, and tampered ciphertext is rejected before record decoding; credential-owned labels, URLs and usernames are zeroized on record drop
 - [x] Stale cached keys trigger a CLI passphrase retry instead of blocking maintenance; non-decryption failures still fail closed
 - [x] `passflick status` authenticates cached session keys against the current encrypted vault before claiming it is unlocked, and rejects unsafe vault-file kinds instead of treating dangling symlinks as absent
 - [x] Picker startup clears a cached session key only on authentication failure; filesystem, header and schema errors preserve the key
