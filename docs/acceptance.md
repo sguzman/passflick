@@ -1,13 +1,13 @@
 # Acceptance plan
 
-Passflick is pre-release until the following checks are run against its real Linux/Wayland target. Automated tests use fictional `example.test` credentials exclusively. CI has already validated the X11 search/Enter/Shift+Enter/Escape lifecycle under Xvfb and the first native Wayland frame plus a synthetic byte-exact clipboard round-trip under nested Weston. The Rust workflow's synthetic CLI recovery and multi-source import smoke test passed on [October 11, 2026 UTC](https://github.com/sguzman/passflick/actions/runs/38168564004), alongside 93 Rust tests, locked CLI checks, formatting, and strict Clippy. The CI runner uses an older `wl-copy`, so its transport test does not validate the sensitive-data hint; that remains a target-host acceptance item. The checklist below contains the remaining target-host acceptance work. This document is an acceptance gate, not a feature changelog.
+Passflick is pre-release until the following checks are run against its real Linux/Wayland target. Automated tests use fictional `example.test` credentials exclusively. CI has already validated the X11 search/Enter/Shift+Enter/Escape lifecycle under Xvfb and the first native Wayland frame plus a synthetic byte-exact clipboard round-trip under nested Weston. The Rust workflow's synthetic CLI recovery and multi-source import smoke test passed on [October 11, 2026 UTC](https://github.com/sguzman/passflick/actions/runs/38169776374), alongside 94 Rust tests, locked CLI checks, formatting, and strict Clippy. [Synthetic GUI CI](https://github.com/sguzman/passflick/actions/runs/38169776405) passed including the legacy clipboard-helper refusal case. The CI runner uses an older `wl-copy`, so its transport test does not validate the sensitive-data hint; that remains a target-host acceptance item. The checklist below contains the remaining target-host acceptance work. This document is an acceptance gate, not a feature changelog.
 
 ## 1. Synthetic graphical picker
 
 Use the project's existing `passflick demo` command. It does not access the real vault.
 
 - The picker opens as a floating overlay without rearranging tiled windows.
-- A dangling symlink at the active vault filename must not trigger first-run vault creation.
+- A dangling symlink at the active vault filename must not trigger first-run vault creation. `passflick status` must reject symlink and directory vault filenames instead of reporting them as absent or usable.
 - The search field has keyboard focus on first frame and accepts typing immediately.
 - Matching and Arrow Up/Down selection behave correctly for multiple entries.
 - Exact duplicates from Edge and Chrome appear as one item with combined provenance.
@@ -52,9 +52,9 @@ Use isolated temporary XDG data directories and synthetic CSV exports for all fo
 ## 3. Clipboard and input boundary
 
 - Verify literal spaces, Unicode, quoted CSV values, embedded newlines, and trailing newlines survive import and copy. Rust CI verifies exact Unicode and whitespace after parse, encrypted save, and vault reopen; an actual Wayland clipboard handoff is still a target-host check.
-- Confirm `wl-clipboard` 2.3+ and the `wl-copy --sensitive` hint; old versions must give an explicit diagnostic even when the helper exits before stdin can be fully written, without writing unmarked secrets. Test exact whitespace and trailing newline preservation using a synthetic supported helper, and evaluate the host clipboard manager's actual history handling.
+- Confirm `wl-clipboard` 2.3+ and the `wl-copy --sensitive` hint; old versions must give an explicit diagnostic even when the helper exits before stdin can be fully written, without writing unmarked secrets. Synthetic GUI CI verifies an old helper leaves the picker open and clipboard unchanged. Test exact whitespace and trailing newline preservation using a synthetic supported helper, and evaluate the host clipboard manager's actual history handling.
 - Check the tool never prints passwords or vault keys in ordinary output, startup traces, crash diagnostics, or screenshots.
-- Imported site names and usernames containing terminal escape sequences, Unicode direction-control characters, or invisible formatting marks must be displayed harmlessly; Shift+Enter must still copy the original username exactly.
+- Imported site names and usernames containing terminal escape sequences, Unicode direction-control characters, or invisible formatting marks must be displayed harmlessly; Shift+Enter must still copy the original username exactly. Filesystem-derived Firefox profile names printed by `passflick discover` must also render without control sequences; preserve the real filesystem path.
 - URL-only credentials and URL-shaped HTTP(S) titles must display only the site authority, omitting userinfo, paths, query strings, and fragments, including mixed-case URL schemes. The exact URL must remain stored and searchable; validate a path-specific search when two logins share the same host and username.
 - Do not record or upload clipboard contents from production sessions.
 
