@@ -6,7 +6,7 @@
 - [x] Multi-source credential schema and CSV parsing; future direct source adapters use site titles rather than whitespace-only URLs as identities, preserving distinct accounts after encrypted import and reopen
 - [x] Encrypted vault, masked in-window unlock, and session-key caching adapted from OTPick
 - [x] Standalone first-run vault setup in the graphical picker
-- [x] Per-vault session-key/explicit-lock isolation for safe independent testing; report cleanup failures accurately after cached-key decryption errors; desktop-keyring enrollment respects manual locks, retries stale keys with a passphrase, and preserves session state if Secret Service storage fails
+- [x] Per-vault session-key/explicit-lock isolation for safe independent testing; report cleanup failures accurately after cached-key decryption errors; desktop-keyring enrollment respects manual locks, retries stale keys with a passphrase, preserves session state if Secret Service storage fails, and never imports an unverified desktop key into the kernel session cache during CLI maintenance
 - [x] Graceful one-shot GUI and interactive CLI fallback when session caching is unavailable
 - [x] Reject empty/mixed-provider import batches and NUL-containing clipboard values before committing; enforce the same empty-password, NUL, and missing-site checks at the transaction boundary for future source adapters
 - [x] Neutralize terminal escape, bidirectional controls, and additional invisible Unicode format marks in visible metadata, CLI filesystem path output, top-level error text, and graphical error/notice display without modifying stored values or actual paths
