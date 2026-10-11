@@ -357,17 +357,20 @@ fn lock_vault() -> Result<(), Box<dyn Error>> {
 
 fn enable_keyring() -> Result<(), Box<dyn Error>> {
     let path = paths::vault_path()?;
-    let vault = match session::load(&path)? {
-        Some(key) => Vault::open_with_key(&path, key)?,
-        None => {
-            let passphrase = Zeroizing::new(rpassword::prompt_password("Passflick passphrase: ")?);
-            let vault = Vault::unlock(&path, passphrase.as_bytes())?;
-            // Desktop Secret Service can work even when the kernel session
-            // keyring is unavailable. Treat session caching as optional here.
-            let _ = session::store(&path, vault.key());
-            vault
-        }
+    // Enrollment must not bypass an explicit session lock or trust a stale
+    // kernel key. A missing/unavailable lock state requires a passphrase.
+    let cached = if matches!(session::is_manually_locked(&path), Ok(false)) {
+        session::load(&path).ok().flatten()
+    } else {
+        None
     };
+    let vault = open_with_cached_key_or_passphrase(&path, cached, || {
+        rpassword::prompt_password("Passflick passphrase: ").map(Zeroizing::new)
+    })?;
+    // Secret Service can still work when the Linux session keyring is
+    // unavailable. A successful authenticated enrollment can refresh the
+    // session key, but failing to cache it must not prevent enrollment.
+    let _ = session::store(&path, vault.key());
     desktop_keyring::store(&path, vault.key())?;
     println!("Desktop keyring integration enabled.");
     Ok(())
@@ -842,6 +845,39 @@ mod demo_tests {
             panic!("unsafe vault must fail closed without prompting")
         });
         assert!(denied.is_err());
+        assert_eq!(fs::read(&path).unwrap(), original);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn keyring_enrollment_requires_authenticated_key_or_passphrase() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-keyring-enrollment-test-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let path = root.join("vault.passvault");
+        let passphrase = "fictional-keyring-enrollment";
+        Vault::create(&path, passphrase.as_bytes()).unwrap();
+        let original = fs::read(&path).unwrap();
+        let wrong = vault::VaultKey::from_slice(&[0x5e_u8; 32]).unwrap();
+
+        let denied = open_with_cached_key_or_passphrase(&path, Some(wrong), || {
+            Ok(Zeroizing::new("incorrect-passphrase".to_owned()))
+        });
+        assert!(denied.is_err());
+        assert_eq!(fs::read(&path).unwrap(), original);
+
+        let wrong = vault::VaultKey::from_slice(&[0x5e_u8; 32]).unwrap();
+        let mut prompted = false;
+        let authenticated = open_with_cached_key_or_passphrase(&path, Some(wrong), || {
+            prompted = true;
+            Ok(Zeroizing::new(passphrase.to_owned()))
+        })
+        .unwrap();
+        assert!(prompted);
+        assert_eq!(authenticated.records().len(), 0);
         assert_eq!(fs::read(&path).unwrap(), original);
         fs::remove_dir_all(&root).unwrap();
     }
