@@ -622,7 +622,10 @@ mod tests {
         let path = root.join("vault.passvault");
         let start = Arc::new(Barrier::new(3));
         let mut workers = Vec::new();
-        for password in [b"fictional-first-passphrase".as_slice(), b"fictional-second-passphrase".as_slice()] {
+        for password in [
+            b"fictional-first-passphrase".as_slice(),
+            b"fictional-second-passphrase".as_slice(),
+        ] {
             let path = path.clone();
             let start = Arc::clone(&start);
             workers.push(thread::spawn(move || {
@@ -632,10 +635,16 @@ mod tests {
         }
 
         start.wait();
-        let results: Vec<_> = workers.into_iter().map(|worker| worker.join().unwrap()).collect();
+        let results: Vec<_> = workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect();
         assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
         assert_eq!(
-            results.iter().filter(|result| matches!(result, Err(VaultError::AlreadyExists(_)))).count(),
+            results
+                .iter()
+                .filter(|result| matches!(result, Err(VaultError::AlreadyExists(_))))
+                .count(),
             1
         );
         let winning_passphrase = *results.into_iter().find_map(Result::ok).as_ref().unwrap();
