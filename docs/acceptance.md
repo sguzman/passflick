@@ -1,6 +1,6 @@
 # Acceptance plan
 
-Passflick is pre-release until the following checks are run against its real Linux/Wayland target. Automated tests use fictional `example.test` credentials exclusively. CI has already validated the X11 search/Enter/Shift+Enter/Escape lifecycle under Xvfb and the first native Wayland frame plus a synthetic byte-exact clipboard round-trip under nested Weston. The Rust workflow's synthetic CLI recovery and multi-source import smoke test passed on [October 11, 2026 UTC](https://github.com/sguzman/passflick/actions/runs/38158698568), alongside 82 Rust tests, locked CLI checks, formatting, and strict Clippy. The CI runner uses an older `wl-copy`, so its transport test does not validate the sensitive-data hint; that remains a target-host acceptance item. The checklist below contains the remaining target-host acceptance work. This document is an acceptance gate, not a feature changelog.
+Passflick is pre-release until the following checks are run against its real Linux/Wayland target. Automated tests use fictional `example.test` credentials exclusively. CI has already validated the X11 search/Enter/Shift+Enter/Escape lifecycle under Xvfb and the first native Wayland frame plus a synthetic byte-exact clipboard round-trip under nested Weston. The Rust workflow's synthetic CLI recovery and multi-source import smoke test passed on [October 11, 2026 UTC](https://github.com/sguzman/passflick/actions/runs/38161796693), alongside 86 Rust tests, locked CLI checks, formatting, and strict Clippy. The CI runner uses an older `wl-copy`, so its transport test does not validate the sensitive-data hint; that remains a target-host acceptance item. The checklist below contains the remaining target-host acceptance work. This document is an acceptance gate, not a feature changelog.
 
 ## 1. Synthetic graphical picker
 
@@ -18,7 +18,7 @@ Use the project's existing `passflick demo` command. It does not access the real
 - A second invocation can retrieve the other field without session unlock.
 - First launch with no vault offers masked passphrase creation inside the picker, without a terminal. Short or mismatched entries must not create a vault; valid entries create a private encrypted file.
 - If the session key is absent, the picker presents a masked vault unlock field; a correct passphrase opens the picker, an incorrect one never exposes records, and Escape closes without copying.
-- If the Linux session keyring is unavailable, a correctly entered passphrase still permits one-shot picker use; the next launch must require another unlock and provide a clear explanation.
+- If the Linux session keyring is unavailable, a correctly entered passphrase still permits one-shot picker use; the next launch must require another unlock and provide a clear explanation. Rust CI also verifies that stale cached CLI keys allow a passphrase retry while unsafe vault-file errors do not.
 - Test focus, resize behavior, and keyboard repeat using the real compositor and application class.
 
 Record startup latency from process entry to first visible, focused frame. No numerical performance guarantee is asserted until it has been measured.
@@ -36,7 +36,7 @@ Use isolated temporary XDG data directories and synthetic CSV exports for all fo
 - Test unusually small snapshots and the explicit `--allow-shrink` override. CI verified both non-destructive refusal and a deliberate reduction from 12 Edge records to 3 without affecting Firefox.
 - Verify private file and directory permissions, effective-user ownership of active vault/lock/managed-backup paths, encrypted contents, and authenticated decryption failure after tampering.
 - Confirm an active vault refuses unlock from a shared or symlinked immediate directory even if its file is mode 0600; confirm encrypted snapshots remain verifiable from an external directory when the snapshot file itself is private. A symlink substituted for the managed `backups/` directory must be rejected without following the redirect.
-- Substitute named pipes for the vault file, write-lock file, and an explicit CSV import path in isolated synthetic directories. All must reject without blocking for a counterpart process. Use `import SOURCE -` for intentional streaming.
+- Substitute named pipes for the vault file, write-lock file, and an explicit CSV import path in isolated synthetic directories. All must reject without blocking for a counterpart process. Use `import SOURCE -` for intentional streaming. Rust CI additionally verifies that a never-ending stream is bounded and rejected as oversized.
 - Exercise two simultaneous imports and verify that the exclusive write lock preserves both updates. Rust CI verified this with two racing source transactions followed by a vault reopen; cross-process behavior on the actual host remains an acceptance check.
 - Create and reopen a byte-exact encrypted backup.
 - Verify session unlock, explicit lock, failed unlock, and the optional Secret Service integration.

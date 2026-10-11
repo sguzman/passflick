@@ -13,7 +13,7 @@
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Rust CI verified at [`06e3652`](https://github.com/sguzman/passflick/actions/runs/38158698568): 82 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy
+- [x] Rust CI verified at [`10f9f38`](https://github.com/sguzman/passflick/actions/runs/38161796693): 86 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy
 - [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
 - [x] Synthetic ordinary restore smoke passed: explicit confirmation, corrupted and hard-linked snapshot rejection, four-source restoration, and encrypted pre-restore safety backup
 - [x] Synthetic CLI source refresh passed: Firefox survives Edge replacement; a large accidental Edge shrink is rejected without vault mutation, and `--allow-shrink` preserves Firefox
@@ -21,6 +21,8 @@
 - [x] Synthetic concurrent source imports passed: two writers race, serialize using the persistent write lock, and preserve both providers after reopening
 - [x] Simultaneous initial vault creations never overwrite one another; Argon2 derives its key directly into zeroizing storage
 - [x] Session, desktop keyring, and encrypted backup key loading avoid temporary raw-key arrays; malformed key lengths are rejected
+- [x] Vault AEAD decrypts inside zeroizing memory, and tampered ciphertext is rejected before record decoding
+- [x] Stale cached keys trigger a CLI passphrase retry instead of blocking maintenance; non-decryption failures still fail closed
 - [x] Synthetic filesystem regression tests passed in Rust CI
 - [ ] Confirm filesystem edge cases on target EndeavourOS/Hyprland
 - [x] Automated X11 keyboard/copy/close smoke tests under Xvfb
@@ -52,9 +54,11 @@
 - [x] Lossless encrypted import round trip preserves Unicode usernames, quoted site titles, and multiline passwords with leading/trailing whitespace
 - [x] Detect Apple Title + OTPAuth exports without Notes, rejecting wrong-source imports
 - [x] Require sensitive clipboard support instead of silently copying password values into unmarked history
+- [x] Clipboard transport itself rejects NUL-containing legacy values before launching `wl-copy`
 - [x] CI passed synthetic regression tests for early-exiting legacy `wl-copy` and exact bytes with a supported helper
 - [x] Reject named-pipe vault and lock paths without blocking; require private effective-user-owned active vault, lock, and managed backup paths while keeping external encrypted snapshots verifiable
 - [x] Reject named pipes and non-regular CSV import paths without blocking; preserve regular-file symlink imports and explicit stdin streaming
+- [x] Bound never-ending stdin streams at the 32 MiB import limit plus one byte before parsing
 - [x] Verify backup creation rejects a symlink-substituted backup directory without changing the vault or redirected target
 - [ ] More security review: symlink races, keyring lifecycle, clipboard history, import edge cases
 - [x] Checksummed Linux x86_64 pre-release binary build workflow
