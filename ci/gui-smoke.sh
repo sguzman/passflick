@@ -17,6 +17,13 @@ mkdir -p "$root/bin"
 cat > "$root/bin/wl-copy" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${PASSFLICK_TEST_OLD_CLIPBOARD:-}" == "1" ]]; then
+  if [[ "${1:-}" == "--help" ]]; then
+    echo 'wl-copy --type --trim-newline'
+    exit 0
+  fi
+  exit 2
+fi
 case " $* " in *" --sensitive "*) ;; *) exit 23 ;; esac
 case " $* " in *" --trim-newline "*) exit 24 ;; esac
 cat > "$PASSFLICK_TEST_CLIPBOARD"
@@ -111,6 +118,18 @@ launch_picker >/dev/null
 xdotool key --clearmodifiers Escape
 await_exit
 cmp "$root/expected" "$PASSFLICK_TEST_CLIPBOARD"
+
+echo "Synthetic GUI test: legacy wl-copy cannot close picker or change clipboard"
+export PASSFLICK_TEST_OLD_CLIPBOARD=1
+launch_picker >/dev/null
+xdotool type --clearmodifiers --delay 35 'Another'
+xdotool key --clearmodifiers Return
+sleep 0.4
+kill -0 "$picker_pid"
+cmp "$root/expected" "$PASSFLICK_TEST_CLIPBOARD"
+xdotool key --clearmodifiers Escape
+await_exit
+unset PASSFLICK_TEST_OLD_CLIPBOARD
 
 echo "Synthetic GUI test: first-run setup rejects short passphrases"
 export PASSFLICK_VAULT="$root/new-vault.passvault"
