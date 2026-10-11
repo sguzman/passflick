@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::model::Source;
+use crate::model::{Source, safe_display_text};
 
 /// A non-secret profile locator. Discovery never reads a password database,
 /// decrypts credentials, or unlocks any browser or desktop keyring.
@@ -11,6 +11,15 @@ pub struct ProfileCandidate {
     pub browser: &'static str,
     pub profile: String,
     pub path: PathBuf,
+}
+
+impl ProfileCandidate {
+    /// A browser profile directory name is untrusted terminal input even
+    /// though discovery never reads credential content. Keep the actual
+    /// filesystem path unchanged, sanitizing only the printed label.
+    pub fn display_profile(&self) -> String {
+        safe_display_text(&self.profile)
+    }
 }
 
 fn chromium_profiles(
@@ -123,6 +132,28 @@ mod tests {
         assert_eq!(candidates[2].source, Source::Firefox);
         assert_eq!(candidates[0].profile, "Default");
 
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn firefox_profile_names_cannot_emit_terminal_control_sequences() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-discovery-display-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let raw_name = "example\u{001b}[2J\u{202e}.default";
+        let firefox = root.join("firefox").join(raw_name);
+        fs::create_dir_all(&firefox).unwrap();
+        fs::write(firefox.join("logins.json"), b"fictional export").unwrap();
+        fs::write(firefox.join("key4.db"), b"fictional key-file placeholder").unwrap();
+
+        let profiles = discover_from(&root.join("config"), &root.join("firefox"));
+        assert_eq!(profiles.len(), 1);
+        assert_eq!(profiles[0].profile, raw_name);
+        assert_eq!(profiles[0].path, firefox);
+        assert_eq!(profiles[0].display_profile(), "example\u{fffd}[2J\u{fffd}.default");
         fs::remove_dir_all(&root).unwrap();
     }
 
