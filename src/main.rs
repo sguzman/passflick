@@ -364,12 +364,21 @@ fn disable_keyring() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn cached_key_opens_vault(path: &Path, key: vault::VaultKey) -> bool {
+    Vault::open_with_key(path, key).is_ok()
+}
+
 fn status() -> Result<(), Box<dyn Error>> {
     let path = paths::vault_path()?;
     println!("Vault: {}", path.display());
     println!("Exists: {}", path.exists());
     let manually_locked = session::is_manually_locked(&path)?;
-    let session_unlocked = !manually_locked && session::load(&path)?.is_some();
+    // A key's presence in the kernel keyring is not proof that it belongs to
+    // the current encrypted vault (for example, after restoring an older
+    // ciphertext lineage). Validate the authenticated file read-only.
+    let session_unlocked = !manually_locked
+        && session::load(&path)?
+            .is_some_and(|key| cached_key_opens_vault(&path, key));
     println!("Session unlocked: {session_unlocked}");
     println!("Manual lock: {manually_locked}");
     match desktop_keyring::exists(&path) {
@@ -704,6 +713,32 @@ mod demo_tests {
         let alias = root.join("export-link.csv");
         symlink(&csv, &alias).unwrap();
         assert_eq!(read_import_file(&alias).unwrap().as_slice(), payload);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn status_only_marks_an_authenticated_cached_key_as_unlocked() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-status-key-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let path = root.join("vault.passvault");
+        let vault = Vault::create(&path, b"fictional-status-passphrase").unwrap();
+        let before = fs::read(&path).unwrap();
+        let valid = vault::VaultKey::from_slice(vault.key().as_bytes()).unwrap();
+        let wrong = vault::VaultKey::from_slice(&[0x42_u8; 32]).unwrap();
+        assert!(cached_key_opens_vault(&path, valid));
+        assert!(!cached_key_opens_vault(&path, wrong));
+        assert_eq!(fs::read(&path).unwrap(), before);
+
+        let mut damaged = before.clone();
+        *damaged.last_mut().unwrap() ^= 1;
+        fs::write(&path, &damaged).unwrap();
+        let valid = vault::VaultKey::from_slice(vault.key().as_bytes()).unwrap();
+        assert!(!cached_key_opens_vault(&path, valid));
+        assert_eq!(fs::read(&path).unwrap(), damaged);
         fs::remove_dir_all(&root).unwrap();
     }
 
