@@ -34,10 +34,25 @@ jobs:
       - name: Install X11, software rendering and virtual display tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwayland-dev libxkbcommon-dev libx11-dev libx11-xcb-dev libxcursor-dev libxi-dev libxrandr-dev libgl1-mesa-dev xvfb xauth xdotool libgl1-mesa-dri libxkbcommon-x11-0 weston libegl1 wl-clipboard
+          sudo apt-get install -y libwayland-dev libxkbcommon-dev libx11-dev libx11-xcb-dev libxcursor-dev libxi-dev libxrandr-dev libgl1-mesa-dev xvfb xauth xdotool libgl1-mesa-dri libxkbcommon-x11-0 weston libegl1 wl-clipboard meson ninja-build wayland-protocols
       - name: Compile real debug picker from locked dependency set
         run: cargo build --locked
+      - name: Checkout pinned wl-clipboard 2.3.0 for real sensitive-hint transport
+        uses: actions/checkout@v7
+        with:
+          repository: bugaevc/wl-clipboard
+          ref: 67a7b937895bceec1ae5ccebb10216f63f70ca1b
+          path: .ci-wl-clipboard
+          persist-credentials: false
+      - name: Build real wl-copy with sensitive hint support
+        run: |
+          meson setup .ci-wl-build .ci-wl-clipboard --buildtype=release
+          meson compile -C .ci-wl-build
+          ./.ci-wl-build/src/wl-copy --help | grep -q -- '--sensitive'
+          echo "${GITHUB_WORKSPACE}/.ci-wl-build/src" >> "${GITHUB_PATH}"
       - name: Exercise picker with synthetic account data only
         run: xvfb-run -a bash ci/gui-smoke.sh
-      - name: Verify native Wayland frame and clipboard using nested Weston
+      - name: Verify real sensitive Wayland clipboard transport with nested Weston
+        env:
+          PASSFLICK_EXPECT_SENSITIVE: "1"
         run: xvfb-run -a bash ci/wayland-smoke.sh
