@@ -381,6 +381,12 @@ pub(crate) fn read_private_vault(path: &Path) -> Result<Vec<u8>, VaultError> {
     {
         return Err(VaultError::UnsafeFile);
     }
+    // Sparse and otherwise oversized regular files should fail before reading
+    // or allocating up to 64 MiB. Keep the bounded read for files that grow
+    // after this metadata check.
+    if metadata.len() > MAX_VAULT_BYTES {
+        return Err(VaultError::TooLarge);
+    }
 
     // Reject a huge or corrupt vault without allocating an unbounded buffer.
     let mut bytes = Vec::new();
@@ -779,6 +785,29 @@ mod tests {
         fs::write(&path, b"fictional ciphertext").unwrap();
         let metadata = fs::symlink_metadata(&path).unwrap();
         assert!(owned_by_current_user(&metadata));
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn oversized_sparse_vault_is_rejected_before_bounded_read() {
+        let mut entropy = [0_u8; 8];
+        fill_random(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-sparse-vault-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&root).unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
+        let path = root.join("oversized.passvault");
+        let file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&path)
+            .unwrap();
+        file.set_len(MAX_VAULT_BYTES + 1).unwrap();
+        assert!(matches!(read_private_vault(&path), Err(VaultError::TooLarge)));
+        drop(file);
         fs::remove_dir_all(&root).unwrap();
     }
 
