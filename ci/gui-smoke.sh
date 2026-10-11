@@ -21,7 +21,7 @@ if [[ "${1:-}" == "--help" ]]; then
   if [[ "${PASSFLICK_TEST_OLD_CLIPBOARD:-}" == "1" ]]; then
     echo 'wl-copy --type --trim-newline'
   else
-    echo 'wl-copy --type --sensitive --trim-newline'
+    echo '  --sensitive  Hint that the content is sensitive'
   fi
   exit 0
 fi
