@@ -13,7 +13,7 @@
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Rust CI verified at [`162ea4b`](https://github.com/sguzman/passflick/actions/runs/38165333018): 88 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy
+- [x] Rust CI verified at [`0ad0b85`](https://github.com/sguzman/passflick/actions/runs/38167496629): 90 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy
 - [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
 - [x] Synthetic ordinary restore smoke passed: explicit confirmation, corrupted and hard-linked snapshot rejection, four-source restoration, and encrypted pre-restore safety backup
 - [x] Synthetic CLI source refresh passed: Firefox survives Edge replacement; a large accidental Edge shrink is rejected without vault mutation, and `--allow-shrink` preserves Firefox
@@ -24,6 +24,8 @@
 - [x] Session, desktop keyring, and encrypted backup key loading avoid temporary raw-key arrays; malformed key lengths are rejected
 - [x] Vault AEAD decrypts inside zeroizing memory, and tampered ciphertext is rejected before record decoding
 - [x] Stale cached keys trigger a CLI passphrase retry instead of blocking maintenance; non-decryption failures still fail closed
+- [x] `passflick status` authenticates cached session keys against the current encrypted vault before claiming it is unlocked
+- [x] Picker startup clears a cached session key only on authentication failure; filesystem, header and schema errors preserve the key
 - [x] Synthetic filesystem regression tests passed in Rust CI
 - [ ] Confirm filesystem edge cases on target EndeavourOS/Hyprland
 - [x] Automated X11 keyboard/copy/close smoke tests under Xvfb
