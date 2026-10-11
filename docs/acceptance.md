@@ -1,6 +1,6 @@
 # Acceptance plan
 
-Passflick is pre-release until the following checks are run against its real Linux/Wayland target. Automated tests use fictional `example.test` credentials exclusively. CI has already validated the X11 search/Enter/Shift+Enter/Escape lifecycle under Xvfb and the first native Wayland frame plus a synthetic byte-exact clipboard round-trip under nested Weston. The Rust workflow's synthetic CLI recovery and multi-source import smoke test passed on [October 11, 2026 UTC](https://github.com/sguzman/passflick/actions/runs/38172053220), alongside 100 Rust tests, locked CLI checks, formatting, and strict Clippy. [Synthetic GUI CI](https://github.com/sguzman/passflick/actions/runs/38172053226) passed including the legacy clipboard-helper refusal case. The CI runner uses an older `wl-copy`, so its transport test does not validate the sensitive-data hint; that remains a target-host acceptance item. The checklist below contains the remaining target-host acceptance work. This document is an acceptance gate, not a feature changelog.
+Passflick is pre-release until the following checks are run against its real Linux/Wayland target. Automated tests use fictional `example.test` credentials exclusively. CI has already validated the X11 search/Enter/Shift+Enter/Escape lifecycle under Xvfb and the first native Wayland frame plus a synthetic byte-exact clipboard round-trip under nested Weston. The Rust workflow's synthetic CLI recovery and multi-source import smoke test passed on [October 11, 2026 UTC](https://github.com/sguzman/passflick/actions/runs/38173456750), alongside 103 Rust tests, locked CLI checks, formatting, and strict Clippy. [Synthetic GUI CI](https://github.com/sguzman/passflick/actions/runs/38173456746) passed including the legacy clipboard-helper refusal case. The CI runner uses an older `wl-copy`, so its transport test does not validate the sensitive-data hint; that remains a target-host acceptance item. The checklist below contains the remaining target-host acceptance work. This document is an acceptance gate, not a feature changelog.
 
 ## 1. Synthetic graphical picker
 
@@ -8,7 +8,7 @@ Use the project's existing `passflick demo` command. It does not access the real
 
 - The picker opens as a floating overlay without rearranging tiled windows. Large-vault row labels must remain stable while searching and scrolling; cached labels must be invalidated after unlocking a different projection. Synthetic Rust CI tests cache invalidation; real keyboard latency is still an acceptance gate.
 - A dangling symlink at the active vault filename must not trigger first-run vault creation. `passflick status` must reject symlink and directory vault filenames instead of reporting them as absent or usable.
-- The search field has keyboard focus on first frame and accepts typing immediately.
+- The search field has keyboard focus on first frame and accepts typing immediately. Owned search text must be zeroized on drop and scrubbed when loading a new vault projection; normalized search temporaries must also use zeroizing storage. This is not proof of total process-memory erasure.
 - Matching and Arrow Up/Down selection behave correctly for multiple entries.
 - Exact duplicates from Edge and Chrome appear as one item with combined provenance.
 - A conflicting Firefox value remains a distinct selectable item.
@@ -47,7 +47,7 @@ Use isolated temporary XDG data directories and synthetic CSV exports for all fo
 - Restore a compatible encrypted snapshot with `--confirm`; verify automatic pre-restore backup and that a corrupted snapshot leaves the live vault unchanged. Synthetic CLI CI now covers an unconfirmed restore, corrupted snapshot, hard-link alias, four-source restoration, and a byte-exact displaced-vault safety backup.
 - Corrupt or delete the primary vault in a synthetic environment, then run `passflick recover FILE --confirm`: require the backup passphrase, preserve existing raw ciphertext, reconstruct a private encrypted file, and require a fresh session unlock. An incorrect passphrase must leave existing primary bytes unchanged.
 - In CLI smoke automation, verify `recover` without `--confirm` is refused without changing the primary, and restoring a missing primary does not create a spurious displaced-primary safety snapshot.
-- Confirm no plaintext CSV remains in Passflick-controlled storage.
+- Confirm no plaintext CSV remains in Passflick-controlled storage. A regular CSV file exceeding 32 MiB, including a sparse file, must be rejected from metadata before a large read; deliberately streamed stdin remains capped at 32 MiB plus one detection byte.
 
 ## 3. Clipboard and input boundary
 
@@ -69,7 +69,7 @@ An import is not validated merely because a synthetic CSV with similar column na
 - CI formatting, locked tests, locked CLI smoke checks, and strict Clippy are green.
 - Synthetic target-host picker and vault workflows pass.
 - User-facing docs and source compatibility statements match reality.
-- No actual credentials, exports, local profile paths, or key material enter the public repository or CI artifacts. Verify that filenames containing terminal escape or bidirectional controls are rendered harmlessly in CLI status, backup notices, and error output; Rust CI exercises the display projection without changing file paths.
+- No actual credentials, exports, local profile paths, or key material enter the public repository or CI artifacts. Picker notices and graphical error messages containing path-derived control characters must render safely. Verify that filenames containing terminal escape or bidirectional controls are rendered harmlessly in CLI status, backup notices, and error output; Rust CI exercises the display projection without changing file paths.
 - No release is described as production-ready without security review and explicit target-host acceptance.
 
 A full independent security audit remains a separate goal even after the first usability acceptance.

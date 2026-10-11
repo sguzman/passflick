@@ -9,12 +9,12 @@
 - [x] Per-vault session-key/explicit-lock isolation for safe independent testing; report cleanup failures accurately after cached-key decryption errors
 - [x] Graceful one-shot GUI and interactive CLI fallback when session caching is unavailable
 - [x] Reject empty/mixed-provider import batches and NUL-containing clipboard values before committing; enforce the same empty-password, NUL, and missing-site checks at the transaction boundary for future source adapters
-- [x] Neutralize terminal escape, bidirectional controls, and additional invisible Unicode format marks in visible metadata, CLI filesystem path output, and top-level error text without modifying stored values or actual paths
+- [x] Neutralize terminal escape, bidirectional controls, and additional invisible Unicode format marks in visible metadata, CLI filesystem path output, top-level error text, and graphical error/notice display without modifying stored values or actual paths
 - [x] Hide URL userinfo, paths, query strings, and fragments in URL-only or HTTP(S)-title picker and CLI labels without modifying stored URLs or search identities; trim surrounding title whitespace for URL detection and number otherwise-indistinguishable credential variants; suppress scheme-only URL payloads (`data:`, `javascript:`, etc.) in URL-only displays while retaining ordinary host:port labels
-- [x] One-shot keyboard picker with Enter/Shift+Enter; cache visible row labels between egui redraws and clear cached labels after a vault projection change
+- [x] One-shot keyboard picker with Enter/Shift+Enter; cache visible row labels between egui redraws and clear cached labels after a vault projection change; zeroize owned search text on close or reload and case-folded search query temporaries
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Rust CI verified at [`17d9603`](https://github.com/sguzman/passflick/actions/runs/38172053220): 100 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy; [synthetic GUI checks](https://github.com/sguzman/passflick/actions/runs/38172053226) also passed
+- [x] Rust CI verified at [`3106faa`](https://github.com/sguzman/passflick/actions/runs/38173456750): 103 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy; [synthetic GUI checks](https://github.com/sguzman/passflick/actions/runs/38173456746) also passed
 - [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
 - [x] Synthetic ordinary restore smoke passed: explicit confirmation, corrupted and hard-linked snapshot rejection, four-source restoration, and encrypted pre-restore safety backup
 - [x] Synthetic CLI source refresh passed: Firefox survives Edge replacement; a large accidental Edge shrink is rejected without vault mutation, and `--allow-shrink` preserves Firefox
@@ -62,7 +62,7 @@
 - [x] CI passed synthetic regression tests for early-exiting legacy `wl-copy` and exact bytes with a supported helper; GUI smoke also verifies legacy helpers leave the picker open and existing clipboard untouched
 - [x] Reject named-pipe vault and lock paths without blocking; require private effective-user-owned active vault, lock, and managed backup paths while keeping external encrypted snapshots verifiable
 - [x] Reject named pipes and non-regular CSV import paths without blocking; preserve regular-file symlink imports and explicit stdin streaming
-- [x] Bound never-ending stdin streams at the 32 MiB import limit plus one byte before parsing
+- [x] Bound never-ending stdin streams at the 32 MiB import limit plus one byte before parsing; reject oversized regular CSV files from metadata before buffer allocation, including sparse files
 - [x] Verify backup creation rejects a symlink-substituted backup directory without changing the vault or redirected target
 - [ ] More security review: symlink races, keyring lifecycle, clipboard history, import edge cases
 - [x] Checksummed Linux x86_64 pre-release binary build workflow
