@@ -49,6 +49,14 @@ pub enum ImportError {
         existing: usize,
         incoming: usize,
     },
+    #[error(
+        "suspicious {provider} snapshot replacement: none of {incoming} imported accounts match the {existing} existing accounts; previous snapshot is unchanged; repeat with --allow-shrink if intentional"
+    )]
+    SuspiciousReplacement {
+        provider: Source,
+        existing: usize,
+        incoming: usize,
+    },
 }
 
 fn normalize_header(value: &str) -> String {
@@ -225,6 +233,42 @@ pub fn validate_snapshot_refresh(
     Ok(())
 }
 
+/// Chromium-family CSV headers do not prove whether the export came from
+/// Edge or Chrome. Catch an accidentally selected, completely unrelated file
+/// even when its row count is unchanged (the shrink guard cannot detect it).
+/// Compare only non-secret URL-or-title and username identity; do not copy or
+/// hash passwords into a second collection.
+fn validate_snapshot_overlap(
+    records: &[Credential],
+    source: Source,
+    incoming: &[Credential],
+    allow_shrink: bool,
+) -> Result<(), ImportError> {
+    let existing: HashSet<_> = records
+        .iter()
+        .filter(|record| record.source == source)
+        .map(|record| {
+            let (url_based, site, username, _) = record.identity_key();
+            (url_based, site, username)
+        })
+        .collect();
+    if allow_shrink || existing.len() < 10 {
+        return Ok(());
+    }
+    let overlaps = incoming.iter().any(|record| {
+        let (url_based, site, username, _) = record.identity_key();
+        existing.contains(&(url_based, site, username))
+    });
+    if !overlaps {
+        return Err(ImportError::SuspiciousReplacement {
+            provider: source,
+            existing: existing.len(),
+            incoming: incoming.len(),
+        });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 pub fn replace_snapshot(
     records: &mut Vec<Credential>,
@@ -282,6 +326,7 @@ pub fn commit_snapshot(
         }
     }
     validate_snapshot_refresh(vault.records(), source, incoming.len(), allow_shrink)?;
+    validate_snapshot_overlap(vault.records(), source, &incoming, allow_shrink)?;
     let previous_backup = if vault.records().iter().any(|record| record.source == source) {
         Some(backup::create(path)?)
     } else {
@@ -529,6 +574,74 @@ mod tests {
             validate_snapshot_refresh(eleven, Source::Edge, 5, false),
             Err(ImportError::SuspiciousShrink { .. })
         ));
+    }
+
+    #[test]
+    fn same_size_unrelated_source_export_cannot_erase_established_snapshot() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-unrelated-import-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let path = root.join("vault.passvault");
+        let passphrase = b"fictional-zero-overlap-passphrase";
+        let mut vault = Vault::create(&path, passphrase).unwrap();
+        let old: Vec<_> = (0..12)
+            .map(|index| {
+                Credential::new(
+                    Source::Edge,
+                    format!("Old {index}"),
+                    format!("https://old-{index}.example.test"),
+                    "fictional-user",
+                    "fictional-old-password",
+                    1,
+                )
+            })
+            .collect();
+        commit_snapshot(&path, &mut vault, Source::Edge, old, false).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let other: Vec<_> = (0..12)
+            .map(|index| {
+                Credential::new(
+                    Source::Edge,
+                    format!("Wrong source {index}"),
+                    format!("https://unrelated-{index}.example.test"),
+                    "fictional-user",
+                    "fictional-other-password",
+                    2,
+                )
+            })
+            .collect();
+        assert!(matches!(
+            commit_snapshot(&path, &mut vault, Source::Edge, other, false),
+            Err(ImportError::SuspiciousReplacement { .. })
+        ));
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(vault.records().len(), 12);
+        assert!(!root.join("backups").exists());
+
+        let other: Vec<_> = (0..12)
+            .map(|index| {
+                Credential::new(
+                    Source::Edge,
+                    format!("Intentional {index}"),
+                    format!("https://unrelated-{index}.example.test"),
+                    "fictional-user",
+                    "fictional-other-password",
+                    2,
+                )
+            })
+            .collect();
+        let result = commit_snapshot(&path, &mut vault, Source::Edge, other, true).unwrap();
+        let snapshot = result.previous_backup.unwrap();
+        assert_eq!(std::fs::read(snapshot).unwrap(), before);
+        let reopened = Vault::unlock(&path, passphrase).unwrap();
+        assert_eq!(reopened.records().len(), 12);
+        assert!(reopened.records().iter().all(|record| {
+            record.url.starts_with("https://unrelated-")
+        }));
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]
