@@ -1,6 +1,6 @@
 # Acceptance plan
 
-Passflick is pre-release until the following checks are run against its real Linux/Wayland target. Automated tests use fictional `example.test` credentials exclusively. CI has already validated the X11 search/Enter/Shift+Enter/Escape lifecycle under Xvfb and the first native Wayland frame plus a synthetic byte-exact clipboard round-trip under nested Weston. The Rust workflow's synthetic CLI recovery and multi-source import smoke test passed on [October 11, 2026 UTC](https://github.com/sguzman/passflick/actions/runs/38158313234), alongside 81 Rust tests, locked CLI checks, formatting, and strict Clippy. The CI runner uses an older `wl-copy`, so its transport test does not validate the sensitive-data hint; that remains a target-host acceptance item. The checklist below contains the remaining target-host acceptance work. This document is an acceptance gate, not a feature changelog.
+Passflick is pre-release until the following checks are run against its real Linux/Wayland target. Automated tests use fictional `example.test` credentials exclusively. CI has already validated the X11 search/Enter/Shift+Enter/Escape lifecycle under Xvfb and the first native Wayland frame plus a synthetic byte-exact clipboard round-trip under nested Weston. The Rust workflow's synthetic CLI recovery and multi-source import smoke test passed on [October 11, 2026 UTC](https://github.com/sguzman/passflick/actions/runs/38158698568), alongside 82 Rust tests, locked CLI checks, formatting, and strict Clippy. The CI runner uses an older `wl-copy`, so its transport test does not validate the sensitive-data hint; that remains a target-host acceptance item. The checklist below contains the remaining target-host acceptance work. This document is an acceptance gate, not a feature changelog.
 
 ## 1. Synthetic graphical picker
 
@@ -51,7 +51,7 @@ Use isolated temporary XDG data directories and synthetic CSV exports for all fo
 
 ## 3. Clipboard and input boundary
 
-- Verify literal spaces, Unicode, quoted CSV values, embedded newlines, and trailing newlines survive import and copy.
+- Verify literal spaces, Unicode, quoted CSV values, embedded newlines, and trailing newlines survive import and copy. Rust CI verifies exact Unicode and whitespace after parse, encrypted save, and vault reopen; an actual Wayland clipboard handoff is still a target-host check.
 - Confirm `wl-clipboard` 2.3+ and the `wl-copy --sensitive` hint; old versions must give an explicit diagnostic even when the helper exits before stdin can be fully written, without writing unmarked secrets. Test exact whitespace and trailing newline preservation using a synthetic supported helper, and evaluate the host clipboard manager's actual history handling.
 - Check the tool never prints passwords or vault keys in ordinary output, startup traces, crash diagnostics, or screenshots.
 - Imported site names and usernames containing terminal escape sequences or Unicode direction-control characters must be displayed harmlessly; Shift+Enter must still copy the original username exactly.

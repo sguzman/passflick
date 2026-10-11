@@ -13,7 +13,7 @@
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Rust CI verified at [`8ee4de2`](https://github.com/sguzman/passflick/actions/runs/38158313234): 81 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy
+- [x] Rust CI verified at [`06e3652`](https://github.com/sguzman/passflick/actions/runs/38158698568): 82 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy
 - [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
 - [x] Synthetic ordinary restore smoke passed: explicit confirmation, corrupted and hard-linked snapshot rejection, four-source restoration, and encrypted pre-restore safety backup
 - [x] Synthetic CLI source refresh passed: Firefox survives Edge replacement; a large accidental Edge shrink is rejected without vault mutation, and `--allow-shrink` preserves Firefox
@@ -49,6 +49,7 @@
 - [x] Provider-signature and duplicate-header checks for CSV import snapshots
 - [x] Reject ambiguous semantic CSV header aliases and missing username headers before importing a source snapshot
 - [x] Synthetic complete-format Firefox and Apple exports; Apple OTPAuth and Notes are not persisted
+- [x] Lossless encrypted import round trip preserves Unicode usernames, quoted site titles, and multiline passwords with leading/trailing whitespace
 - [x] Detect Apple Title + OTPAuth exports without Notes, rejecting wrong-source imports
 - [x] Require sensitive clipboard support instead of silently copying password values into unmarked history
 - [x] CI passed synthetic regression tests for early-exiting legacy `wl-copy` and exact bytes with a supported helper
