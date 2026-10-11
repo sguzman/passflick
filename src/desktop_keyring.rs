@@ -12,6 +12,7 @@ use crate::{paths, vault::VaultKey};
 const APP: &str = "passflick";
 const KIND: &str = "vault-key-v1";
 const LABEL: &str = "Passflick vault key";
+#[cfg(test)]
 const KEY_LEN: usize = 32;
 
 pub fn load(vault_path: &Path) -> Result<Option<VaultKey>, DesktopKeyringError> {
