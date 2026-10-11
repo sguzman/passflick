@@ -10,6 +10,7 @@
 - [x] Graceful one-shot GUI and interactive CLI fallback when session caching is unavailable
 - [x] Reject empty/mixed-provider import batches and NUL-containing clipboard values before committing; enforce the same empty-password, NUL, and missing-site checks at the transaction boundary for future source adapters
 - [x] Neutralize terminal escape, bidirectional controls, and additional invisible Unicode format marks in visible metadata without changing copied usernames
+- [x] Hide URL userinfo, paths, query strings, and fragments in URL-only or HTTP(S)-title picker and CLI labels without modifying stored URLs or search identities
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
