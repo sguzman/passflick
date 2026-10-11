@@ -186,7 +186,10 @@ mod tests {
             1,
         );
         let visible = record.display_label();
-        assert!(visible.contains("example\u{fffd}\u{fffd}\u{fffd}\u{fffd}\u{fffd}\u{fffd}\u{fffd}.test"));
+        assert!(
+            visible
+                .contains("example\u{fffd}\u{fffd}\u{fffd}\u{fffd}\u{fffd}\u{fffd}\u{fffd}.test")
+        );
         assert!(!visible.contains(hidden));
         assert_eq!(record.label, label);
         assert_eq!(record.username, username);
