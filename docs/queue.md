@@ -13,12 +13,13 @@
 - [x] One-shot keyboard picker with Enter/Shift+Enter
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Rust CI verified at [`37bffdc`](https://github.com/sguzman/passflick/actions/runs/38100223185): 78 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy
+- [x] Rust CI verified at [`df972c2`](https://github.com/sguzman/passflick/actions/runs/38102388987): 80 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy
 - [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
 - [x] Synthetic ordinary restore smoke passed: explicit confirmation, corrupted and hard-linked snapshot rejection, four-source restoration, and encrypted pre-restore safety backup
 - [x] Synthetic CLI source refresh passed: Firefox survives Edge replacement; a large accidental Edge shrink is rejected without vault mutation, and `--allow-shrink` preserves Firefox
 - [x] Four-provider synthetic CLI ingestion passed: Edge, Chrome, Firefox, and Apple coexist; Apple exports mislabeled as Edge are rejected without mutation
 - [x] Synthetic concurrent source imports passed: two writers race, serialize using the persistent write lock, and preserve both providers after reopening
+- [x] Simultaneous initial vault creations never overwrite one another; Argon2 derives its key directly into zeroizing storage
 - [x] Synthetic filesystem regression tests passed in Rust CI
 - [ ] Confirm filesystem edge cases on target EndeavourOS/Hyprland
 - [x] Automated X11 keyboard/copy/close smoke tests under Xvfb
@@ -47,6 +48,7 @@
 - [x] Provider-signature and duplicate-header checks for CSV import snapshots
 - [x] Reject ambiguous semantic CSV header aliases and missing username headers before importing a source snapshot
 - [x] Synthetic complete-format Firefox and Apple exports; Apple OTPAuth and Notes are not persisted
+- [x] Detect Apple Title + OTPAuth exports without Notes, rejecting wrong-source imports
 - [x] Require sensitive clipboard support instead of silently copying password values into unmarked history
 - [x] CI passed synthetic regression tests for early-exiting legacy `wl-copy` and exact bytes with a supported helper
 - [x] Reject named-pipe vault and lock paths without blocking; require private effective-user-owned active vault, lock, and managed backup paths while keeping external encrypted snapshots verifiable

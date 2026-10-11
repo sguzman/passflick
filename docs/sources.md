@@ -27,7 +27,7 @@ The parser includes fictional regression cases for the documented provider layou
 
 - Edge and Chrome/Chromium commonly use `name,url,username,password` or another header set containing `url,username,password`. The two cannot always be distinguished from header text alone.
 - Firefox exports `url,username,password,httpRealm,formActionOrigin,guid,timeCreated,timeLastUsed,timePasswordChanged`. Its realm, GUID, and timestamps are not copied into the Passflick record.
-- Apple/Safari exports `Title,URL,Username,Password,Notes,OTPAuth`. Passflick takes the password identity only: **Notes and OTPAuth are intentionally ignored**, so TOTP seeds are not silently imported into the password projection.
+- Apple/Safari exports commonly contain `Title,URL,Username,Password,Notes,OTPAuth`. Passflick also recognizes `Title` + `OTPAuth` as Apple-specific when `Notes` is absent, preventing a mislabeled import from replacing another source. It takes the password identity only: **Notes and OTPAuth are intentionally ignored**, so TOTP seeds are not silently imported into the password projection.
 
 References: [Google Password Manager CSV format](https://support.google.com/chrome/answer/13068232?hl=en-GB), [Firefox LoginExport implementation](https://searchfox.org/mozilla-central/source/toolkit/components/passwordmgr/LoginExport.sys.mjs), [Apple Safari password-export columns](https://developer.apple.com/documentation/SafariServices/importing-data-exported-from-safari).
 
