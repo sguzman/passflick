@@ -19,7 +19,7 @@ All four are exposed through `passflick import SOURCE FILE`, with the aliases `e
 4. Entries with the same website, username, and password may be grouped for display. Original records remain intact.
 5. Keep source and import timestamp. A missing or old snapshot is not represented as live browser state.
 
-Source import updates are serialized through a private lock file, preventing concurrent source refreshes from accidentally overwriting each other. Plaintext CSV files are a transient exchange format and should be deleted after their import is verified. The stdin interface (`passflick import edge -`) permits trusted exporters to stream a snapshot directly.
+Source import updates are serialized through a private lock file, preventing concurrent source refreshes from accidentally overwriting each other. Plaintext CSV files are a transient exchange format and should be deleted after their import is verified. The stdin interface (`passflick import edge -`) permits trusted exporters to stream a snapshot directly. Explicit CSV file paths must resolve to regular files; named pipes and other special files are rejected without blocking. A symlink pointing to an ordinary export file remains supported.
 
 ## Documented CSV layouts
 
