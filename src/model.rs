@@ -180,7 +180,7 @@ impl Credential {
         &self.password
     }
     pub fn title(&self) -> &str {
-        if self.label.is_empty() {
+        if self.label.trim().is_empty() {
             &self.url
         } else {
             &self.label
@@ -217,7 +217,11 @@ impl Credential {
     /// Key borrows the original secret rather than creating another plaintext
     /// password allocation. A missing URL uses a labelled-site identity instead.
     pub fn identity_key(&self) -> (bool, &str, &str, &str) {
-        if self.url.is_empty() {
+        // A future source adapter may preserve a whitespace-only URL rather
+        // than normalizing it during import. It is not a real site identity:
+        // use the distinct provider titles instead of folding unrelated
+        // accounts with the same username and secret.
+        if self.url.trim().is_empty() {
             (false, &self.label, &self.username, self.password())
         } else {
             (true, &self.url, &self.username, self.password())
@@ -231,6 +235,46 @@ impl Credential {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn whitespace_only_urls_use_distinct_site_titles_for_identity() {
+        let first = Credential::new(
+            Source::Edge,
+            "One example site",
+            "   ",
+            "shared-user",
+            "shared-synthetic-secret",
+            1,
+        );
+        let second = Credential::new(
+            Source::Firefox,
+            "Another example site",
+            "   ",
+            "shared-user",
+            "shared-synthetic-secret",
+            1,
+        );
+        assert_ne!(first.identity_key(), second.identity_key());
+        assert!(!first.same_identity_and_secret(&second));
+        assert_eq!(first.url, "   ");
+        assert_eq!(second.url, "   ");
+        assert_eq!(first.title(), "One example site");
+    }
+
+    #[test]
+    fn whitespace_only_titles_search_using_the_real_url() {
+        let record = Credential::new(
+            Source::Chrome,
+            "  ",
+            "https://example.test/login",
+            "synthetic-user",
+            "synthetic-secret",
+            1,
+        );
+        assert_eq!(record.title(), "https://example.test/login");
+        assert_eq!(record.display_title(), "example.test");
+        assert_eq!(record.label, "  ");
+    }
+
     #[test]
     fn password_preserves_unicode_and_spaces() {
         let c = Credential::new(
