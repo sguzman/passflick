@@ -359,7 +359,11 @@ mod tests {
         assert_eq!(result.count, 1);
         assert!(result.previous_backup.is_none());
         let ciphertext = std::fs::read(&path).unwrap();
-        assert!(!ciphertext.windows(secret.len()).any(|part| part == secret.as_bytes()));
+        assert!(
+            !ciphertext
+                .windows(secret.len())
+                .any(|part| part == secret.as_bytes())
+        );
 
         drop(vault);
         let reopened = Vault::unlock(&path, passphrase).unwrap();
