@@ -806,7 +806,10 @@ mod tests {
             .open(&path)
             .unwrap();
         file.set_len(MAX_VAULT_BYTES + 1).unwrap();
-        assert!(matches!(read_private_vault(&path), Err(VaultError::TooLarge)));
+        assert!(matches!(
+            read_private_vault(&path),
+            Err(VaultError::TooLarge)
+        ));
         drop(file);
         fs::remove_dir_all(&root).unwrap();
     }
