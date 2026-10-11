@@ -138,10 +138,11 @@ impl Credential {
     /// session or password-reset tokens in URLs; full URLs are kept unchanged
     /// in the encrypted vault for identity and search.
     pub fn display_title(&self) -> String {
-        let visible = if self.label.is_empty() {
+        let stripped = self.label.trim();
+        let visible = if stripped.is_empty() {
             public_site_preview(&self.url)
-        } else if is_web_url(&self.label) {
-            public_site_preview(&self.label)
+        } else if is_web_url(stripped) {
+            public_site_preview(stripped)
         } else {
             &self.label
         };
@@ -274,6 +275,19 @@ mod tests {
             1,
         );
         assert_eq!(mixed_case.display_title(), "example.test");
+        let padded = Credential::new(
+            Source::Apple,
+            "  HTTPS://bob:fictional-secret@example.test/token?private=value  ",
+            "",
+            "bob",
+            "fictional-password",
+            1,
+        );
+        assert_eq!(padded.display_title(), "example.test");
+        assert_eq!(
+            padded.label,
+            "  HTTPS://bob:fictional-secret@example.test/token?private=value  "
+        );
         assert_eq!(
             titled.title(),
             "https://bob:fictional-secret@example.test/token?private=value"

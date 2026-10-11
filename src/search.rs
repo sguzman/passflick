@@ -66,7 +66,37 @@ pub fn display_label_with_sources(records: &[Credential], selected: usize) -> St
     if has_secret_conflict(records, selected) {
         label.push_str("  ·  Conflict");
     }
+    if let Some((ordinal, total)) = visible_variant_position(records, selected) {
+        label.push_str(&format!("  ·  Variant {ordinal}/{total}"));
+    }
     label
+}
+
+/// Different URL paths or passwords can result in the same safe title and
+/// username. Mark distinct credentials without exposing URL components.
+/// Identical records across providers share one ordinal even if ranking
+/// chooses a later stored record.
+fn visible_variant_position(records: &[Credential], selected: usize) -> Option<(usize, usize)> {
+    let target = &records[selected];
+    let visible_title = target.display_title();
+    let target_key = target.identity_key();
+    let mut seen = HashSet::new();
+    let mut total = 0;
+    let mut ordinal = 0;
+
+    for record in records {
+        if record.username != target.username || record.display_title() != visible_title {
+            continue;
+        }
+        let key = record.identity_key();
+        if seen.insert(key) {
+            total += 1;
+            if key == target_key {
+                ordinal = total;
+            }
+        }
+    }
+    (total > 1).then_some((ordinal, total))
 }
 
 /// Detect competing passwords for one URL-or-title and username identity.
@@ -183,6 +213,85 @@ mod tests {
         assert_eq!(records[0].url, url);
         // Search is intentionally against the original URL identity.
         assert_eq!(rank_credentials(&records, "reset-token"), vec![0]);
+    }
+
+    #[test]
+    fn redacted_url_collisions_get_distinct_non_secret_variant_labels() {
+        let records = vec![
+            Credential::new(
+                Source::Edge,
+                "",
+                "https://example.test/account/first?token=private-a",
+                "shared-user",
+                "fictional-first-password",
+                1,
+            ),
+            Credential::new(
+                Source::Edge,
+                "",
+                "https://example.test/account/second?token=private-b",
+                "shared-user",
+                "fictional-second-password",
+                1,
+            ),
+        ];
+        let first = display_label_with_sources(&records, 0);
+        let second = display_label_with_sources(&records, 1);
+        assert!(first.contains("Variant 1/2"));
+        assert!(second.contains("Variant 2/2"));
+        assert_ne!(first, second);
+        for label in [&first, &second] {
+            assert!(label.contains("example.test"));
+            for private in [
+                "account",
+                "private-a",
+                "private-b",
+                "fictional-first-password",
+                "fictional-second-password",
+            ] {
+                assert!(!label.contains(private));
+            }
+        }
+        assert_eq!(rank_credentials(&records, "first"), vec![0]);
+        assert_eq!(rank_credentials(&records, "second"), vec![1]);
+    }
+
+    #[test]
+    fn cross_source_exact_duplicate_does_not_create_extra_variant() {
+        let records = vec![
+            Credential::new(
+                Source::Firefox,
+                "Example",
+                "https://example.test",
+                "me",
+                "shared",
+                1,
+            ),
+            Credential::new(
+                Source::Edge,
+                "Example",
+                "https://example.test",
+                "me",
+                "shared",
+                1,
+            ),
+            Credential::new(
+                Source::Edge,
+                "Example",
+                "https://example.test",
+                "me",
+                "different",
+                1,
+            ),
+        ];
+        assert_eq!(rank_credentials(&records, ""), vec![1, 2]);
+        assert!(display_label_with_sources(&records, 1).contains("Variant 1/2"));
+        assert!(display_label_with_sources(&records, 2).contains("Variant 2/2"));
+        let unrelated = vec![
+            Credential::new(Source::Edge, "Example", "https://example.test", "one", "first", 1),
+            Credential::new(Source::Edge, "Example", "https://example.test", "two", "second", 1),
+        ];
+        assert!(!display_label_with_sources(&unrelated, 0).contains("Variant"));
     }
 
     #[test]
