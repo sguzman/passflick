@@ -55,6 +55,7 @@ Use isolated temporary XDG data directories and synthetic CSV exports for all fo
 - Confirm `wl-clipboard` 2.3+ and the `wl-copy --sensitive` hint; old versions must give an explicit diagnostic even when the helper exits before stdin can be fully written, without writing unmarked secrets. Test exact whitespace and trailing newline preservation using a synthetic supported helper, and evaluate the host clipboard manager's actual history handling.
 - Check the tool never prints passwords or vault keys in ordinary output, startup traces, crash diagnostics, or screenshots.
 - Imported site names and usernames containing terminal escape sequences, Unicode direction-control characters, or invisible formatting marks must be displayed harmlessly; Shift+Enter must still copy the original username exactly.
+- URL-only credentials and URL-shaped HTTP(S) titles must display only the site authority, omitting userinfo, paths, query strings, and fragments, including mixed-case URL schemes. The exact URL must remain stored and searchable; validate a path-specific search when two logins share the same host and username.
 - Do not record or upload clipboard contents from production sessions.
 
 ## 4. Provider export compatibility
