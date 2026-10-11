@@ -75,7 +75,7 @@ some-trusted-export-command | passflick import edge -
 
 The `-` argument means stdin. Do not send credentials from unknown commands or untrusted exporters. **All password-manager CSV exports are plaintext**; move them out of shared/synced directories and remove them after verified import. Ordinary deletion cannot guarantee forensic erasure from every disk or backup.
 
-Check local projection freshness without revealing passwords:
+Check local projection freshness without revealing passwords. The picker also shows a compact count of imported sources and marks snapshots whose most recent import is 30 or more days old. Hover the status line to see each source's import age; these are **local CSV snapshot ages, not live browser synchronization**.
 
 ```sh
 passflick sources
