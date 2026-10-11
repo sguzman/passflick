@@ -10,8 +10,8 @@ mod paths;
 mod process_security;
 mod search;
 mod session;
-mod startup;
 mod source_status;
+mod startup;
 mod vault;
 mod write_lock;
 
