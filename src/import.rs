@@ -1,6 +1,7 @@
 use crate::model::{Credential, Source};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use zeroize::Zeroizing;
 
 use crate::backup;
 use crate::vault::{Vault, VaultError};
@@ -152,7 +153,12 @@ pub fn parse_csv(
     let mut result: Vec<Credential> = Vec::new();
     // Index only the non-secret identity fields. Never duplicate plaintext passwords
     // into the deduplication index, and avoid quadratic scanning of entire exports.
-    let mut seen: HashMap<(String, String, String), Vec<usize>> = HashMap::new();
+    // These index keys duplicate potentially sensitive site titles, URLs and
+    // usernames. Wipe the owned copies when parsing succeeds or aborts.
+    let mut seen: HashMap<
+        (Zeroizing<String>, Zeroizing<String>, Zeroizing<String>),
+        Vec<usize>,
+    > = HashMap::new();
     for (index, row) in reader.records().enumerate() {
         let row_number = index + 2; // Header is the first line for ordinary CSV exports.
         let row = row?;
@@ -186,7 +192,11 @@ pub fn parse_csv(
             });
         }
 
-        let identity = (site_name.to_owned(), site_url.to_owned(), login.to_owned());
+        let identity = (
+            Zeroizing::new(site_name.to_owned()),
+            Zeroizing::new(site_url.to_owned()),
+            Zeroizing::new(login.to_owned()),
+        );
         if seen.get(&identity).is_some_and(|indices| {
             indices
                 .iter()
@@ -376,6 +386,16 @@ pub fn commit_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn duplicate_index_preserves_unicode_account_distinctions() {
+        let csv = b"name,url,username,password\nExample,https://example.test,alice,fictional-a\nExample,https://example.test,alic\xc3\xa9,fictional-a\nExample,https://example.test,alice,fictional-a\nExample,https://example.test,alic\xc3\xa9,fictional-b\n";
+        let records = parse_csv(csv, Source::Edge, 1).unwrap();
+        assert_eq!(records.len(), 3);
+        assert_eq!(records[0].username, "alice");
+        assert_eq!(records[1].username, "alicé");
+        assert_eq!(records[2].password(), "fictional-b");
+    }
 
     #[test]
     fn edge_csv_preserves_password_whitespace() {
