@@ -13,7 +13,7 @@ All four are exposed through `passflick import SOURCE FILE`, with the aliases `e
 
 ## Snapshot rules
 
-1. Validate every row before replacing anything in the encrypted vault. Incomplete rows, missing username headers (while allowing blank username values), empty exports, duplicate normalized or semantically ambiguous column names, and recognizable provider mismatches fail closed. Unrecognized **extra** columns are ignored rather than stored. A suspiciously large source shrink also requires explicit `--allow-shrink` confirmation.
+1. Validate every row before replacing anything in the encrypted vault. Incomplete rows, missing username headers (while allowing blank username values), empty exports, duplicate normalized or semantically ambiguous column names, and recognizable provider mismatches fail closed. Unrecognized **extra** columns are ignored rather than stored. A suspiciously large source shrink requires explicit `--allow-shrink` confirmation. For an established provider with at least ten distinct account identities, a replacement with no matching site/username identity is also refused, even if both CSVs have the same row count. Use `--allow-shrink` to authorize an intentional full replacement, which first creates an encrypted backup. Partial overlap does not guarantee correct provider attribution.
 2. Replacing one source's snapshot cannot remove records from any other source.
 3. Credentials with different secret values remain separate entries even when they have the same website and username.
 4. Entries with the same website, username, and password may be grouped for display. Original records remain intact.
@@ -23,7 +23,7 @@ Source import updates are serialized through a private lock file, preventing con
 
 ## Documented CSV layouts
 
-The parser includes fictional regression cases for the documented provider layouts. An [end-to-end CI run](https://github.com/sguzman/passflick/actions/runs/37974510558) also verified four concurrent provider projections, a rejected mislabeled Apple export, and source-specific shrink protection. These synthetic tests are not substitutes for checking a recent, authorized export from each real browser.
+The parser includes fictional regression cases for the documented provider layouts. A [verified Rust CI run](https://github.com/sguzman/passflick/actions/runs/38165333018) also checked four-provider CLI projections, a rejected mislabeled Apple export, source-specific shrink protection, and the byte-exact refusal of an unrelated same-size snapshot. These synthetic tests are not substitutes for checking a recent, authorized export from each real browser.
 
 - Edge and Chrome/Chromium commonly use `name,url,username,password` or another header set containing `url,username,password`. The two cannot always be distinguished from header text alone.
 - Firefox exports `url,username,password,httpRealm,formActionOrigin,guid,timeCreated,timeLastUsed,timePasswordChanged`. Its realm, GUID, and timestamps are not copied into the Passflick record.
