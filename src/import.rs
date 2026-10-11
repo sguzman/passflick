@@ -638,9 +638,12 @@ mod tests {
         assert_eq!(std::fs::read(snapshot).unwrap(), before);
         let reopened = Vault::unlock(&path, passphrase).unwrap();
         assert_eq!(reopened.records().len(), 12);
-        assert!(reopened.records().iter().all(|record| {
-            record.url.starts_with("https://unrelated-")
-        }));
+        assert!(
+            reopened
+                .records()
+                .iter()
+                .all(|record| { record.url.starts_with("https://unrelated-") })
+        );
         std::fs::remove_dir_all(&root).unwrap();
     }
 
