@@ -1,7 +1,7 @@
 use crate::model::{Credential, Source};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use zeroize::Zeroizing;
+use zeroize::Zeroize;
 
 use crate::backup;
 use crate::vault::{Vault, VaultError};
@@ -58,6 +58,24 @@ pub enum ImportError {
         existing: usize,
         incoming: usize,
     },
+}
+
+/// Duplicate-detection keys repeat non-secret identifiers which may still
+/// contain confidential URLs or usernames. Keep exact Hash/Eq behavior while
+/// wiping each copy when the import index is released or parsing aborts.
+#[derive(Eq, Hash, PartialEq)]
+struct ImportIdentity {
+    site_name: String,
+    site_url: String,
+    username: String,
+}
+
+impl Drop for ImportIdentity {
+    fn drop(&mut self) {
+        self.site_name.zeroize();
+        self.site_url.zeroize();
+        self.username.zeroize();
+    }
 }
 
 fn normalize_header(value: &str) -> String {
@@ -155,8 +173,7 @@ pub fn parse_csv(
     // into the deduplication index, and avoid quadratic scanning of entire exports.
     // These index keys duplicate potentially sensitive site titles, URLs and
     // usernames. Wipe the owned copies when parsing succeeds or aborts.
-    let mut seen: HashMap<(Zeroizing<String>, Zeroizing<String>, Zeroizing<String>), Vec<usize>> =
-        HashMap::new();
+    let mut seen: HashMap<ImportIdentity, Vec<usize>> = HashMap::new();
     for (index, row) in reader.records().enumerate() {
         let row_number = index + 2; // Header is the first line for ordinary CSV exports.
         let row = row?;
@@ -190,11 +207,11 @@ pub fn parse_csv(
             });
         }
 
-        let identity = (
-            Zeroizing::new(site_name.to_owned()),
-            Zeroizing::new(site_url.to_owned()),
-            Zeroizing::new(login.to_owned()),
-        );
+        let identity = ImportIdentity {
+            site_name: site_name.to_owned(),
+            site_url: site_url.to_owned(),
+            username: login.to_owned(),
+        };
         if seen.get(&identity).is_some_and(|indices| {
             indices
                 .iter()
