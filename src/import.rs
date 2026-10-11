@@ -687,7 +687,10 @@ mod tests {
 
         let reopened = Vault::unlock(&path, passphrase).unwrap();
         assert_eq!(reopened.records().len(), 2);
-        assert_eq!(crate::search::rank_credentials(reopened.records(), "").len(), 2);
+        assert_eq!(
+            crate::search::rank_credentials(reopened.records(), "").len(),
+            2
+        );
         assert_eq!(
             crate::search::rank_credentials(reopened.records(), "Second fictional"),
             vec![1]
