@@ -526,7 +526,10 @@ fn restore_encrypted_vault(snapshot: &Path) -> Result<(), Box<dyn Error>> {
     let (_, mut live) = open_unlocked_vault()?;
     let saved_current = backup::restore_into(&path, snapshot, &mut live)?;
     println!("Restored verified encrypted snapshot.");
-    println!("Previous vault preserved at {}", safe_cli_path(&saved_current));
+    println!(
+        "Previous vault preserved at {}",
+        safe_cli_path(&saved_current)
+    );
     Ok(())
 }
 
@@ -538,7 +541,10 @@ fn backup_encrypted_vault() -> Result<(), Box<dyn Error>> {
     // Demand a successful decrypt before preserving a vault snapshot.
     let (_, _) = open_unlocked_vault()?;
     let destination = backup::create(&path)?;
-    println!("Created encrypted backup at {}", safe_cli_path(&destination));
+    println!(
+        "Created encrypted backup at {}",
+        safe_cli_path(&destination)
+    );
     Ok(())
 }
 
