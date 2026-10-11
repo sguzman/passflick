@@ -6,15 +6,15 @@
 - [x] Multi-source credential schema and CSV parsing; future direct source adapters use site titles rather than whitespace-only URLs as identities, preserving distinct accounts after encrypted import and reopen
 - [x] Encrypted vault, masked in-window unlock, and session-key caching adapted from OTPick
 - [x] Standalone first-run vault setup in the graphical picker
-- [x] Per-vault session-key/explicit-lock isolation for safe independent testing; report cleanup failures accurately after cached-key decryption errors
+- [x] Per-vault session-key/explicit-lock isolation for safe independent testing; report cleanup failures accurately after cached-key decryption errors; desktop-keyring enrollment respects manual locks, retries stale keys with a passphrase, and preserves session state if Secret Service storage fails
 - [x] Graceful one-shot GUI and interactive CLI fallback when session caching is unavailable
 - [x] Reject empty/mixed-provider import batches and NUL-containing clipboard values before committing; enforce the same empty-password, NUL, and missing-site checks at the transaction boundary for future source adapters
 - [x] Neutralize terminal escape, bidirectional controls, and additional invisible Unicode format marks in visible metadata, CLI filesystem path output, top-level error text, and graphical error/notice display without modifying stored values or actual paths
 - [x] Hide URL userinfo, paths, query strings, and fragments in URL-only or HTTP(S)-title picker and CLI labels without modifying stored URLs or search identities; trim surrounding title whitespace for URL detection and number otherwise-indistinguishable credential variants; suppress scheme-only URL payloads (`data:`, `javascript:`, etc.) in URL-only and URL-shaped-title displays, retain ordinary host:port labels and colon-separated titles
-- [x] One-shot keyboard picker with Enter/Shift+Enter; cache visible row labels between egui redraws and clear cached labels after a vault projection change; zeroize owned search text on close or reload, cached picker row labels on drop, and case-folded search query, indexed field, and sort-key temporaries
+- [x] One-shot keyboard picker with Enter/Shift+Enter; cache visible row labels between egui redraws and clear cached labels after a vault projection change; zeroize owned search text on close or reload, cached picker row labels on drop, and case-folded search query, indexed field, and sort-key temporaries; normalize one zeroizing title sort key per matched search result instead of per comparator call
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Rust CI verified at [`32c3113`](https://github.com/sguzman/passflick/actions/runs/38178852033): 107 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy; [synthetic GUI checks](https://github.com/sguzman/passflick/actions/runs/38178851992) also passed
+- [x] Rust CI verified at [`fbfde30`](https://github.com/sguzman/passflick/actions/runs/38180798941): 110 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy; [synthetic GUI checks](https://github.com/sguzman/passflick/actions/runs/38180798931) also passed
 - [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
 - [x] Synthetic ordinary restore smoke passed: explicit confirmation, corrupted and hard-linked snapshot rejection, four-source restoration, and encrypted pre-restore safety backup
 - [x] Synthetic CLI source refresh passed: Firefox survives Edge replacement; a large accidental Edge shrink is rejected without vault mutation, and `--allow-shrink` preserves Firefox
@@ -52,7 +52,7 @@
 - [x] Failed source refresh restores original in-memory projection without cloning secrets
 - [x] Automatic encrypted pre-refresh backups for existing credential sources
 - [x] Atomically published backups with no overwrite and safe temporary-file cleanup
-- [x] Provider-signature and duplicate-header checks for CSV import snapshots
+- [x] Provider-signature and duplicate-header checks for CSV import snapshots; deduplication index zeroizes its site-title, URL, and username copies on release or parsing failure while preserving Unicode and password-variant distinctions
 - [x] Reject ambiguous semantic CSV header aliases and missing username headers before importing a source snapshot
 - [x] Synthetic complete-format Firefox and Apple exports; Apple OTPAuth and Notes are not persisted
 - [x] Lossless encrypted import round trip preserves Unicode usernames, quoted site titles, and multiline passwords with leading/trailing whitespace
