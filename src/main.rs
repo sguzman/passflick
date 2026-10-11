@@ -17,6 +17,7 @@ mod write_lock;
 use std::error::Error;
 use std::fs;
 use std::io::{self, Read};
+use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -395,6 +396,23 @@ fn read_import_bytes(reader: impl Read) -> io::Result<Zeroizing<Vec<u8>>> {
     Ok(input)
 }
 
+/// Explicit FILE imports require a regular file. O_NONBLOCK prevents a
+/// substituted FIFO from holding the process open waiting for a writer.
+/// Deliberate streams continue to use import SOURCE - (standard input).
+fn read_import_file(path: &Path) -> io::Result<Zeroizing<Vec<u8>>> {
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NONBLOCK)
+        .open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "CSV export path must be a regular file; use - to read stdin",
+        ));
+    }
+    read_import_bytes(file)
+}
+
 fn discover_browser_profiles() {
     let candidates = discovery::discover();
     if candidates.is_empty() {
@@ -528,7 +546,7 @@ fn import_csv(source: Source, path: &Path, allow_shrink: bool) -> Result<(), Box
     let bytes = if path == Path::new("-") {
         read_import_bytes(io::stdin().lock())?
     } else {
-        read_import_bytes(fs::File::open(path)?)?
+        read_import_file(path)?
     };
     let time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let imported = r#import::parse_csv(&bytes, source, time)?;
@@ -616,6 +634,43 @@ fn print_help() {
 #[cfg(test)]
 mod demo_tests {
     use super::*;
+
+    #[test]
+    fn explicit_csv_path_rejects_fifo_without_waiting_for_writer() {
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::symlink;
+
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-import-file-kind-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&root).unwrap();
+        let fifo = root.join("no-writer.csv");
+        let name = std::ffi::CString::new(fifo.as_os_str().as_bytes()).unwrap();
+        // SAFETY: mkfifo reads this NUL-terminated filename during the call.
+        assert_eq!(unsafe { libc::mkfifo(name.as_ptr(), 0o600) }, 0);
+
+        assert_eq!(
+            read_import_file(&fifo).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert_eq!(
+            read_import_file(&root).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
+
+        // File-based imports may intentionally refer to a symlink pointing
+        // to a regular export; the guard rejects the file type, not aliases.
+        let csv = root.join("synthetic.csv");
+        let payload = b"name,url,username,password\nExample,https://example.test,user,fictional\n";
+        fs::write(&csv, payload).unwrap();
+        let alias = root.join("export-link.csv");
+        symlink(&csv, &alias).unwrap();
+        assert_eq!(read_import_file(&alias).unwrap().as_slice(), payload);
+        fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn failed_session_key_cleanup_never_claims_invalidation() {
