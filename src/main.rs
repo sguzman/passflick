@@ -433,10 +433,20 @@ fn read_import_file(path: &Path) -> io::Result<Zeroizing<Vec<u8>>> {
         .read(true)
         .custom_flags(libc::O_NONBLOCK)
         .open(path)?;
-    if !file.metadata()?.is_file() {
+    let metadata = file.metadata()?;
+    if !metadata.is_file() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "CSV export path must be a regular file; use - to read stdin",
+        ));
+    }
+    // Reject sparse or oversized regular files before allocating a 32 MiB
+    // input buffer. The bounded read still protects against files growing
+    // after the metadata check, and stdin retains its streaming limit.
+    if metadata.len() > r#import::MAX_IMPORT_BYTES as u64 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "CSV export is larger than 32 MiB",
         ));
     }
     read_import_bytes(file)
@@ -742,6 +752,29 @@ mod demo_tests {
         symlink(&csv, &alias).unwrap();
         assert_eq!(read_import_file(&alias).unwrap().as_slice(), payload);
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn sparse_oversized_csv_is_rejected_before_streaming() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let directory = std::env::temp_dir().join(format!(
+            "passflick-large-csv-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&directory).unwrap();
+        let path = directory.join("synthetic.csv");
+        let file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
+        file.set_len(r#import::MAX_IMPORT_BYTES as u64 + 1).unwrap();
+        drop(file);
+        let error = read_import_file(&path).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("32 MiB"));
+        fs::remove_dir_all(&directory).unwrap();
     }
 
     #[test]
