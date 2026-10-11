@@ -669,9 +669,10 @@ fn load_vault_key(path: &Path) -> Result<Option<vault::VaultKey>, Box<dyn Error>
         Ok(Some(key)) => key,
         Ok(None) | Err(_) => return Ok(None),
     };
-    // A valid Secret Service key remains useful for this one invocation even
-    // if the kernel session keyring is temporarily unavailable.
-    let _ = session::store(path, &key);
+    // Return the desktop key for authenticated vault opening, but never
+    // install it into the kernel cache before the vault's AEAD tag verifies.
+    // Recovery may leave a stale desktop key; caching it here would poison
+    // subsequent CLI commands even though passphrase fallback succeeds.
     Ok(Some(key))
 }
 
