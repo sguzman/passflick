@@ -97,15 +97,8 @@ fn public_site_preview(url: &str) -> &str {
             // Non-web URI payloads can themselves contain ://. A syntactically
             // valid scheme does not guarantee the following text is a public
             // host. Keep these sensitive payloads out of row labels.
-            || [
-                "data",
-                "javascript",
-                "file",
-                "blob",
-                "about",
-                "mailto",
-            ]
-            .iter()
+            || ["data", "javascript", "file", "blob", "about", "mailto"]
+                .iter()
             .any(|blocked| scheme.eq_ignore_ascii_case(blocked))
         {
             return "(local site)";
