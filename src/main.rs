@@ -377,8 +377,7 @@ fn status() -> Result<(), Box<dyn Error>> {
     // the current encrypted vault (for example, after restoring an older
     // ciphertext lineage). Validate the authenticated file read-only.
     let session_unlocked = !manually_locked
-        && session::load(&path)?
-            .is_some_and(|key| cached_key_opens_vault(&path, key));
+        && session::load(&path)?.is_some_and(|key| cached_key_opens_vault(&path, key));
     println!("Session unlocked: {session_unlocked}");
     println!("Manual lock: {manually_locked}");
     match desktop_keyring::exists(&path) {
