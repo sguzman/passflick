@@ -327,7 +327,7 @@ fn derive_key(passphrase: &[u8], header: &Header) -> Result<VaultKey, VaultError
     // Avoid leaving a separate unprotected key array on the stack.
     let mut key = Zeroizing::new([0_u8; KEY_LEN]);
     argon2
-        .hash_password_into(passphrase, &header.salt, &mut key)
+        .hash_password_into(passphrase, &header.salt, &mut key[..])
         .map_err(|error| VaultError::Kdf(error.to_string()))?;
 
     Ok(VaultKey(key))
