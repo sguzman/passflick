@@ -9,12 +9,12 @@
 - [x] Per-vault session-key/explicit-lock isolation for safe independent testing; report cleanup failures accurately after cached-key decryption errors
 - [x] Graceful one-shot GUI and interactive CLI fallback when session caching is unavailable
 - [x] Reject empty/mixed-provider import batches and NUL-containing clipboard values before committing; enforce the same empty-password, NUL, and missing-site checks at the transaction boundary for future source adapters
-- [x] Neutralize terminal escape, bidirectional controls, and additional invisible Unicode format marks in visible metadata without changing copied usernames
+- [x] Neutralize terminal escape, bidirectional controls, and additional invisible Unicode format marks in visible metadata, CLI filesystem path output, and top-level error text without modifying stored values or actual paths
 - [x] Hide URL userinfo, paths, query strings, and fragments in URL-only or HTTP(S)-title picker and CLI labels without modifying stored URLs or search identities; trim surrounding title whitespace for URL detection and number otherwise-indistinguishable credential variants
-- [x] One-shot keyboard picker with Enter/Shift+Enter
+- [x] One-shot keyboard picker with Enter/Shift+Enter; cache visible row labels between egui redraws and clear cached labels after a vault projection change
 - [x] Synthetic demo picker that never opens a real vault
 - [x] Commit Cargo.lock and enforce locked builds in CI
-- [x] Rust CI verified at [`7a6b4f8`](https://github.com/sguzman/passflick/actions/runs/38170679693): 96 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy; [synthetic GUI checks](https://github.com/sguzman/passflick/actions/runs/38170679691) also passed
+- [x] Rust CI verified at [`be0439d`](https://github.com/sguzman/passflick/actions/runs/38171710954): 99 passed tests, locked CLI checks, formatting, desktop installation smoke, four-source encrypted recovery/restore/import smoke, and strict Clippy; [synthetic GUI checks](https://github.com/sguzman/passflick/actions/runs/38171711005) also passed
 - [x] Synthetic CLI encrypted-recovery smoke passed: passphrase prompts, backup verification, wrong-passphrase rejection, tamper recovery, and displaced ciphertext safety snapshot
 - [x] Synthetic ordinary restore smoke passed: explicit confirmation, corrupted and hard-linked snapshot rejection, four-source restoration, and encrypted pre-restore safety backup
 - [x] Synthetic CLI source refresh passed: Firefox survives Edge replacement; a large accidental Edge shrink is rejected without vault mutation, and `--allow-shrink` preserves Firefox
@@ -44,7 +44,7 @@
 - [ ] Highlight potentially stale source snapshots in the picker
 - [x] Add non-secret local browser profile discovery (`passflick discover`), with terminal-safe rendering of untrusted Firefox profile names
 - [ ] Evaluate authorized read-only browser credential adapters
-- [x] Add bounds to import and vault parsing, private filesystem permissions, write locking, and encrypted backups
+- [x] Add bounds to import and vault parsing, private filesystem permissions, write locking, and encrypted backups; reject oversized regular vault files from metadata before the bounded read, including sparse files
 - [x] Authenticated encrypted restore with pre-restore safety backup; reject hard-link aliases to the active vault using device/inode identity
 - [x] Read-only encrypted backup authentication command (`passflick verify FILE`)
 - [x] Passphrase-authenticated disaster recovery from a missing or corrupted primary vault, preserving original raw bytes before replacement
