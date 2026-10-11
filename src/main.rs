@@ -636,6 +636,23 @@ mod demo_tests {
     use super::*;
 
     #[test]
+    fn streaming_import_stops_at_size_limit_even_if_input_never_ends() {
+        // Standard input and pipes can be unbounded. Read one byte past the
+        // advertised maximum, then let CSV validation reject the batch.
+        let oversized = read_import_bytes(io::repeat(b'x')).unwrap();
+        assert_eq!(oversized.len(), r#import::MAX_IMPORT_BYTES + 1);
+        assert!(matches!(
+            r#import::parse_csv(&oversized, Source::Edge, 42),
+            Err(r#import::ImportError::TooLarge)
+        ));
+
+        let payload =
+            b"name,url,username,password\nExample,https://example.test,user,fictional\n";
+        let copied = read_import_bytes(io::Cursor::new(&payload[..])).unwrap();
+        assert_eq!(copied.as_slice(), payload);
+    }
+
+    #[test]
     fn explicit_csv_path_rejects_fifo_without_waiting_for_writer() {
         use std::os::unix::ffi::OsStrExt;
         use std::os::unix::fs::symlink;
