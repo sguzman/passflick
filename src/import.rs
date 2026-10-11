@@ -341,6 +341,36 @@ mod tests {
     }
 
     #[test]
+    fn encrypted_import_round_trip_preserves_unicode_spaces_and_multiline_secret() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-lossless-import-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let path = root.join("vault.passvault");
+        let passphrase = b"fictional-lossless-import-passphrase";
+        let mut vault = Vault::create(&path, passphrase).unwrap();
+
+        let secret = "  synthetic 🔐 phrase\nline two  \n";
+        let input = "name,url,username,password\n\"Example, Portal\",https://example.test,\"  usuária  \",\"  synthetic 🔐 phrase\nline two  \n\"\n";
+        let imported = parse_csv(input.as_bytes(), Source::Chrome, 17).unwrap();
+        let result = commit_snapshot(&path, &mut vault, Source::Chrome, imported, false).unwrap();
+        assert_eq!(result.count, 1);
+        assert!(result.previous_backup.is_none());
+        let ciphertext = std::fs::read(&path).unwrap();
+        assert!(!ciphertext.windows(secret.len()).any(|part| part == secret.as_bytes()));
+
+        drop(vault);
+        let reopened = Vault::unlock(&path, passphrase).unwrap();
+        assert_eq!(reopened.records().len(), 1);
+        assert_eq!(reopened.records()[0].label, "Example, Portal");
+        assert_eq!(reopened.records()[0].username, "  usuária  ");
+        assert_eq!(reopened.records()[0].password(), secret);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
     fn username_whitespace_is_not_silently_removed() {
         let data =
             b"name,url,username,password\nExample,https://example.test,\"  alice  \",secret\n";
