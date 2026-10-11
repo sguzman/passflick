@@ -384,7 +384,9 @@ fn cached_key_opens_vault(path: &Path, key: vault::VaultKey) -> bool {
 fn status() -> Result<(), Box<dyn Error>> {
     let path = paths::vault_path()?;
     println!("Vault: {}", path.display());
-    println!("Exists: {}", path.exists());
+    // exists() follows symlinks and reports a dangling symlink as absent.
+    // Status must not encourage initializing over an unsafe vault path.
+    println!("Exists: {}", vault_file_presence(&path)?);
     let manually_locked = session::is_manually_locked(&path)?;
     // A key's presence in the kernel keyring is not proof that it belongs to
     // the current encrypted vault (for example, after restoring an older
@@ -842,6 +844,10 @@ mod demo_tests {
         fs::remove_file(&vault).unwrap();
         fs::write(&vault, b"synthetic encrypted placeholder").unwrap();
         assert!(vault_file_presence(&vault).unwrap());
+        fs::remove_file(&vault).unwrap();
+        fs::create_dir(&vault).unwrap();
+        assert!(vault_file_presence(&vault).is_err());
+        fs::remove_dir(&vault).unwrap();
         fs::remove_dir_all(&directory).unwrap();
     }
 
