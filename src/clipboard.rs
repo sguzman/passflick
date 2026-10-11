@@ -31,9 +31,21 @@ fn wl_copy_command(executable: &OsStr) -> Command {
 }
 
 fn has_sensitive_flag(output: &[u8]) -> bool {
-    output
-        .windows(b"--sensitive".len())
-        .any(|window| window == b"--sensitive")
+    // A mention of the flag somewhere in prose is not a capability claim.
+    // Recognize a documented option at the start of its help line, optionally
+    // preceded by the short-option form used by wl-clipboard.
+    output.split(|byte| matches!(byte, b'\n' | b'\r')).any(|line| {
+        let line = line.trim_ascii_start();
+        let option = line
+            .strip_prefix(b"-s,")
+            .map(|rest| rest.trim_ascii_start())
+            .unwrap_or(line);
+        option.strip_prefix(b"--sensitive").is_some_and(|tail| {
+            tail.is_empty()
+                || tail[0].is_ascii_whitespace()
+                || matches!(tail[0], b',' | b'=')
+        })
+    })
 }
 
 /// Probe the installed helper *before* passing it any credential bytes.
@@ -105,7 +117,19 @@ mod tests {
             b"wl-copy --type --paste-once --trim-newline"
         ));
         assert!(has_sensitive_flag(
-            b"wl-copy --type --sensitive --paste-once"
+            b"  -s, --sensitive   Hint that clipboard data is sensitive"
+        ));
+        assert!(has_sensitive_flag(
+            b"  --sensitive\tDo not save to history"
+        ));
+        assert!(!has_sensitive_flag(
+            b"Warning: --sensitive is unsupported by this build"
+        ));
+        assert!(!has_sensitive_flag(
+            b"  --sensitive-legacy   A different option"
+        ));
+        assert!(!has_sensitive_flag(
+            b"  --not-sensitive   A different option"
         ));
     }
 
@@ -143,6 +167,42 @@ mod tests {
 if [ "$1" = "--help" ]; then echo '--type --trim-newline'; exit 0; fi
 printf 'unsafe invocation' > "$(dirname "$0")/unexpected-copy"
 exit 2
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+
+        assert!(matches!(
+            copy_sensitive_using("fictional-clipboard-secret", executable.as_os_str()),
+            Err(ClipboardError::SensitiveUnsupported)
+        ));
+        assert!(!dir.join("unexpected-copy").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn misleading_help_cannot_trigger_clipboard_execution() {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "passflick-clipboard-help-test-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&dir).unwrap();
+        let executable = dir.join("misleading-wl-copy");
+        fs::write(
+            &executable,
+            br#"#!/bin/sh
+if [ "$1" = "--help" ]; then
+    echo 'Note: --sensitive is not available'
+    echo '  --sensitive-legacy    Old incompatible option'
+    exit 0
+fi
+printf 'unsafe invocation' > "$(dirname "$0")/unexpected-copy"
+exit 0
 "#,
         )
         .unwrap();
