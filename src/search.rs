@@ -2,6 +2,7 @@ use crate::model::{Credential, safe_display_text};
 use std::collections::HashSet;
 use zeroize::Zeroizing;
 
+#[cfg(test)]
 pub fn rank_credentials(records: &[Credential], query: &str) -> Vec<usize> {
     // Keep the combined search for callers that already use it.
     let needle = Zeroizing::new(query.trim().to_lowercase());
@@ -151,6 +152,7 @@ pub fn has_secret_conflict(records: &[Credential], selected: usize) -> bool {
     })
 }
 
+#[cfg(test)]
 fn score(rec: &Credential, query: &str) -> Option<i32> {
     if query.is_empty() {
         return Some(0);
@@ -291,15 +293,39 @@ mod tests {
     #[test]
     fn staged_search_keeps_cross_source_deduplication() {
         let records = vec![
-            Credential::new(Source::Firefox, "GitHub", "https://github.com", "alice", "same", 0),
-            Credential::new(Source::Edge, "GitHub", "https://github.com", "alice", "same", 0),
-            Credential::new(Source::Edge, "GitHub", "https://github.com", "bob", "other", 0),
+            Credential::new(
+                Source::Firefox,
+                "GitHub",
+                "https://github.com",
+                "alice",
+                "same",
+                0,
+            ),
+            Credential::new(
+                Source::Edge,
+                "GitHub",
+                "https://github.com",
+                "alice",
+                "same",
+                0,
+            ),
+            Credential::new(
+                Source::Edge,
+                "GitHub",
+                "https://github.com",
+                "bob",
+                "other",
+                0,
+            ),
         ];
         assert_eq!(
             rank_credentials_by_site_and_username(&records, "git", "alice"),
             vec![1]
         );
-        assert_eq!(rank_credentials_by_site_and_username(&records, "", ""), vec![1, 2]);
+        assert_eq!(
+            rank_credentials_by_site_and_username(&records, "", ""),
+            vec![1, 2]
+        );
     }
 
     #[test]
