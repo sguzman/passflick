@@ -656,7 +656,8 @@ mod tests {
                 1,
             ),
         ];
-        let incomplete = b"name,url,username,password\nValid,https://one.example.test,me,good\n,,me,nonempty\n";
+        let incomplete =
+            b"name,url,username,password\nValid,https://one.example.test,me,good\n,,me,nonempty\n";
         assert!(matches!(
             parse_csv(incomplete, Source::Edge, 2),
             Err(ImportError::InvalidRow { row: 3, .. })
