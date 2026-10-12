@@ -277,7 +277,7 @@ pub fn parse_csv_with_report(
 }
 
 #[cfg(test)]
-fn parse_csv(
+pub fn parse_csv(
     content: &[u8],
     source: Source,
     imported_at: u64,
