@@ -1,6 +1,7 @@
 use std::ffi::OsStr;
 use std::io::{self, Write};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClipboardError {
@@ -14,6 +15,8 @@ pub enum ClipboardError {
     Wait(#[source] io::Error),
     #[error("wl-copy exited unsuccessfully")]
     Failed,
+    #[error("wl-copy did not respond within the clipboard operation deadline")]
+    TimedOut,
     #[error("value contains a NUL byte; refusing unsafe clipboard copy")]
     NulByte,
     #[error(
@@ -43,19 +46,53 @@ fn has_sensitive_flag(output: &[u8]) -> bool {
         })
 }
 
+/// Reap helpers that do not exit. In particular, a frozen Wayland session
+/// must not trap the one-shot picker forever in child.wait(). A timeout
+/// terminates only our direct helper process, then reaps it.
+fn wait_bounded(child: &mut Child, deadline: Duration) -> Result<ExitStatus, ClipboardError> {
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Ok(status),
+            Ok(None) if started.elapsed() < deadline => {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                child.wait().map_err(ClipboardError::Wait)?;
+                return Err(ClipboardError::TimedOut);
+            }
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(ClipboardError::Wait(error));
+            }
+        }
+    }
+}
+
 /// Probe the installed helper *before* passing it any credential bytes.
 /// An old or incompatible wl-copy must never get a chance to place an
 /// unmarked secret on the clipboard, even if it tolerates unknown options.
-fn require_sensitive_support(executable: &OsStr) -> Result<(), ClipboardError> {
-    let help = Command::new(executable)
+fn require_sensitive_support(
+    executable: &OsStr,
+    deadline: Duration,
+) -> Result<(), ClipboardError> {
+    let mut child = Command::new(executable)
         .arg("--help")
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .output()
+        .spawn()
         .map_err(ClipboardError::Spawn)?;
-    if !help.status.success()
-        || !(has_sensitive_flag(&help.stdout) || has_sensitive_flag(&help.stderr))
-    {
+    let status = wait_bounded(&mut child, deadline)?;
+    if !status.success() {
+        return Err(ClipboardError::SensitiveUnsupported);
+    }
+    // Only collect help after the helper exits. A helper that hangs or floods
+    // its pipe fails closed, rather than keeping an ordinary .output() open.
+    let help = child.wait_with_output().map_err(ClipboardError::Wait)?;
+    if !(has_sensitive_flag(&help.stdout) || has_sensitive_flag(&help.stderr)) {
         return Err(ClipboardError::SensitiveUnsupported);
     }
     Ok(())
@@ -66,15 +103,28 @@ pub fn copy_sensitive(text: &str) -> Result<(), ClipboardError> {
 }
 
 fn copy_sensitive_using(text: &str, executable: &OsStr) -> Result<(), ClipboardError> {
+    copy_sensitive_with_limits(
+        text,
+        executable,
+        Duration::from_secs(3),
+        Duration::from_secs(7),
+    )
+}
+
+fn copy_sensitive_with_limits(
+    text: &str,
+    executable: &OsStr,
+    help_deadline: Duration,
+    copy_deadline: Duration,
+) -> Result<(), ClipboardError> {
     // Import validates new records, but old vaults and future adapters can
     // still reach this public boundary. Embedded NUL can be truncated by
     // clipboard consumers and silently copy a different password.
     if text.contains('\0') {
         return Err(ClipboardError::NulByte);
     }
-    // This adds one short local helper invocation per copy. Password safety
-    // takes precedence over avoiding that invocation.
-    require_sensitive_support(executable)?;
+    // Fail closed if the helper's advertised sensitive support is absent.
+    require_sensitive_support(executable, help_deadline)?;
     let mut child = wl_copy_command(executable)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -83,16 +133,13 @@ fn copy_sensitive_using(text: &str, executable: &OsStr) -> Result<(), ClipboardE
         .map_err(ClipboardError::Spawn)?;
 
     let mut stdin = child.stdin.take().ok_or(ClipboardError::MissingStdin)?;
-    // An old wl-copy can reject --sensitive and exit before the pipe write
-    // completes, producing EPIPE instead of a useful unsupported-flag error.
-    // Always reap the child before diagnosing either write or exit failures.
+    // An early child exit can cause EPIPE. Reap the child before choosing
+    // between a write failure and an unsuccessful helper exit.
     let write_result = stdin.write_all(text.as_bytes());
     drop(stdin);
 
-    let status = child.wait().map_err(ClipboardError::Wait)?;
+    let status = wait_bounded(&mut child, copy_deadline)?;
     if !status.success() {
-        // The helper advertised --sensitive during preflight, but a runtime
-        // failure still must not trigger a fallback to an ordinary copy.
         if let Err(error) = write_result {
             return Err(ClipboardError::Write(error));
         }
@@ -237,6 +284,76 @@ cat > '{}'
         let synthetic = "  fictional secret with newline\n";
         copy_sensitive_using(synthetic, executable.as_os_str()).unwrap();
         assert_eq!(fs::read(destination).unwrap(), synthetic.as_bytes());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn frozen_help_preflight_times_out_without_transmitting_any_secret() {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "passflick-clipboard-hung-help-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&dir).unwrap();
+        let executable = dir.join("hung-help-wl-copy");
+        fs::write(
+            &executable,
+            br#"#!/bin/sh
+if [ "$1" = "--help" ]; then exec sleep 10; fi
+echo unsafe > "$(dirname "$0")/unexpected-copy"
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+
+        let result = copy_sensitive_with_limits(
+            "fictional-only-secret",
+            executable.as_os_str(),
+            Duration::from_millis(120),
+            Duration::from_millis(120),
+        );
+        assert!(matches!(result, Err(ClipboardError::TimedOut)));
+        assert!(!dir.join("unexpected-copy").exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn frozen_copy_process_times_out_and_is_reaped() {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "passflick-clipboard-hung-copy-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&dir).unwrap();
+        let executable = dir.join("hung-copy-wl-copy");
+        fs::write(
+            &executable,
+            br#"#!/bin/sh
+if [ "$1" = "--help" ]; then
+    echo '  --sensitive  Hint that the content is sensitive'
+    exit 0
+fi
+exec sleep 10
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+
+        let result = copy_sensitive_with_limits(
+            "fictional-only-secret",
+            executable.as_os_str(),
+            Duration::from_secs(1),
+            Duration::from_millis(120),
+        );
+        assert!(matches!(result, Err(ClipboardError::TimedOut)));
         fs::remove_dir_all(&dir).unwrap();
     }
 
