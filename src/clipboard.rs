@@ -74,10 +74,7 @@ fn wait_bounded(child: &mut Child, deadline: Duration) -> Result<ExitStatus, Cli
 /// Probe the installed helper *before* passing it any credential bytes.
 /// An old or incompatible wl-copy must never get a chance to place an
 /// unmarked secret on the clipboard, even if it tolerates unknown options.
-fn require_sensitive_support(
-    executable: &OsStr,
-    deadline: Duration,
-) -> Result<(), ClipboardError> {
+fn require_sensitive_support(executable: &OsStr, deadline: Duration) -> Result<(), ClipboardError> {
     let mut child = Command::new(executable)
         .arg("--help")
         .stdin(Stdio::null())
