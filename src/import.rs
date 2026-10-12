@@ -39,6 +39,8 @@ pub enum ImportError {
     InvalidRow { row: usize, reason: &'static str },
     #[error("CSV contains no credentials; previous snapshot is unchanged")]
     Empty,
+    #[error("CSV contains no usable passwords; skipped {skipped} empty-password row(s); previous snapshot is unchanged")]
+    NoUsablePasswords { skipped: usize },
     #[error("import credential {position} is invalid: {reason}; previous snapshot is unchanged")]
     InvalidCredential {
         position: usize,
@@ -111,14 +113,21 @@ fn column(
     Ok(found)
 }
 
-/// Parse the entire input, including every row, before permitting a snapshot replacement.
-/// Unlike a generic best-effort importer, malformed records fail the import rather than
-/// silently removing passwords that existed in an older source snapshot.
-pub fn parse_csv(
+/// Browser exports can include passwordless rows. Report their count while
+/// keeping actual credentials separate from the import diagnostics.
+pub struct CsvImport {
+    pub records: Vec<Credential>,
+    pub skipped_empty_passwords: usize,
+}
+
+/// Parse the entire CSV before permitting a snapshot replacement. Empty
+/// password rows are excluded; other malformed rows still abort the import.
+/// An export containing no usable credentials never replaces a source.
+pub fn parse_csv_with_report(
     content: &[u8],
     source: Source,
     imported_at: u64,
-) -> Result<Vec<Credential>, ImportError> {
+) -> Result<CsvImport, ImportError> {
     if content.len() > MAX_IMPORT_BYTES {
         return Err(ImportError::TooLarge);
     }
@@ -175,6 +184,7 @@ pub fn parse_csv(
     }
 
     let mut result: Vec<Credential> = Vec::new();
+    let mut skipped_empty_passwords = 0;
     // Index non-secret account identities and keyed, process-local password
     // fingerprints. A final exact comparison rules out hash collisions. This
     // avoids quadratic scans of distinct password variants for one account
@@ -198,10 +208,8 @@ pub fn parse_csv(
         let login = row.get(username).unwrap_or("");
 
         if secret.is_empty() {
-            return Err(ImportError::InvalidRow {
-                row: row_number,
-                reason: "password field is empty",
-            });
+            skipped_empty_passwords += 1;
+            continue;
         }
         // The Wayland text clipboard is not a binary transport. Embedded NUL
         // can be truncated by clipboard consumers, silently copying the wrong
@@ -252,9 +260,23 @@ pub fn parse_csv(
         ));
     }
     if result.is_empty() {
-        return Err(ImportError::Empty);
+        return if skipped_empty_passwords > 0 {
+            Err(ImportError::NoUsablePasswords {
+                skipped: skipped_empty_passwords,
+            })
+        } else {
+            Err(ImportError::Empty)
+        };
     }
-    Ok(result)
+    Ok(CsvImport {
+        records: result,
+        skipped_empty_passwords,
+    })
+}
+
+#[cfg(test)]
+fn parse_csv(content: &[u8], source: Source, imported_at: u64) -> Result<Vec<Credential>, ImportError> {
+    parse_csv_with_report(content, source, imported_at).map(|report| report.records)
 }
 
 /// Reject unexpectedly partial exports before any existing source records are removed.
@@ -508,6 +530,56 @@ mod tests {
     }
 
     #[test]
+    fn empty_passwords_are_skipped_counted_and_not_stored() {
+        let data = b"name,url,username,password\nValid,https://one.example.test,alice,fictional-one\nEmpty,https://empty.example.test,alice,\nQuoted,https://quoted.example.test,bob,\"\"\nSpaces,https://spaces.example.test,bob,\"  \"\nValid,https://two.example.test,alice,fictional-two\n";
+        let imported = parse_csv_with_report(data, Source::Edge, 42).unwrap();
+        assert_eq!(imported.skipped_empty_passwords, 2);
+        assert_eq!(imported.records.len(), 3);
+        assert_eq!(imported.records[0].password(), "fictional-one");
+        assert_eq!(imported.records[1].password(), "  ");
+        assert_eq!(imported.records[2].password(), "fictional-two");
+        assert!(imported.records.iter().all(|record| !record.password().is_empty()));
+    }
+
+    #[test]
+    fn all_empty_password_export_cannot_replace_a_valid_encrypted_snapshot() {
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "passflick-empty-passwords-test-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        let path = root.join("vault.passvault");
+        let mut vault = Vault::create(&path, b"fictional-empty-password-passphrase").unwrap();
+        let current = parse_csv(
+            b"name,url,username,password\nExisting,https://old.example.test,user,fictional-old\n",
+            Source::Edge,
+            1,
+        )
+        .unwrap();
+        commit_snapshot(&path, &mut vault, Source::Edge, current, false).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let input = b"name,url,username,password\nEmpty,https://example.test,alice,\nAlso empty,https://other.example.test,bob,\"\"\n";
+        assert!(matches!(
+            parse_csv_with_report(input, Source::Edge, 2),
+            Err(ImportError::NoUsablePasswords { skipped: 2 })
+        ));
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(vault.records()[0].password(), "fictional-old");
+        assert!(!root.join("backups").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn malformed_nonempty_password_rows_still_abort_after_skipped_rows() {
+        let input = b"name,url,username,password\nEmpty,https://empty.example.test,user,\nBroken,,user,synthetic-nonempty\n";
+        assert!(matches!(
+            parse_csv_with_report(input, Source::Edge, 1),
+            Err(ImportError::InvalidRow { row: 3, .. })
+        ));
+    }
+
+    #[test]
     fn username_whitespace_is_not_silently_removed() {
         let data =
             b"name,url,username,password\nExample,https://example.test,\"  alice  \",secret\n";
@@ -573,7 +645,7 @@ mod tests {
                 1,
             ),
         ];
-        let incomplete = b"name,url,username,password\nValid,https://one.example.test,me,good\nMissing,https://two.example.test,me,\n";
+        let incomplete = b"name,url,username,password\nValid,https://one.example.test,me,good\nMissing,,me,nonempty\n";
         assert!(matches!(
             parse_csv(incomplete, Source::Edge, 2),
             Err(ImportError::InvalidRow { row: 3, .. })

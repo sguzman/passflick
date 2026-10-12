@@ -584,17 +584,21 @@ fn import_csv(source: Source, path: &Path, allow_shrink: bool) -> Result<(), Box
         read_import_file(path)?
     };
     let time = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let imported = r#import::parse_csv(&bytes, source, time)?;
+    let parsed = r#import::parse_csv_with_report(&bytes, source, time)?;
     // Keep the advisory lock across read-modify-write. Otherwise two concurrent
     // source imports can overwrite each other's snapshots despite atomic saves.
     let write_path = paths::vault_path()?;
     let _guard = write_lock::acquire(&write_path)?;
     let (vault_path, mut vault) = open_unlocked_vault()?;
     let result =
-        r#import::commit_snapshot(&vault_path, &mut vault, source, imported, allow_shrink)?;
+        r#import::commit_snapshot(&vault_path, &mut vault, source, parsed.records, allow_shrink)?;
     println!(
         "Imported {} {} credential(s) into encrypted projection.",
         result.count, source
+    );
+    println!(
+        "Skipped {} row(s) with empty passwords.",
+        parsed.skipped_empty_passwords
     );
     if let Some(snapshot) = result.previous_backup {
         println!(
