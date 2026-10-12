@@ -583,7 +583,7 @@ mod tests {
 
     #[test]
     fn malformed_nonempty_password_rows_still_abort_after_skipped_rows() {
-        let input = b"name,url,username,password\nEmpty,https://empty.example.test,user,\nBroken,,user,synthetic-nonempty\n";
+        let input = b"name,url,username,password\nEmpty,https://empty.example.test,user,\n,,user,synthetic-nonempty\n";
         assert!(matches!(
             parse_csv_with_report(input, Source::Edge, 1),
             Err(ImportError::InvalidRow { row: 3, .. })
@@ -656,7 +656,7 @@ mod tests {
                 1,
             ),
         ];
-        let incomplete = b"name,url,username,password\nValid,https://one.example.test,me,good\nMissing,,me,nonempty\n";
+        let incomplete = b"name,url,username,password\nValid,https://one.example.test,me,good\n,,me,nonempty\n";
         assert!(matches!(
             parse_csv(incomplete, Source::Edge, 2),
             Err(ImportError::InvalidRow { row: 3, .. })
