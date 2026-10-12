@@ -1,6 +1,7 @@
 use std::ffi::OsStr;
 use std::io::{self, Write};
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::os::fd::AsRawFd;
+use std::process::{Child, ChildStdin, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
 #[derive(Debug, thiserror::Error)]
@@ -71,6 +72,49 @@ fn wait_bounded(child: &mut Child, deadline: Duration) -> Result<ExitStatus, Cli
     }
 }
 
+/// Do not allow a helper that stops reading stdin to freeze the picker.
+/// Making our *write end* nonblocking means an oversized password value
+/// cannot trap write_all() before we reach the process-exit timeout.
+fn write_with_deadline(
+    stdin: &mut ChildStdin,
+    bytes: &[u8],
+    started: Instant,
+    deadline: Duration,
+) -> Result<(), ClipboardError> {
+    let fd = stdin.as_raw_fd();
+    // SAFETY: fcntl receives the valid, borrowed ChildStdin file descriptor.
+    // F_GETFL and F_SETFL change only its file-status flags, not ownership.
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags < 0 {
+        return Err(ClipboardError::Write(io::Error::last_os_error()));
+    }
+    // SAFETY: The file descriptor is still owned by stdin in this scope.
+    if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+        return Err(ClipboardError::Write(io::Error::last_os_error()));
+    }
+
+    let mut remaining = bytes;
+    while !remaining.is_empty() {
+        if started.elapsed() >= deadline {
+            return Err(ClipboardError::TimedOut);
+        }
+        match stdin.write(remaining) {
+            Ok(0) => {
+                return Err(ClipboardError::Write(io::Error::new(
+                    io::ErrorKind::WriteZero,
+                    "clipboard helper stopped accepting input",
+                )));
+            }
+            Ok(length) => remaining = &remaining[length..],
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Err(error) => return Err(ClipboardError::Write(error)),
+        }
+    }
+    Ok(())
+}
+
 /// Probe the installed helper *before* passing it any credential bytes.
 /// An old or incompatible wl-copy must never get a chance to place an
 /// unmarked secret on the clipboard, even if it tolerates unknown options.
@@ -122,6 +166,7 @@ fn copy_sensitive_with_limits(
     }
     // Fail closed if the helper's advertised sensitive support is absent.
     require_sensitive_support(executable, help_deadline)?;
+    let started = Instant::now();
     let mut child = wl_copy_command(executable)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -130,20 +175,33 @@ fn copy_sensitive_with_limits(
         .map_err(ClipboardError::Spawn)?;
 
     let mut stdin = child.stdin.take().ok_or(ClipboardError::MissingStdin)?;
-    // An early child exit can cause EPIPE. Reap the child before choosing
-    // between a write failure and an unsuccessful helper exit.
-    let write_result = stdin.write_all(text.as_bytes());
+    // A small password generally fits into one pipe write. Even if the
+    // helper never reads a large value, nonblocking writes can time out.
+    let write_result = write_with_deadline(
+        &mut stdin,
+        text.as_bytes(),
+        started,
+        copy_deadline,
+    );
     drop(stdin);
+    if matches!(write_result, Err(ClipboardError::TimedOut)) {
+        let _ = child.kill();
+        child.wait().map_err(ClipboardError::Wait)?;
+        return Err(ClipboardError::TimedOut);
+    }
 
-    let status = wait_bounded(&mut child, copy_deadline)?;
+    // An early child exit can cause EPIPE; reap it before diagnosing the
+    // write. The remaining deadline includes time spent writing to stdin.
+    let remaining = copy_deadline.saturating_sub(started.elapsed());
+    let status = wait_bounded(&mut child, remaining)?;
     if !status.success() {
         if let Err(error) = write_result {
-            return Err(ClipboardError::Write(error));
+            return Err(error);
         }
         return Err(ClipboardError::Failed);
     }
 
-    write_result.map_err(ClipboardError::Write)
+    write_result
 }
 
 #[cfg(test)]
@@ -349,6 +407,45 @@ exec sleep 10
             executable.as_os_str(),
             Duration::from_secs(1),
             Duration::from_millis(120),
+        );
+        assert!(matches!(result, Err(ClipboardError::TimedOut)));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn blocked_stdin_write_times_out_and_reaps_the_helper() {
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut entropy = [0_u8; 8];
+        getrandom::fill(&mut entropy).unwrap();
+        let dir = std::env::temp_dir().join(format!(
+            "passflick-clipboard-blocked-stdin-{:016x}",
+            u64::from_le_bytes(entropy)
+        ));
+        fs::create_dir(&dir).unwrap();
+        let executable = dir.join("nonreading-wl-copy");
+        fs::write(
+            &executable,
+            br#"#!/bin/sh
+if [ "$1" = "--help" ]; then
+    echo '  --sensitive  Hint that the content is sensitive'
+    exit 0
+fi
+exec sleep 10
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+
+        // Larger than the Linux pipe buffer, so write_all() would have
+        // blocked indefinitely in the previous implementation.
+        let synthetic = "fictional-data-only".repeat(20_000);
+        let result = copy_sensitive_with_limits(
+            &synthetic,
+            executable.as_os_str(),
+            Duration::from_secs(1),
+            Duration::from_millis(150),
         );
         assert!(matches!(result, Err(ClipboardError::TimedOut)));
         fs::remove_dir_all(&dir).unwrap();
