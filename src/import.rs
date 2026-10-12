@@ -39,7 +39,9 @@ pub enum ImportError {
     InvalidRow { row: usize, reason: &'static str },
     #[error("CSV contains no credentials; previous snapshot is unchanged")]
     Empty,
-    #[error("CSV contains no usable passwords; skipped {skipped} empty-password row(s); previous snapshot is unchanged")]
+    #[error(
+        "CSV contains no usable passwords; skipped {skipped} empty-password row(s); previous snapshot is unchanged"
+    )]
     NoUsablePasswords { skipped: usize },
     #[error("import credential {position} is invalid: {reason}; previous snapshot is unchanged")]
     InvalidCredential {
@@ -275,7 +277,11 @@ pub fn parse_csv_with_report(
 }
 
 #[cfg(test)]
-fn parse_csv(content: &[u8], source: Source, imported_at: u64) -> Result<Vec<Credential>, ImportError> {
+fn parse_csv(
+    content: &[u8],
+    source: Source,
+    imported_at: u64,
+) -> Result<Vec<Credential>, ImportError> {
     parse_csv_with_report(content, source, imported_at).map(|report| report.records)
 }
 
@@ -538,7 +544,12 @@ mod tests {
         assert_eq!(imported.records[0].password(), "fictional-one");
         assert_eq!(imported.records[1].password(), "  ");
         assert_eq!(imported.records[2].password(), "fictional-two");
-        assert!(imported.records.iter().all(|record| !record.password().is_empty()));
+        assert!(
+            imported
+                .records
+                .iter()
+                .all(|record| !record.password().is_empty())
+        );
     }
 
     #[test]

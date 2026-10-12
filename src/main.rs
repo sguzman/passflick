@@ -590,8 +590,13 @@ fn import_csv(source: Source, path: &Path, allow_shrink: bool) -> Result<(), Box
     let write_path = paths::vault_path()?;
     let _guard = write_lock::acquire(&write_path)?;
     let (vault_path, mut vault) = open_unlocked_vault()?;
-    let result =
-        r#import::commit_snapshot(&vault_path, &mut vault, source, parsed.records, allow_shrink)?;
+    let result = r#import::commit_snapshot(
+        &vault_path,
+        &mut vault,
+        source,
+        parsed.records,
+        allow_shrink,
+    )?;
     println!(
         "Imported {} {} credential(s) into encrypted projection.",
         result.count, source
