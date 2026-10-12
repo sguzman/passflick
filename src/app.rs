@@ -1,6 +1,6 @@
 use crate::clipboard::copy_sensitive;
 use crate::model::{Credential, safe_display_text};
-use crate::search::{display_label_with_sources, rank_credentials};
+use crate::search::{display_label_with_sources, rank_credentials_by_site_and_username};
 use crate::startup::StartupTrace;
 use crate::vault::Vault;
 use crate::{passphrase, paths, session, source_status};
@@ -52,9 +52,10 @@ fn value_to_copy(record: &Credential, username: bool) -> Result<&str, &'static s
 
 pub struct PickerApp {
     records: Vec<Credential>,
-    // Search can include secret-bearing URL components; wipe the owned text
-    // on drop and whenever a different vault projection becomes active.
-    query: Zeroizing<String>,
+    // Search may contain sensitive URL components and usernames.
+    // Both filters must be wiped when the active vault projection changes.
+    site_query: Zeroizing<String>,
+    username_query: Zeroizing<String>,
     ranked: Vec<usize>,
     display_labels: HashMap<usize, Zeroizing<String>>,
     source_snapshots: [source_status::SourceSnapshot; 4],
@@ -94,12 +95,13 @@ impl PickerApp {
             .insert(egui::TextStyle::Small, egui::FontId::proportional(15.0));
         cc.egui_ctx.set_style_of(egui::Theme::Dark, style);
         startup_trace.mark("egui-app-created");
-        let ranked = rank_credentials(&records, "");
+        let ranked = rank_credentials_by_site_and_username(&records, "", "");
         let source_snapshots = source_status::summarize(&records);
         let source_status_at = source_status::now_epoch();
         Self {
             records,
-            query: Zeroizing::new(String::new()),
+            site_query: Zeroizing::new(String::new()),
+            username_query: Zeroizing::new(String::new()),
             ranked,
             display_labels: HashMap::new(),
             source_snapshots,
@@ -129,7 +131,8 @@ impl PickerApp {
         self.setup_required = false;
         self.unlock_focused = false;
         self.focused = false;
-        self.query.zeroize();
+        self.site_query.zeroize();
+        self.username_query.zeroize();
         self.notice = None;
         self.error = None;
         self.selected = 0;
@@ -200,7 +203,11 @@ impl PickerApp {
     }
 
     fn refresh(&mut self) {
-        self.ranked = rank_credentials(&self.records, &self.query);
+        self.ranked = rank_credentials_by_site_and_username(
+            &self.records,
+            &self.site_query,
+            &self.username_query,
+        );
         self.selected = self.selected.min(self.ranked.len().saturating_sub(1));
     }
 
@@ -327,18 +334,44 @@ impl eframe::App for PickerApp {
             self.move_selection(1);
         }
 
+        // Switch fields without losing either filter or invoking a copy action.
+        let toggle_filter =
+            ctx.input_mut(|input| input.consume_key(egui::Modifiers::CTRL, egui::Key::Space));
+
         egui::CentralPanel::default().show(ui, |ui| {
             ui.add_space(10.0);
-            let response = ui.add(
-                egui::TextEdit::singleline(&mut *self.query)
-                    .desired_width(f32::INFINITY)
-                    .hint_text("Search passwords..."),
-            );
+            let site_response = ui
+                .horizontal(|ui| {
+                    ui.label("Site");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut *self.site_query)
+                            .desired_width(f32::INFINITY)
+                            .hint_text("Website name or URL"),
+                    )
+                })
+                .inner;
+            let username_response = ui
+                .horizontal(|ui| {
+                    ui.label("User");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut *self.username_query)
+                            .desired_width(f32::INFINITY)
+                            .hint_text("Username within matching sites"),
+                    )
+                })
+                .inner;
             if !self.focused {
-                response.request_focus();
+                site_response.request_focus();
                 self.focused = true;
             }
-            if response.changed() {
+            if toggle_filter {
+                if site_response.has_focus() {
+                    username_response.request_focus();
+                } else {
+                    site_response.request_focus();
+                }
+            }
+            if site_response.changed() || username_response.changed() {
                 self.selected = 0;
                 self.refresh();
                 self.error = None;
@@ -391,7 +424,9 @@ impl eframe::App for PickerApp {
             }
             ui.add_space(6.0);
             ui.label(
-                egui::RichText::new("Enter: password  ·  Shift+Enter: username  ·  Esc: close")
+                egui::RichText::new(
+                    "Ctrl+Space: switch filter  ·  Enter: password  ·  Shift+Enter: username  ·  Esc: close",
+                )
                     .size(12.0)
                     .weak(),
             );

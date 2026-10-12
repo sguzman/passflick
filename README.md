@@ -8,13 +8,15 @@ Passflick gives Linux users a single, encrypted, searchable view of credentials 
 
 ## Daily use
 
-Launch `passflick` from your compositor shortcut. Typing immediately searches account names, websites, URLs, and usernames. The top match is selected.
+Launch `passflick` from your compositor shortcut. Typing immediately searches **sites and URLs**. Press **Ctrl+Space** (or Tab) to switch to **User**, then type a username to search only within the matching sites. Both filters stay active when you switch back; the top match is selected.
 
 | Key | Action |
 | --- | --- |
 | Enter | Copy selected password and exit |
 | Shift+Enter | Copy selected username and exit |
 | Up / Down | Select a credential |
+| Ctrl+Space | Switch between site and username filters |
+| Tab / Shift+Tab | Move between search fields |
 | Escape | Exit without copying |
 
 There is no persistent tray app, no browser dependency for ordinary lookups, and no need to reveal a password on screen. Opening Passflick twice for a password and username is expected to be fast enough that a multi-action window is unnecessary.

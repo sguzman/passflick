@@ -3,17 +3,52 @@ use std::collections::HashSet;
 use zeroize::Zeroizing;
 
 pub fn rank_credentials(records: &[Credential], query: &str) -> Vec<usize> {
-    // URL searches may themselves contain private reset or session tokens.
-    // Avoid leaving the temporary case-folded query in an ordinary String.
+    // Keep the combined search for callers that already use it.
     let needle = Zeroizing::new(query.trim().to_lowercase());
-    // Normalize each matched title once rather than allocating lowercase
-    // URL copies inside every sorting comparison. Titles may contain private
-    // URL components, so the per-result sort keys remain zeroizing.
+    rank_with_score(records, |record| score(record, needle.as_str()))
+}
+
+/// First narrow by website/title/URL, then independently by username.
+/// Each query must match its own field; both must match when both are set.
+pub fn rank_credentials_by_site_and_username(
+    records: &[Credential],
+    site_query: &str,
+    username_query: &str,
+) -> Vec<usize> {
+    let site = Zeroizing::new(site_query.trim().to_lowercase());
+    let username = Zeroizing::new(username_query.trim().to_lowercase());
+    rank_with_score(records, |record| {
+        let site_score = if site.is_empty() {
+            Some(0)
+        } else {
+            [(record.title(), 35), (record.url.as_str(), 25)]
+                .iter()
+                .filter_map(|(field, weight)| {
+                    let lowered = Zeroizing::new(field.to_lowercase());
+                    field_score(lowered.as_str(), site.as_str()).map(|score| score + weight)
+                })
+                .max()
+        }?;
+        let username_score = if username.is_empty() {
+            Some(0)
+        } else {
+            let lowered = Zeroizing::new(record.username.to_lowercase());
+            field_score(lowered.as_str(), username.as_str())
+        }?;
+        Some(site_score + username_score)
+    })
+}
+
+fn rank_with_score(
+    records: &[Credential],
+    mut score_record: impl FnMut(&Credential) -> Option<i32>,
+) -> Vec<usize> {
+    // Sort keys can contain sensitive URL components and are zeroizing.
     let mut ranked: Vec<(usize, i32, Zeroizing<String>)> = records
         .iter()
         .enumerate()
         .filter_map(|(i, rec)| {
-            score(rec, needle.as_str()).map(|s| (i, s, Zeroizing::new(rec.title().to_lowercase())))
+            score_record(rec).map(|s| (i, s, Zeroizing::new(rec.title().to_lowercase())))
         })
         .collect();
     ranked.sort_by(|(a, sa, ta), (b, sb, tb)| {
@@ -175,6 +210,98 @@ mod tests {
     fn record(source: Source, name: &str, password: &str) -> Credential {
         Credential::new(source, name, "https://example.test", "me", password, 0)
     }
+    #[test]
+    fn site_then_username_filters_within_matching_websites() {
+        let records = vec![
+            Credential::new(
+                Source::Edge,
+                "GitHub",
+                "https://github.com/login",
+                "alice@example.test",
+                "fictional-alice",
+                0,
+            ),
+            Credential::new(
+                Source::Edge,
+                "GitHub",
+                "https://github.com/login",
+                "bob@example.test",
+                "fictional-bob",
+                0,
+            ),
+            Credential::new(
+                Source::Edge,
+                "GitLab",
+                "https://gitlab.com",
+                "alice@example.test",
+                "fictional-gitlab",
+                0,
+            ),
+        ];
+        assert_eq!(
+            rank_credentials_by_site_and_username(&records, "GITHUB", "ALICE"),
+            vec![0]
+        );
+        assert_eq!(
+            rank_credentials_by_site_and_username(&records, "github", "bob"),
+            vec![1]
+        );
+        assert!(rank_credentials_by_site_and_username(&records, "github", "nobody").is_empty());
+        assert_eq!(
+            rank_credentials_by_site_and_username(&records, "gitlab", "alice"),
+            vec![2]
+        );
+    }
+
+    #[test]
+    fn site_and_username_terms_do_not_match_each_others_fields() {
+        let records = vec![
+            Credential::new(
+                Source::Edge,
+                "Mail",
+                "https://mail.example.test",
+                "github-user",
+                "fictional-mail",
+                0,
+            ),
+            Credential::new(
+                Source::Chrome,
+                "GitHub",
+                "https://github.com",
+                "mail-user",
+                "fictional-github",
+                0,
+            ),
+        ];
+        assert_eq!(
+            rank_credentials_by_site_and_username(&records, "github", ""),
+            vec![1]
+        );
+        assert_eq!(
+            rank_credentials_by_site_and_username(&records, "", "github"),
+            vec![0]
+        );
+        assert_eq!(
+            rank_credentials_by_site_and_username(&records, "mail", "github"),
+            vec![0]
+        );
+        assert!(rank_credentials_by_site_and_username(&records, "github", "github").is_empty());
+    }
+
+    #[test]
+    fn staged_search_keeps_cross_source_deduplication() {
+        let records = vec![
+            Credential::new(Source::Firefox, "GitHub", "https://github.com", "alice", "same", 0),
+            Credential::new(Source::Edge, "GitHub", "https://github.com", "alice", "same", 0),
+            Credential::new(Source::Edge, "GitHub", "https://github.com", "bob", "other", 0),
+        ];
+        assert_eq!(
+            rank_credentials_by_site_and_username(&records, "git", "alice"),
+            vec![1]
+        );
+        assert_eq!(rank_credentials_by_site_and_username(&records, "", ""), vec![1, 2]);
+    }
+
     #[test]
     fn searches_with_full_url_query_remain_exact_after_zeroizing_normalization() {
         let records = vec![
