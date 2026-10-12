@@ -1,6 +1,7 @@
 use crate::model::{Credential, Source};
+use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
-use std::hash::{BuildHasher, RandomState};
+use std::hash::BuildHasher;
 use std::path::{Path, PathBuf};
 use zeroize::Zeroize;
 
