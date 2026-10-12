@@ -53,6 +53,7 @@
 - [x] Automatic encrypted pre-refresh backups for existing credential sources
 - [x] Atomically published backups with no overwrite and safe temporary-file cleanup
 - [x] Provider-signature and duplicate-header checks for CSV import snapshots; deduplication index zeroizes its site-title, URL, and username copies on release or parsing failure while preserving Unicode and password-variant distinctions
+- [x] Bound both raw CSV record count and direct-adapter transaction count at 100,000, independent of the 32 MiB raw input limit; deduplicate password variants with keyed, process-local fingerprints and exact collision checks rather than quadratic linear scans
 - [x] Reject ambiguous semantic CSV header aliases and missing username headers before importing a source snapshot
 - [x] Synthetic complete-format Firefox and Apple exports; Apple OTPAuth and Notes are not persisted
 - [x] Lossless encrypted import round trip preserves Unicode usernames, quoted site titles, and multiline passwords with leading/trailing whitespace

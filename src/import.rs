@@ -1,5 +1,6 @@
 use crate::model::{Credential, Source};
 use std::collections::{HashMap, HashSet};
+use std::hash::{BuildHasher, RandomState};
 use std::path::{Path, PathBuf};
 use zeroize::Zeroize;
 
@@ -8,6 +9,8 @@ use crate::vault::{Vault, VaultError};
 
 /// A defensive limit for a single explicit export snapshot.
 pub const MAX_IMPORT_BYTES: usize = 32 * 1024 * 1024;
+/// Limit decompressed credential objects independently of raw CSV size.
+pub const MAX_IMPORT_RECORDS: usize = 100_000;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ImportError {
@@ -15,6 +18,8 @@ pub enum ImportError {
     Csv(#[from] csv::Error),
     #[error("CSV export is larger than 32 MiB")]
     TooLarge,
+    #[error("source import has more than 100,000 records; previous snapshot is unchanged")]
+    TooManyRecords,
     #[error(transparent)]
     Vault(#[from] VaultError),
     #[error("CSV has no password column")]
@@ -169,12 +174,18 @@ pub fn parse_csv(
     }
 
     let mut result: Vec<Credential> = Vec::new();
-    // Index only the non-secret identity fields. Never duplicate plaintext passwords
-    // into the deduplication index, and avoid quadratic scanning of entire exports.
-    // These index keys duplicate potentially sensitive site titles, URLs and
-    // usernames. Wipe the owned copies when parsing succeeds or aborts.
-    let mut seen: HashMap<ImportIdentity, Vec<usize>> = HashMap::new();
+    // Index non-secret account identities and keyed, process-local password
+    // fingerprints. A final exact comparison rules out hash collisions. This
+    // avoids quadratic scans of distinct password variants for one account
+    // without cloning passwords into the index. Identity keys are zeroized.
+    let password_hash_seed = RandomState::new();
+    let mut seen: HashMap<ImportIdentity, HashMap<u64, Vec<usize>>> = HashMap::new();
     for (index, row) in reader.records().enumerate() {
+        // A small CSV can contain millions of tiny rows. Reject them before
+        // allocating another credential, regardless of duplicate frequency.
+        if index >= MAX_IMPORT_RECORDS {
+            return Err(ImportError::TooManyRecords);
+        }
         let row_number = index + 2; // Header is the first line for ordinary CSV exports.
         let row = row?;
         let field = |index: Option<usize>| index.and_then(|i| row.get(i)).unwrap_or("");
@@ -212,14 +223,23 @@ pub fn parse_csv(
             site_url: site_url.to_owned(),
             username: login.to_owned(),
         };
-        if seen.get(&identity).is_some_and(|indices| {
-            indices
-                .iter()
-                .any(|&record_index| result[record_index].password() == secret)
-        }) {
+        let fingerprint = password_hash_seed.hash_one(secret);
+        if seen
+            .get(&identity)
+            .and_then(|by_hash| by_hash.get(&fingerprint))
+            .is_some_and(|indices| {
+                indices
+                    .iter()
+                    .any(|&record_index| result[record_index].password() == secret)
+            })
+        {
             continue;
         }
-        seen.entry(identity).or_default().push(result.len());
+        seen.entry(identity)
+            .or_default()
+            .entry(fingerprint)
+            .or_default()
+            .push(result.len());
         // Deliberately preserve ALL password characters, including whitespace.
         result.push(Credential::new(
             source,
@@ -327,6 +347,9 @@ pub fn commit_snapshot(
     if incoming.is_empty() {
         return Err(ImportError::Empty);
     }
+    if incoming.len() > MAX_IMPORT_RECORDS {
+        return Err(ImportError::TooManyRecords);
+    }
     if incoming.iter().any(|record| record.source != source) {
         return Err(ImportError::MismatchedSource);
     }
@@ -410,6 +433,35 @@ mod tests {
         assert_eq!(records[0].username, "alice");
         assert_eq!(records[1].username, "alicé");
         assert_eq!(records[2].password(), "fictional-b");
+    }
+
+    #[test]
+    fn oversized_record_count_is_rejected_even_if_the_csv_is_under_32_mib() {
+        let mut data = b"name,url,username,password\n".to_vec();
+        for _ in 0..=MAX_IMPORT_RECORDS {
+            data.extend_from_slice(b"Example,https://example.test,user,fictional\n");
+        }
+        assert!(data.len() < MAX_IMPORT_BYTES);
+        assert!(matches!(
+            parse_csv(&data, Source::Edge, 1),
+            Err(ImportError::TooManyRecords)
+        ));
+    }
+
+    #[test]
+    fn same_account_with_many_distinct_passwords_remains_distinct() {
+        let mut data = b"name,url,username,password\n".to_vec();
+        for variant in 0..3_000 {
+            data.extend_from_slice(
+                format!("Example,https://example.test,user,synthetic-{variant}\n").as_bytes(),
+            );
+        }
+        data.extend_from_slice(b"Example,https://example.test,user,synthetic-0\n");
+        data.extend_from_slice(b"Example,https://example.test,user,synthetic-2999\n");
+        let records = parse_csv(&data, Source::Chrome, 15).unwrap();
+        assert_eq!(records.len(), 3_000);
+        assert_eq!(records[0].password(), "synthetic-0");
+        assert_eq!(records[2999].password(), "synthetic-2999");
     }
 
     #[test]
