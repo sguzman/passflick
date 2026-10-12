@@ -177,12 +177,7 @@ fn copy_sensitive_with_limits(
     let mut stdin = child.stdin.take().ok_or(ClipboardError::MissingStdin)?;
     // A small password generally fits into one pipe write. Even if the
     // helper never reads a large value, nonblocking writes can time out.
-    let write_result = write_with_deadline(
-        &mut stdin,
-        text.as_bytes(),
-        started,
-        copy_deadline,
-    );
+    let write_result = write_with_deadline(&mut stdin, text.as_bytes(), started, copy_deadline);
     drop(stdin);
     if matches!(write_result, Err(ClipboardError::TimedOut)) {
         let _ = child.kill();
