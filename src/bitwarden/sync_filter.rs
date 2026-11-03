@@ -271,7 +271,8 @@ mod tests {
     fn permission_restricted_logins_are_not_exposed() {
         let mut restricted = active("restricted-org");
         restricted["viewPassword"] = json!(false);
-        let entries = active_logins(&json!({"ciphers":[active("personal"), restricted]})).unwrap();
+        let snapshot = json!({"ciphers":[active("personal"), restricted]});
+        let entries = active_logins(&snapshot).unwrap();
         assert_eq!(
             entries.iter().map(|item| item.id).collect::<Vec<_>>(),
             vec!["personal"]
