@@ -97,7 +97,9 @@ pub fn admit<'a>(
         .ok_or(SyncEnvelopeError::InvalidFolders)?;
     let mut folder_ids = HashSet::with_capacity(folders.len());
     for folder in folders {
-        let folder = folder.as_object().ok_or(SyncEnvelopeError::InvalidFolders)?;
+        let folder = folder
+            .as_object()
+            .ok_or(SyncEnvelopeError::InvalidFolders)?;
         if folder.contains_key("id") && folder.contains_key("Id") {
             return Err(SyncEnvelopeError::AmbiguousFields);
         }
@@ -189,7 +191,10 @@ mod tests {
     fn missing_or_duplicate_folders_abort_snapshot() {
         let mut value = full_sync();
         value.as_object_mut().unwrap().remove("folders");
-        assert!(matches!(admit(&value, None), Err(SyncEnvelopeError::InvalidFolders)));
+        assert!(matches!(
+            admit(&value, None),
+            Err(SyncEnvelopeError::InvalidFolders)
+        ));
 
         value["folders"] = json!([{"id":"same"},{"id":"same"}]);
         assert!(matches!(
@@ -197,7 +202,10 @@ mod tests {
             Err(SyncEnvelopeError::DuplicateFolderId)
         ));
         value["folders"] = json!([null]);
-        assert!(matches!(admit(&value, None), Err(SyncEnvelopeError::InvalidFolders)));
+        assert!(matches!(
+            admit(&value, None),
+            Err(SyncEnvelopeError::InvalidFolders)
+        ));
     }
 
     #[test]
@@ -210,10 +218,16 @@ mod tests {
         ));
         let mut value = full_sync();
         value["profile"]["id"] = json!(" ");
-        assert!(matches!(admit(&value, None), Err(SyncEnvelopeError::InvalidProfile)));
+        assert!(matches!(
+            admit(&value, None),
+            Err(SyncEnvelopeError::InvalidProfile)
+        ));
         let mut value = full_sync();
         value["object"] = json!("cipherDetails");
-        assert!(matches!(admit(&value, None), Err(SyncEnvelopeError::InvalidMarker)));
+        assert!(matches!(
+            admit(&value, None),
+            Err(SyncEnvelopeError::InvalidMarker)
+        ));
     }
 
     #[test]

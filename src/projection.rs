@@ -168,9 +168,8 @@ impl ProjectionSnapshot {
     /// A storage adapter will encrypt it before performing an atomic publish.
     pub fn encode_json(&self) -> Result<Zeroizing<Vec<u8>>, ProjectionError> {
         self.validate()?;
-        let bytes = Zeroizing::new(
-            serde_json::to_vec(self).map_err(|_| ProjectionError::InvalidJson)?,
-        );
+        let bytes =
+            Zeroizing::new(serde_json::to_vec(self).map_err(|_| ProjectionError::InvalidJson)?);
         if bytes.len() > MAX_SNAPSHOT_BYTES {
             return Err(ProjectionError::TooLarge);
         }
@@ -270,7 +269,10 @@ mod tests {
         assert_eq!(decoded.items().len(), 1);
         assert_eq!(decoded.items()[0].username(), "mañana用户");
         assert_eq!(decoded.items()[0].password(), expected);
-        assert_eq!(decoded.items()[0].uris()[0], "https://example.test/path?token=fictional");
+        assert_eq!(
+            decoded.items()[0].uris()[0],
+            "https://example.test/path?token=fictional"
+        );
     }
 
     #[test]
@@ -289,7 +291,8 @@ mod tests {
         let first = snapshot(vec![
             login("retained", "same-user", "old"),
             login("archived", "other", "old-secret"),
-        ]).unwrap();
+        ])
+        .unwrap();
         let second = snapshot(vec![login("retained", "same-user", "new")]).unwrap();
         assert_eq!(first.items().len(), 2);
         assert_eq!(second.items().len(), 1);
@@ -330,7 +333,10 @@ mod tests {
         let mut bad = login("one", "user", "pw");
         bad.uris = vec![];
         bad.title = "  ".to_owned();
-        assert!(matches!(snapshot(vec![bad]), Err(ProjectionError::InvalidItem)));
+        assert!(matches!(
+            snapshot(vec![bad]),
+            Err(ProjectionError::InvalidItem)
+        ));
 
         let long_secret = "x".repeat(MAX_SECRET_BYTES + 1);
         assert!(matches!(
@@ -342,7 +348,12 @@ mod tests {
             Err(ProjectionError::InvalidSource)
         ));
         assert!(matches!(
-            ProjectionSnapshot::new("https://vault.example.test".to_owned(), "account".to_owned(), 0, vec![]),
+            ProjectionSnapshot::new(
+                "https://vault.example.test".to_owned(),
+                "account".to_owned(),
+                0,
+                vec![]
+            ),
             Err(ProjectionError::InvalidSource)
         ));
     }
@@ -351,6 +362,12 @@ mod tests {
     fn valid_empty_snapshot_is_allowed_after_complete_upstream_sync() {
         let empty = snapshot(vec![]).unwrap();
         assert!(empty.items().is_empty());
-        assert_eq!(ProjectionSnapshot::decode_json(empty.encode_json().unwrap().as_slice()).unwrap().items().len(), 0);
+        assert_eq!(
+            ProjectionSnapshot::decode_json(empty.encode_json().unwrap().as_slice())
+                .unwrap()
+                .items()
+                .len(),
+            0
+        );
     }
 }
