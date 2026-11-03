@@ -46,7 +46,7 @@ pub fn parse_sync_json(raw: &[u8]) -> Result<Value, SyncEnvelopeError> {
     if raw.len() > MAX_SYNC_BODY_BYTES {
         return Err(SyncEnvelopeError::OversizedResponse);
     }
-    serde_json::from_slice(raw).map_err(|_| SyncEnvelopeError::InvalidJson)
+    super::strict_json::parse(raw).map_err(|_| SyncEnvelopeError::InvalidJson)
 }
 
 /// Bind the full response to a known upstream account before projecting
