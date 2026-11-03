@@ -133,11 +133,15 @@ See [security and lifecycle contract](docs/vaultwarden-security-contract.md) for
 
 ### 2026-11-03 additional sync-admission hardening
 
-The test-only sync filter was extended to honor the upstream `viewPassword` restriction, require deletion status and reject ambiguous case variants. Four new synthetic test cases cover these invariants. The local lock/logout/revocation design has also been made explicit in [the security contract](docs/vaultwarden-security-contract.md). **Fresh CI is pending for the new test commit.** No production authentication, decryption, or projection update exists. No new weighted task acceptance has been earned; overall remains 13% (+0 pp).
+The test-only sync filter was extended to honor the upstream `viewPassword` restriction, require deletion status and reject ambiguous case variants. Four new synthetic test cases cover these invariants (11 sync-filter tests total). The local lock/logout/revocation design has also been made explicit in [the security contract](docs/vaultwarden-security-contract.md).
+
+**Fresh CI evidence:** [Rust workflow](https://github.com/sguzman/passflick/actions/runs/41734515325) and [synthetic GUI workflow](https://github.com/sguzman/passflick/actions/runs/41734515123) both passed for code commit `b4f91d408dbff9f9194a827118d81b5ae496e1be`, including committed formatting, Cargo tests, CLI/desktop/encrypted-recovery smoke and Clippy. Earlier corrective runs failed during formatting or a synthetic-test borrow lifetime and were repaired before these green runs. The checks are **not** evidence of live authentication, decryption, or refresh.
+
+**Progress:** still 13/100 weighted points verified (13% → 13%, +0 pp). B01 remains active because the end-to-end disposable-server and native adapter acceptance gates remain unverified.
 
 ## 📍 Durable checkpoint
 
-- **Repository:** `sguzman/passflick`, branch `main`; audited head at adoption `7fd71fde7c4d`.
+- **Repository:** `sguzman/passflick`, branch `main`; audited head at adoption `7fd71fde7c4d`. Latest code commit with both CI workflows green: `b4f91d4`; follow-up documentation commit(s) do not alter the tested Rust code.
 - **Verified reuse:** existing Rust+egui picker, keyboard selection, sensitive clipboard, local encrypted vault, session/keyring architecture and prior synthetic CI evidence. These are not proof of a working Vaultwarden integration.
 - **Unimplemented:** backend auth and sync, native Bitwarden item decryption, upstream-ID projection, update, correct lock/revocation policy, adaptation and legacy retirement.
 - **Next actionable work:** A03/A04/B01 — make an isolated native Rust backend spike with fictional Vaultwarden data; assess compatibility/licensing and document the concrete interface before changing the production cache.
