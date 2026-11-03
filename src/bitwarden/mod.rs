@@ -3,5 +3,5 @@
 //! archive/permission filtering and transactional cache have passed acceptance.
 
 pub mod envelope;
-pub mod sync_filter;
 pub mod pipeline;
+pub mod sync_filter;

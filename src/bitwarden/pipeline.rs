@@ -78,15 +78,23 @@ mod tests {
             id: &str,
             raw: &Map<String, Value>,
         ) -> Result<LoginItem, DecodeError> {
-            let title = raw.get("name").and_then(Value::as_str)
+            let title = raw
+                .get("name")
+                .and_then(Value::as_str)
                 .and_then(|value| value.strip_prefix("2."))
                 .ok_or(DecodeError::InvalidCipher)?;
-            let login = raw.get("login").and_then(Value::as_object)
+            let login = raw
+                .get("login")
+                .and_then(Value::as_object)
                 .ok_or(DecodeError::InvalidCipher)?;
-            let username = login.get("username").and_then(Value::as_str)
+            let username = login
+                .get("username")
+                .and_then(Value::as_str)
                 .and_then(|value| value.strip_prefix("2."))
                 .ok_or(DecodeError::InvalidCipher)?;
-            let password = login.get("password").and_then(Value::as_str)
+            let password = login
+                .get("password")
+                .and_then(Value::as_str)
                 .and_then(|value| value.strip_prefix("2."))
                 .ok_or(DecodeError::InvalidCipher)?;
             Ok(LoginItem::new(
@@ -146,7 +154,8 @@ mod tests {
             hidden,
         ]);
         let sync = envelope::admit(&body, Some("synthetic-account")).unwrap();
-        let result = project_full_sync(sync, "https://vault.example.test", 1, &FixtureDecoder).unwrap();
+        let result =
+            project_full_sync(sync, "https://vault.example.test", 1, &FixtureDecoder).unwrap();
         assert_eq!(result.items().len(), 2);
         assert_eq!(result.items()[0].id(), "active-a");
         assert_eq!(result.items()[0].password(), "  🗝️ uno  ");
@@ -161,14 +170,16 @@ mod tests {
             "https://vault.example.test",
             1,
             &FixtureDecoder,
-        ).unwrap();
+        )
+        .unwrap();
         let next_body = complete(vec![cipher("id-a", "new")]);
         let next = project_full_sync(
             envelope::admit(&next_body, None).unwrap(),
             "https://vault.example.test",
             2,
             &FixtureDecoder,
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(first.items().len(), 2);
         assert_eq!(next.items().len(), 1);
         assert_eq!(next.items()[0].password(), "new");
