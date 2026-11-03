@@ -370,6 +370,12 @@ impl ReadOnlySyncTransport {
         endpoint: &ServerEndpoint,
         session: &mut RemoteSession,
     ) -> Result<(), AuthError> {
+        if session.refresh_token.is_empty()
+            || session.refresh_token.len() > 8192
+            || session.refresh_token.bytes().any(|byte| byte.is_ascii_control())
+        {
+            return Err(AuthError::InvalidSettings);
+        }
         let grant = RefreshGrant {
             grant_type: "refresh_token",
             client_id: "cli",
@@ -498,6 +504,23 @@ mod tests {
                     code: "\n"
                 })
             ),
+            Err(AuthError::InvalidSettings)
+        ));
+    }
+
+    #[test]
+    fn refresh_rejects_empty_token_without_network_request() {
+        let transport = ReadOnlySyncTransport::new().unwrap();
+        let endpoint = ServerEndpoint::parse("https://vault.example.test").unwrap();
+        let mut reply = LoginReply {
+            access_token: "synthetic".into(),
+            refresh_token: String::new(),
+            encrypted_user_key: "2.example".into(),
+            expires_in: 60,
+        };
+        let mut session = RemoteSession::new(&mut reply).unwrap();
+        assert!(matches!(
+            transport.refresh_session(&endpoint, &mut session),
             Err(AuthError::InvalidSettings)
         ));
     }

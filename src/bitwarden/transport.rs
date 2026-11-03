@@ -311,6 +311,7 @@ mod tests {
 
     #[test]
     fn no_request_is_sent_with_invalid_token_or_account() {
+        assert!(validate_token("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmeCJ9.signature").is_ok());
         for bad in ["", "with whitespace", "token\r\nInjected:yes", "🗝️"] {
             assert!(matches!(
                 validate_token(bad),
