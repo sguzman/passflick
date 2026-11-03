@@ -32,6 +32,14 @@ The new projection **must have a separate file identity, encryption key, session
 
 These are implementation requirements, **not claims that current Passflick behaves this way**. A03/A04 and C03/G04 remain open until the native backend, cache key lifecycle and real Wayland tests substantiate them.
 
+## Native Bitwarden crypto and token lifecycle boundaries (test-only)
+
+The adapter currently uses the pinned MIT `rbw` Rust library for master-password KDF, wrapped user key, type-2 ciphertext decoding and HMAC verification. Since the library's verifier assumes a fixed 32-byte decoded MAC, Passflick rejects malformed decoded lengths, missing MAC, incorrect IV length and non-block-aligned ciphertext **before** dispatching to it. Error types must remain non-secret and failed candidate updates must never mutate the prior encrypted cache.
+
+Authentication uses the existing strict HTTPS/no-redirect transport for prelogin, password grant and refresh; it bounds server-provided KDF cost, authenticates only against the explicitly configured endpoint, supports TOTP/email-code challenge values, and holds access/refresh tokens in zeroizing in-memory structures with an expiry boundary. This is not yet a complete session manager, and transient HTTP encoding/serialization buffers should not be represented as cryptographically guaranteed zeroized.
+
+Unsupported organization ciphers and master-password re-prompt flags are currently rejected at the candidate snapshot level. This is deliberately fail-closed but does not mean Passflick can yet synchronize arbitrary users' vaults. Server/device compatibility, TLS CA tests, endpoint auth errors, logout and explicit local-lock policy remain acceptance requirements.
+
 ## Native read-only HTTPS admission (test-only baseline)
 
 The isolated `src/bitwarden/transport.rs` sends an HTTPS GET only to the selected server's derived `/api/sync` endpoint. The adapter rejects insecure endpoint schemes, credentials embedded in URLs, queries/fragments, invalid bearer header characters, redirects and non-success HTTP statuses. Connection and total timeouts bound stalls; a 64 MiB limit applies to both declared and actually read body bytes. All network and parsing errors have sanitized messages. The bearer token is supplied by a future authentication layer and is not persisted by this transport.

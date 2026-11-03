@@ -18,6 +18,12 @@ The test-only `src/bitwarden/transport.rs` contains a native Rust `reqwest` clie
 
 **This is not a working Vaultwarden client.** It still requires native authentication and reviewed decryption, an HTTPS test server with trusted and bad-chain/hostname cases, encrypted transactional snapshot storage and real host acceptance. The single GET transport does not satisfy those requirements by itself.
 
+## Rust crypto/auth integration in progress (2026-11-03)
+
+The test-only `src/bitwarden/decryptor.rs` now uses `rbw` 1.15.0's MIT-licensed **library** key-derivation and authenticated AES-CBC cipherstring implementations. Personal login title/username/password and encrypted URIs are decrypted without synthetic prefix shortcuts, including per-item wrapped keys. Org-scoped items and nonzero master re-prompt are **hard failures for the entire update**, not silently projected under wrong credentials. Cipherstrings must carry a valid 32-byte HMAC, 16-byte IV and block-aligned ciphertext: upstream `rbw` otherwise panics for certain malformed MAC lengths.
+
+The separate `src/bitwarden/auth.rs` performs native HTTPS prelogin and password-grant exchange, accepts TOTP/email-code MFA and models refresh/expiry with zeroizing in-memory session tokens. The same strict HTTPS CA/no-redirect client is reused. This layer is **not connected to the actual picker**, has not been exercised against a disposable Vaultwarden server, and has no token persistence. `rbw` is currently a **dev-only** dependency: adopting it for production still needs audited licensing/compatibility and stable API selection.
+
 ## Responsibilities
 
 | Component | Owns | Does not own |
