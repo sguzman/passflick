@@ -127,6 +127,8 @@ The API audit found a concrete compatibility gap in `rbw` v1.15.0: its current `
 
 See [security and lifecycle contract](docs/vaultwarden-security-contract.md) for offline/local lock and refresh invariants. This contract is a design gate, not a completed security audit.
 
+**CI evidence:** [Rust workflow](https://github.com/sguzman/passflick/actions/runs/41731198692) passed committed formatting, the Rust test stage (including the new synthetic sync-ingress tests), CLI and encrypted-recovery smoke tests, and Clippy; [synthetic GUI workflow](https://github.com/sguzman/passflick/actions/runs/41731198812) passed against the same code commit `0eff95e16837a155ffa97688f76e77d43d43f7a9`. These tests do **not** demonstrate real Vaultwarden authentication or decrypted credential synchronization.
+
 **Progress accounting:** 13/100 weighted points remain verified. The prototype is tracked as partial work within unfinished B01; no points are awarded until its acceptance criteria (including a disposable-server integration) pass. Prior and current percentages: **13% → 13% (+0 pp)**.
 
 ## 📍 Durable checkpoint
