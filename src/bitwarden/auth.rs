@@ -190,14 +190,10 @@ fn valid_email(email: &str) -> bool {
 }
 
 fn valid_device_id(id: &str) -> bool {
-    !id.is_empty()
-        && id.len() <= 128
-        && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    !id.is_empty() && id.len() <= 128 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
-fn read_response(
-    response: reqwest::blocking::Response,
-) -> Result<Zeroizing<Vec<u8>>, AuthError> {
+fn read_response(response: reqwest::blocking::Response) -> Result<Zeroizing<Vec<u8>>, AuthError> {
     if response.content_length().is_some_and(|len| len > MAX_REPLY) {
         return Err(AuthError::InvalidResponse);
     }
@@ -213,8 +209,7 @@ fn read_response(
 }
 
 fn decode_login(raw: &[u8]) -> Result<LoginReply, AuthError> {
-    let parsed: LoginReply =
-        serde_json::from_slice(raw).map_err(|_| AuthError::InvalidResponse)?;
+    let parsed: LoginReply = serde_json::from_slice(raw).map_err(|_| AuthError::InvalidResponse)?;
     if parsed.access_token.is_empty()
         || parsed.access_token.len() > 8192
         || parsed.refresh_token.is_empty()
@@ -253,7 +248,9 @@ fn mfa_required(raw: &[u8]) -> bool {
         .or_else(|| value.get("twoFactorProviders"))
         .and_then(serde_json::Value::as_array)
         .is_some_and(|providers| {
-            providers.iter().any(|p| p.as_u64().is_some_and(|v| v == 0 || v == 1))
+            providers
+                .iter()
+                .any(|p| p.as_u64().is_some_and(|v| v == 0 || v == 1))
         })
 }
 
@@ -333,7 +330,10 @@ impl ReadOnlySyncTransport {
         let response = self
             .client()
             .post(endpoint.token_url())
-            .header("auth-email", rbw::base64::encode_url_safe_no_pad(&normalized_email))
+            .header(
+                "auth-email",
+                rbw::base64::encode_url_safe_no_pad(&normalized_email),
+            )
             .form(&grant)
             .send()
             .map_err(|_| AuthError::Transport)?;
@@ -416,18 +416,24 @@ mod tests {
         assert!(decode_login(
             br#"{"access_token":"synthetic-access","refresh_token":"synthetic-refresh","Key":"2.key","expires_in":3600}"#
         ).is_ok());
-        assert!(decode_login(
-            br#"{"access_token":"","refresh_token":"r","Key":"k","expires_in":3600}"#
-        ).is_err());
-        assert!(decode_login(
-            br#"{"access_token":"a","refresh_token":"r","Key":"k","expires_in":0}"#
-        ).is_err());
-        assert!(decode_refresh(
-            br#"{"access_token":"new","refresh_token":"new-refresh","expires_in":3600}"#
-        ).is_ok());
-        assert!(decode_refresh(
-            br#"{"access_token":"new","refresh_token":"","expires_in":3600}"#
-        ).is_err());
+        assert!(
+            decode_login(br#"{"access_token":"","refresh_token":"r","Key":"k","expires_in":3600}"#)
+                .is_err()
+        );
+        assert!(
+            decode_login(br#"{"access_token":"a","refresh_token":"r","Key":"k","expires_in":0}"#)
+                .is_err()
+        );
+        assert!(
+            decode_refresh(
+                br#"{"access_token":"new","refresh_token":"new-refresh","expires_in":3600}"#
+            )
+            .is_ok()
+        );
+        assert!(
+            decode_refresh(br#"{"access_token":"new","refresh_token":"","expires_in":3600}"#)
+                .is_err()
+        );
     }
 
     #[test]
@@ -447,8 +453,9 @@ mod tests {
         assert_eq!(session.bearer_token(), Some("old-access"));
 
         let mut valid = decode_refresh(
-            br#"{"access_token":"new-access","refresh_token":"new-refresh","expires_in":60}"#
-        ).unwrap();
+            br#"{"access_token":"new-access","refresh_token":"new-refresh","expires_in":60}"#,
+        )
+        .unwrap();
         session.apply_refresh(&mut valid).unwrap();
         assert_eq!(session.bearer_token(), Some("new-access"));
         assert_eq!(session.refresh_token.as_str(), "new-refresh");
@@ -456,10 +463,14 @@ mod tests {
 
     #[test]
     fn mfa_challenges_are_classified_without_returning_private_error_text() {
-        assert!(mfa_required(br#"{"TwoFactorProviders":[0,6],"error_description":"private"}"#));
+        assert!(mfa_required(
+            br#"{"TwoFactorProviders":[0,6],"error_description":"private"}"#
+        ));
         assert!(mfa_required(br#"{"twoFactorProviders":[1]}"#));
         assert!(!mfa_required(br#"{"twoFactorProviders":[6]}"#));
-        assert!(!mfa_required(br#"{"error_description":"invalid password"}"#));
+        assert!(!mfa_required(
+            br#"{"error_description":"invalid password"}"#
+        ));
         assert_eq!(MfaProvider::Totp.number(), 0);
         assert_eq!(MfaProvider::EmailCode.number(), 1);
     }
@@ -478,8 +489,14 @@ mod tests {
         ));
         assert!(matches!(
             transport.authenticate(
-                &endpoint, "user@example.test", "fictional", "device-id",
-                Some(MfaChallenge {provider:MfaProvider::Totp,code:"\n"})
+                &endpoint,
+                "user@example.test",
+                "fictional",
+                "device-id",
+                Some(MfaChallenge {
+                    provider: MfaProvider::Totp,
+                    code: "\n"
+                })
             ),
             Err(AuthError::InvalidSettings)
         ));
@@ -488,7 +505,13 @@ mod tests {
     #[test]
     fn token_endpoints_are_separate_from_vault_sync_path() {
         let endpoint = ServerEndpoint::parse("https://vault.example.test/prefix").unwrap();
-        assert_eq!(endpoint.prelogin_url().as_str(), "https://vault.example.test/prefix/identity/accounts/prelogin");
-        assert_eq!(endpoint.token_url().as_str(), "https://vault.example.test/prefix/identity/connect/token");
+        assert_eq!(
+            endpoint.prelogin_url().as_str(),
+            "https://vault.example.test/prefix/identity/accounts/prelogin"
+        );
+        assert_eq!(
+            endpoint.token_url().as_str(),
+            "https://vault.example.test/prefix/identity/connect/token"
+        );
     }
 }
