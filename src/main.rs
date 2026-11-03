@@ -1,4 +1,6 @@
 mod app;
+#[cfg(test)]
+mod bitwarden;
 mod backup;
 mod clipboard;
 mod desktop_keyring;
