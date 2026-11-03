@@ -372,7 +372,10 @@ impl ReadOnlySyncTransport {
     ) -> Result<(), AuthError> {
         if session.refresh_token.is_empty()
             || session.refresh_token.len() > 8192
-            || session.refresh_token.bytes().any(|byte| byte.is_ascii_control())
+            || session
+                .refresh_token
+                .bytes()
+                .any(|byte| byte.is_ascii_control())
         {
             return Err(AuthError::InvalidSettings);
         }
