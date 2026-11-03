@@ -2,6 +2,7 @@
 //! Production integration is not wired in until authentication, crypto,
 //! archive/permission filtering and transactional cache have passed acceptance.
 
+pub mod decryptor;
 pub mod envelope;
 pub mod pipeline;
 pub mod strict_json;
