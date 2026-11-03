@@ -100,6 +100,16 @@ fn decrypt_authenticated(encrypted: &str, keys: &Keys) -> Result<Zeroizing<Vec<u
     {
         return Err(DecodeError::InvalidCipher);
     }
+    // rbw's HMAC verifier expects a 32-byte digest and may panic when
+    // presented with a differently sized decoded MAC. Validate structural
+    // lengths before passing untrusted ciphertext to that primitive.
+    let parts = encrypted[2..].split('|').collect::<Vec<_>>();
+    let iv = rbw::base64::decode(parts[0]).map_err(|_| DecodeError::InvalidCipher)?;
+    let ciphertext = rbw::base64::decode(parts[1]).map_err(|_| DecodeError::InvalidCipher)?;
+    let mac = rbw::base64::decode(parts[2]).map_err(|_| DecodeError::InvalidCipher)?;
+    if iv.len() != 16 || ciphertext.is_empty() || ciphertext.len() % 16 != 0 || mac.len() != 32 {
+        return Err(DecodeError::InvalidCipher);
+    }
     let cipher = CipherString::new(encrypted).map_err(|_| DecodeError::InvalidCipher)?;
     cipher
         .decrypt_symmetric(keys, None)
@@ -302,8 +312,8 @@ mod tests {
 
         record["name"] = json!(cipher("Fictional Service", &keys));
         let mut broken = record["name"].as_str().unwrap().to_owned();
-        broken.pop();
-        broken.push('A');
+        let last = broken.pop().unwrap();
+        broken.push(if last == 'A' { 'B' } else { 'A' });
         record["name"] = json!(broken);
         assert!(
             decoder
