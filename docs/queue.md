@@ -1,4 +1,4 @@
-# Development queue
+> **Historical implementation queue.** This checklist records the original browser-CSV aggregation implementation and synthetic verification. That workflow is being retired as the product moves to a single read-only Bitwarden/Vaultwarden source. Current authorized scope, weighted progress and acceptance gates are tracked in [ROADMAP.md](../ROADMAP.md); design rationale is in [vaultwarden-architecture.md](vaultwarden-architecture.md). Do not interpret checked CSV work as completed native Vaultwarden integration.\n\n# Development queue
 
 ## Initial product
 
