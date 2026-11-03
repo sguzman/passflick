@@ -63,6 +63,27 @@ impl ServerEndpoint {
         Ok(Self { root })
     }
 
+    /// Derive the official identity-service prelogin endpoint.
+    pub(super) fn prelogin_url(&self) -> Url {
+        self.identity_path(&["accounts", "prelogin"])
+    }
+
+    /// Derive the official identity-service token endpoint.
+    pub(super) fn token_url(&self) -> Url {
+        self.identity_path(&["connect", "token"])
+    }
+
+    fn identity_path(&self, segments: &[&str]) -> Url {
+        let mut url = self.root.clone();
+        let mut path = url.path_segments_mut().expect("HTTPS URL has authority");
+        path.pop_if_empty().push("identity");
+        for segment in segments {
+            path.push(segment);
+        }
+        drop(path);
+        url
+    }
+
     /// Construct only the Bitwarden-compatible read-only user sync endpoint.
     /// The caller cannot use this adapter to create, modify or delete ciphers.
     pub fn sync_url(&self) -> Url {
@@ -93,6 +114,11 @@ impl ReadOnlySyncTransport {
             .build()
             .map_err(|_| TransportError::ClientSetup)?;
         Ok(Self { client })
+    }
+
+    /// Reuse the same trusted TLS and no-redirect policy for identity login.
+    pub(super) fn client(&self) -> &Client {
+        &self.client
     }
 
     /// Fetch one complete user sync without any upstream mutation. TLS
