@@ -140,7 +140,10 @@ mod tests {
         });
         let snapshot = json!({"ciphers":[a,b,archive,trashed,note]});
         let entries = active_logins(&snapshot).unwrap();
-        assert_eq!(entries.iter().map(|item| item.id).collect::<Vec<_>>(), vec!["a", "b"]);
+        assert_eq!(
+            entries.iter().map(|item| item.id).collect::<Vec<_>>(),
+            vec!["a", "b"]
+        );
         assert_eq!(entries[0].cipher["name"], "2.encrypted-name");
     }
 
@@ -197,7 +200,10 @@ mod tests {
 
     #[test]
     fn malformed_envelopes_and_missing_login_fail_closed() {
-        assert_eq!(active_logins(&json!({})).unwrap_err(), SyncFilterError::MissingCiphers);
+        assert_eq!(
+            active_logins(&json!({})).unwrap_err(),
+            SyncFilterError::MissingCiphers
+        );
         assert_eq!(
             active_logins(&json!({"ciphers":[null]})).unwrap_err(),
             SyncFilterError::InvalidCipher
