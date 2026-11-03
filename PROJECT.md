@@ -1,28 +1,28 @@
 # Project contract
 
-Passflick is a low-latency, keyboard-first, read-only password projection for Linux. Existing password managers remain the systems of record. Passflick does not create, modify, autofill, or transmit credentials.
+Passflick is a low-latency, keyboard-first **read-only password projection for Linux**, with a Bitwarden-compatible server (including self-hosted Vaultwarden) as the **sole source of truth**. Passflick is not an independent password manager, password editor or browser-export aggregator.
 
-## User contract
+**Transition status:** the Vaultwarden integration described below is **planned and not yet implemented**. The current code still implements the original browser CSV ingestion and independent encrypted local vault. See [ROADMAP.md](ROADMAP.md) and [the architecture design](docs/vaultwarden-architecture.md) for the migration and verification gates.
 
-The picker behaves like OTPick:
+## Accepted user experience
 
-- Search as soon as the window appears.
-- Up/Down selects a result.
-- Enter copies its password and exits.
-- Shift+Enter copies its username and exits.
-- Escape closes without copying.
-- One launch copies at most one value. No secret is shown in search results.
+- Configure and authenticate with a user-selected Bitwarden-compatible server through a secure native Rust integration.
+- Explicitly run `passflick update` or invoke a compact update control to refresh a securely encrypted local projection. **Ordinary picker launches never require a server request.**
+- Search immediately by site and username using the most recently *successfully* synchronized and locally unlocked snapshot, even when the server is temporarily unavailable.
+- Up/Down selects a result. Enter copies its password and exits; Shift+Enter copies its username and exits; Escape closes without copying. Search results never display passwords.
+- Present distinct upstream items, including conflicting credentials at the same site/username; no guessing which password is correct. The last update time is visible; a stale offline projection is not represented as current server state.
+- Following a successful update, the active local view reflects current server archive/deletion state. Local access when offline is governed by an explicit, separately tested cache lock policy.
 
-## Source model
+## Architectural boundaries
 
-The source set is Edge (primary), Chrome/Chromium, Firefox, and Apple Passwords. Imports preserve original source identity and the time of the snapshot. A successful source refresh replaces that source's projection, not another source's records. Failed imports leave existing data intact. Different passwords associated with the same site and username remain distinct.
+- **Authoritative data:** the remote Bitwarden/Vaultwarden vault. Credential creation, edits, archival, deletion and organization happen there, not in Passflick.
+- **Local data:** an authenticated encrypted *projection*, not a second curated authority. It is retained between launches and replaced transactionally only after a fully successful sync.
+- **Integration:** prefer reviewed reusable Rust client/cryptography components; do not casually reimplement password-manager cryptography or assume the unsupported internal Bitwarden SDK is stable. The official CLI may be a disposable integration-test oracle; it is not an assumed runtime dependency.
+- **Local security:** retain existing private permissions, sensitive clipboard transport, zeroizing buffers, core-dump restrictions and keyring patterns where appropriate, after review for the new auth/cache lifecycle. No secrets in logs, process arguments, CI fixtures or public artifacts.
+- **Legacy retirement:** remove Edge/Chrome/Firefox/Apple import paths from the supported app only after the new adapter and rollback path pass acceptance. Do not delete the user's old encrypted data.
 
-CSV export and explicit local import are the baseline. Later adapters may support read-only, opt-in local retrieval when the browser exposes an authorized interface. No hidden background scraping or browser protection bypasses.
+## Supported environment and status
 
-## Platform and security
+Rust + egui on Linux/Wayland/Hyprland; theme selector for System (default), Light and Dark must be verified as part of the new accepted UI. No npm. Preserve the existing MIT repository license unless a reviewed dependency and the owner authorize a change.
 
-Rust + egui, Linux/Wayland/Hyprland, Wayland clipboard via stdin. A separately encrypted local vault uses Argon2id and authenticated encryption, with a Linux session keyring hot path and optional desktop Secret Service unlock. Passflick's key material must never be shared with OTPick. Plaintext imports and vault contents must never be committed to GitHub or logged.
-
-## Status
-
-Initial development. Not security-audited. See docs/queue.md for engineering progress rather than using the README as an activity log.
+This is an **existing-project architectural replacement**, not a new application. Progress is tracked with a weighted roadmap and evidence-based acceptance; the finished implementation is **not** claimed until real server integration, security QA and target-host validation pass.
