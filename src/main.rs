@@ -2,6 +2,8 @@ mod app;
 mod backup;
 #[cfg(test)]
 mod bitwarden;
+#[cfg(test)]
+mod projection;
 mod clipboard;
 mod desktop_keyring;
 mod discovery;
