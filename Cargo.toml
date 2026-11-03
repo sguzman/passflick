@@ -21,6 +21,10 @@ secret-service = { version = "5.2", default-features = false, features = ["rt-as
 thiserror = "2.0"
 zeroize = { version = "1.9", features = ["serde"] }
 
+[dev-dependencies]
+# Isolated native HTTPS sync prototype; not included in release picker yet.
+reqwest = { version = "0.12.28", default-features = false, features = ["blocking", "rustls-tls-native-roots"] }
+
 [profile.release]
 lto = "thin"
 codegen-units = 1

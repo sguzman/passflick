@@ -1,0 +1,33 @@
+name: Resolve native transport Cargo.lock
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - '.github/workflows/resolve-native-lock.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: true
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Resolve only missing locked dependencies
+        run: cargo metadata --format-version=1 > /dev/null
+      - name: Commit lockfile if resolver changed it
+        run: |
+          if git diff --quiet -- Cargo.lock; then
+            echo 'Cargo.lock already current'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Cargo.lock
+          git commit -m 'chore: resolve native HTTPS transport lockfile'
+          git push origin HEAD:main
