@@ -131,6 +131,10 @@ See [security and lifecycle contract](docs/vaultwarden-security-contract.md) for
 
 **Progress accounting:** 13/100 weighted points remain verified. The prototype is tracked as partial work within unfinished B01; no points are awarded until its acceptance criteria (including a disposable-server integration) pass. Prior and current percentages: **13% → 13% (+0 pp)**.
 
+### 2026-11-03 additional sync-admission hardening
+
+The test-only sync filter was extended to honor the upstream `viewPassword` restriction, require deletion status and reject ambiguous case variants. Four new synthetic test cases cover these invariants. The local lock/logout/revocation design has also been made explicit in [the security contract](docs/vaultwarden-security-contract.md). **Fresh CI is pending for the new test commit.** No production authentication, decryption, or projection update exists. No new weighted task acceptance has been earned; overall remains 13% (+0 pp).
+
 ## 📍 Durable checkpoint
 
 - **Repository:** `sguzman/passflick`, branch `main`; audited head at adoption `7fd71fde7c4d`.
