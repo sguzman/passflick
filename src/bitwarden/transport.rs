@@ -228,7 +228,10 @@ mod tests {
         let url = ServerEndpoint::parse("https://vault.example.test:8443/proxy")
             .unwrap()
             .sync_url();
-        assert_eq!(url.as_str(), "https://vault.example.test:8443/proxy/api/sync");
+        assert_eq!(
+            url.as_str(),
+            "https://vault.example.test:8443/proxy/api/sync"
+        );
         assert_eq!(
             ServerEndpoint::parse("https://vault.example.test")
                 .unwrap()
@@ -261,7 +264,9 @@ mod tests {
         ));
         assert!(matches!(
             validate_body(200, &raw, "different-account"),
-            Err(TransportError::Admission(SyncEnvelopeError::AccountMismatch))
+            Err(TransportError::Admission(
+                SyncEnvelopeError::AccountMismatch
+            ))
         ));
         assert!(matches!(
             validate_body(200, b"{secret-ish", "account-fixture"),
@@ -281,10 +286,16 @@ mod tests {
     #[test]
     fn no_request_is_sent_with_invalid_token_or_account() {
         for bad in ["", "with whitespace", "token\r\nInjected:yes", "🗝️"] {
-            assert!(matches!(validate_token(bad), Err(TransportError::InvalidToken)));
+            assert!(matches!(
+                validate_token(bad),
+                Err(TransportError::InvalidToken)
+            ));
         }
         for bad in ["", " ", "wrong\nid"] {
-            assert!(matches!(validate_account(bad), Err(TransportError::InvalidAccount)));
+            assert!(matches!(
+                validate_account(bad),
+                Err(TransportError::InvalidAccount)
+            ));
         }
         let transport = ReadOnlySyncTransport::new().unwrap();
         let endpoint = ServerEndpoint::parse("https://vault.example.test").unwrap();
