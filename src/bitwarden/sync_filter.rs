@@ -28,16 +28,24 @@ pub enum SyncFilterError {
     TooManyCiphers,
     #[error("sync contains a malformed cipher")]
     InvalidCipher,
+    #[error("sync contains ambiguous lower/Pascal-case fields")]
+    AmbiguousFields,
     #[error("sync contains a missing or invalid item ID")]
     InvalidId,
     #[error("sync contains duplicate item IDs")]
     DuplicateId,
     #[error("sync is missing required archival metadata")]
     MissingArchiveStatus,
+    #[error("sync is missing required deletion metadata")]
+    MissingDeletedStatus,
     #[error("sync contains invalid or ambiguous lifecycle metadata")]
     InvalidLifecycleStatus,
     #[error("active login is missing its login data")]
     InvalidLogin,
+    #[error("active login is missing its password visibility permission")]
+    MissingPasswordPermission,
+    #[error("active login has invalid password visibility permission")]
+    InvalidPasswordPermission,
 }
 
 /// Select only active login envelopes, retaining their exact upstream IDs.
@@ -46,6 +54,9 @@ pub enum SyncFilterError {
 /// Missing `archivedDate` is intentionally a hard failure: legacy libraries
 /// can deserialize a sync response while silently dropping archive status.
 pub fn active_logins(snapshot: &Value) -> Result<Vec<ActiveLogin<'_>>, SyncFilterError> {
+    if snapshot.get("ciphers").is_some() && snapshot.get("Ciphers").is_some() {
+        return Err(SyncFilterError::AmbiguousFields);
+    }
     let ciphers = snapshot
         .get("ciphers")
         .or_else(|| snapshot.get("Ciphers"))
@@ -60,6 +71,16 @@ pub fn active_logins(snapshot: &Value) -> Result<Vec<ActiveLogin<'_>>, SyncFilte
 
     for cipher in ciphers {
         let object = cipher.as_object().ok_or(SyncFilterError::InvalidCipher)?;
+        for (lower, upper) in [
+            ("id", "Id"),
+            ("type", "Type"),
+            ("login", "Login"),
+            ("viewPassword", "ViewPassword"),
+        ] {
+            if object.contains_key(lower) && object.contains_key(upper) {
+                return Err(SyncFilterError::AmbiguousFields);
+            }
+        }
         let id = value(object, "id", "Id")
             .and_then(Value::as_str)
             .filter(|id| !id.is_empty())
@@ -68,8 +89,18 @@ pub fn active_logins(snapshot: &Value) -> Result<Vec<ActiveLogin<'_>>, SyncFilte
             return Err(SyncFilterError::DuplicateId);
         }
 
-        let archived = lifecycle_status(object, "archivedDate", "ArchivedDate", true)?;
-        let deleted = lifecycle_status(object, "deletedDate", "DeletedDate", false)?;
+        let archived = lifecycle_status(
+            object,
+            "archivedDate",
+            "ArchivedDate",
+            SyncFilterError::MissingArchiveStatus,
+        )?;
+        let deleted = lifecycle_status(
+            object,
+            "deletedDate",
+            "DeletedDate",
+            SyncFilterError::MissingDeletedStatus,
+        )?;
         if archived || deleted {
             continue;
         }
@@ -82,6 +113,14 @@ pub fn active_logins(snapshot: &Value) -> Result<Vec<ActiveLogin<'_>>, SyncFilte
         }
         if !value(object, "login", "Login").is_some_and(Value::is_object) {
             return Err(SyncFilterError::InvalidLogin);
+        }
+        // A user sync explicitly states whether upstream permits viewing the
+        // secret. Restricted collection items must not enter the projection.
+        match value(object, "viewPassword", "ViewPassword") {
+            Some(Value::Bool(true)) => {}
+            Some(Value::Bool(false)) => continue,
+            Some(_) => return Err(SyncFilterError::InvalidPasswordPermission),
+            None => return Err(SyncFilterError::MissingPasswordPermission),
         }
         active.push(ActiveLogin { id, cipher: object });
     }
@@ -96,7 +135,7 @@ fn lifecycle_status(
     obj: &Map<String, Value>,
     lower: &str,
     upper: &str,
-    required: bool,
+    missing: SyncFilterError,
 ) -> Result<bool, SyncFilterError> {
     if obj.contains_key(lower) && obj.contains_key(upper) {
         return Err(SyncFilterError::InvalidLifecycleStatus);
@@ -104,8 +143,7 @@ fn lifecycle_status(
     match value(obj, lower, upper) {
         Some(Value::Null) => Ok(false),
         Some(Value::String(date)) if !date.trim().is_empty() => Ok(true),
-        None if !required => Ok(false),
-        None => Err(SyncFilterError::MissingArchiveStatus),
+        None => Err(missing),
         _ => Err(SyncFilterError::InvalidLifecycleStatus),
     }
 }
@@ -122,7 +160,8 @@ mod tests {
             "name": "2.encrypted-name",
             "login": {"username": "2.encrypted-user", "password": "2.encrypted-secret"},
             "archivedDate": null,
-            "deletedDate": null
+            "deletedDate": null,
+            "viewPassword": true
         })
     }
 
@@ -190,7 +229,8 @@ mod tests {
         let snapshot = json!({
             "Ciphers": [{
                 "Id":"a", "Type":1, "Login":{},
-                "ArchivedDate":null, "DeletedDate":null
+                "ArchivedDate":null, "DeletedDate":null,
+                "ViewPassword":true
             }]
         });
         let entries = active_logins(&snapshot).unwrap();
@@ -225,5 +265,62 @@ mod tests {
     #[test]
     fn zero_active_logins_can_be_a_valid_snapshot() {
         assert!(active_logins(&json!({"ciphers":[]})).unwrap().is_empty());
+    }
+
+    #[test]
+    fn permission_restricted_logins_are_not_exposed() {
+        let mut restricted = active("restricted-org");
+        restricted["viewPassword"] = json!(false);
+        let entries = active_logins(&json!({"ciphers":[active("personal"), restricted]})).unwrap();
+        assert_eq!(entries.iter().map(|item| item.id).collect::<Vec<_>>(), vec!["personal"]);
+    }
+
+    #[test]
+    fn missing_or_invalid_permission_fails_the_entire_sync() {
+        let mut missing = active("unknown-permission");
+        missing.as_object_mut().unwrap().remove("viewPassword");
+        assert_eq!(
+            active_logins(&json!({"ciphers":[active("good"), missing]})).unwrap_err(),
+            SyncFilterError::MissingPasswordPermission
+        );
+        for bad in [json!(null), json!("true"), json!(1), json!({})] {
+            let mut item = active("invalid-permission");
+            item["viewPassword"] = bad;
+            assert_eq!(
+                active_logins(&json!({"ciphers":[item]})).unwrap_err(),
+                SyncFilterError::InvalidPasswordPermission
+            );
+        }
+    }
+
+    #[test]
+    fn absent_deleted_status_is_not_assumed_active() {
+        let mut item = active("unknown-deletion-status");
+        item.as_object_mut().unwrap().remove("deletedDate");
+        assert_eq!(
+            active_logins(&json!({"ciphers":[item]})).unwrap_err(),
+            SyncFilterError::MissingDeletedStatus
+        );
+    }
+
+    #[test]
+    fn ambiguous_case_variants_fail_without_silent_precedence() {
+        assert_eq!(
+            active_logins(&json!({"ciphers":[], "Ciphers":[active("other")]})).unwrap_err(),
+            SyncFilterError::AmbiguousFields
+        );
+        for (lower, upper) in [
+            ("id", "Id"),
+            ("type", "Type"),
+            ("login", "Login"),
+            ("viewPassword", "ViewPassword"),
+        ] {
+            let mut item = active("ambiguous");
+            item[upper] = item[lower].clone();
+            assert_eq!(
+                active_logins(&json!({"ciphers":[item]})).unwrap_err(),
+                SyncFilterError::AmbiguousFields
+            );
+        }
     }
 }
