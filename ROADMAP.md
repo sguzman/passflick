@@ -44,7 +44,7 @@ New scope replaces the previous multi-browser-source objective, so old and new p
 | --- | --- | ---: | --- | --- |
 | B01 🧪 | Protocol/library evaluation and isolated spike | 4 | 🟡 | Test currently relevant `rbw`-derived APIs, Bitwarden SDK boundaries, and feasibility of a native adapter against a disposable server; document license, stability, maintenance and version risks; A03 candidate |
 | B02 🔑 | Authenticate self-hosted account safely | 5 | ⬜ | Support an explicitly configured endpoint, supported primary auth, session expiration, token refresh and MFA/error handling appropriate to selected backend; no token leaks; B01 |
-| B03 🔐 | Retrieve/decrypt compatible vault items | 6 | ⬜ | Correctly handle supported login cipher types, key derivation, server sync and distinct IDs in fictional fixture; reject unknown encryption formats safely; B02 |
+| B03 🔐 | Retrieve/decrypt compatible vault items | 6 | 🟡 | Correctly handle supported login cipher types, key derivation, server sync and distinct IDs in fictional fixture; reject unknown encryption formats safely; B02 |
 | B04 🧱 | Enforce read-only adapter boundary | 3 | ⬜ | Adapter exposes fetch/list only, no upstream mutations; tests demonstrate absence of write operations under normal/error paths; B03 |
 | B05 🧷 | Self-hosted HTTPS and CA trust | 2 | ⬜ | System/private CA support and hostname validation pass; bad-chain, MITM-like mismatch and inaccessible server fail closed; B02 |
 
@@ -54,7 +54,7 @@ New scope replaces the previous multi-browser-source objective, so old and new p
 
 | ID | Task | w | Status | Acceptance / dependency |
 | --- | --- | ---: | --- | --- |
-| C01 🗃️ | Define versioned upstream-ID indexed projection schema | 4 | ⬜ | Preserve exact secrets and nonsecret searchable metadata without legacy provider precedence; reject malformed/oversized records; B03 |
+| C01 🗃️ | Define versioned upstream-ID indexed projection schema | 4 | 🟡 | Preserve exact secrets and nonsecret searchable metadata without legacy provider precedence; reject malformed/oversized records; B03 |
 | C02 💽 | Atomic encrypted snapshot replacement and recovery | 4 | ⬜ | Snapshot remains authenticated, private and recoverable; power-loss/interruption simulation never replaces last good snapshot with partial records; C01 |
 | C03 🔒 | Local unlock, key caching, lock/logout and key zeroization | 4 | ⬜ | Reuse reviewed existing keyring/AEAD where appropriate; user can lock local projection; no silent unlock of stale/revoked credentials contrary to documented policy; A04, C01 |
 | C04 ♻️ | All-or-nothing refresh lifecycle | 4 | ⬜ | Authenticate/fetch/decrypt/validate/publish stages; failed or concurrent updates leave valid snapshot intact and report outcome; B04, C02 |
@@ -138,6 +138,18 @@ The test-only sync filter was extended to honor the upstream `viewPassword` rest
 **Fresh CI evidence:** [Rust workflow](https://github.com/sguzman/passflick/actions/runs/41734515325) and [synthetic GUI workflow](https://github.com/sguzman/passflick/actions/runs/41734515123) both passed for code commit `b4f91d408dbff9f9194a827118d81b5ae496e1be`, including committed formatting, Cargo tests, CLI/desktop/encrypted-recovery smoke and Clippy. Earlier corrective runs failed during formatting or a synthetic-test borrow lifetime and were repaired before these green runs. The checks are **not** evidence of live authentication, decryption, or refresh.
 
 **Progress:** still 13/100 weighted points verified (13% → 13%, +0 pp). B01 remains active because the end-to-end disposable-server and native adapter acceptance gates remain unverified.
+
+### 2026-11-03 native sync-envelope / projection slice (CI being checked)
+
+**Touched:** B01 🧪, B03 🔐 (interface only), C01 🗃️ (schema prototype). No weighted item is complete yet.
+
+- `src/bitwarden/envelope.rs` validates the **complete** Vaultwarden user sync object, bounded JSON input, profile/account ID, folder set, and prevents accidental acceptance of a bare or mismatched cipher list. It then calls the existing archive/trash/`viewPassword` ingress filter.
+- `src/projection.rs` defines a **versioned, account-bound, upstream-item-ID-indexed plaintext-in-memory schema** with limits, duplicate-ID validation, zeroizing password storage, private error variants, exact UTF-8/whitespace password fidelity and explicit all-items replacement semantics. The serialization result is **plaintext** and must only be encrypted before any disk write.
+- `src/bitwarden/pipeline.rs` provides a test-only, read-only decryptor interface and rejects all partial decodes, identity changes, and invalid projected records. It does **not** implement Bitwarden cipher cryptography: its fictional decoder is strictly a test double.
+- No real HTTP transport, login, MFA, token refresh, cipher decryption, encrypted projection storage or `passflick update` exists. Existing legacy encrypted data is unchanged; all modules remain behind `#[cfg(test)]` while the production adapter is unsafe to enable.
+- **Verification:** formatting updated from GitHub Actions diagnostics. Rust and synthetic GUI CI for the latest code commit are in progress. Do not count these additions as B01/B03/C01 complete until their acceptance criteria, including native server integration and storage, pass.
+
+**Next:** implement an isolated HTTPS, read-only `/sync` transport and a reviewed native Rust authentication/decryption implementation, then connect admitted data to the schema and a distinct encrypted snapshot. The `rbw` high-level `Client::sync` remains unsuitable unchanged because it discards archive and permission metadata. Validate against a disposable server before handling any real credentials.
 
 ## 📍 Durable checkpoint
 

@@ -2,6 +2,14 @@
 
 **Status:** target architecture only; no native Vaultwarden integration implemented or tested yet. See [ROADMAP.md](../ROADMAP.md) for scope, weights, dependencies and acceptance gates.
 
+## Current implementation checkpoint (2026-11-03)
+
+The repository now contains **test-only** modules `src/bitwarden/envelope.rs`, `src/bitwarden/pipeline.rs`, and `src/projection.rs`. Together with `sync_filter.rs`, they demonstrate the **admission → fictional decode → validate complete replacement** shape using exclusively synthetic data. These are not network clients or password cryptography. They are intentionally excluded from the production binary.
+
+A full `/sync` response must include the `object: "sync"` marker, a profile ID, folders and cipher list. A bare `{"ciphers":[]}` is not evidence of an intentionally empty vault. Both the upstream account and selected server identity must be bound to every future encrypted projection. A malformed or cross-account response is never sufficient to overwrite an existing snapshot.
+
+The new projection model has no browser-provider identity and never deduplicates separate Vaultwarden item IDs. Its JSON representation is plaintext **only inside a zeroizing in-memory buffer**; it is not a file format until a distinct authenticated-encryption store, rollback checks, key lifecycle and atomic publish are implemented and tested.
+
 ## Responsibilities
 
 | Component | Owns | Does not own |
