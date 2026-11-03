@@ -4,3 +4,4 @@
 
 pub mod envelope;
 pub mod sync_filter;
+pub mod pipeline;
