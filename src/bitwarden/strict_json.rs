@@ -115,10 +115,8 @@ mod tests {
 
     #[test]
     fn preserves_json_primitive_types_and_unicode() {
-        let parsed = parse(
-            br#"{"values":[null,true,false,-5,4294967296,1.5,"\u00f1and\u00fa"]}"#,
-        )
-        .unwrap();
+        let parsed =
+            parse(br#"{"values":[null,true,false,-5,4294967296,1.5,"\u00f1and\u00fa"]}"#).unwrap();
         assert_eq!(parsed["values"][0], Value::Null);
         assert_eq!(parsed["values"][1], Value::Bool(true));
         assert_eq!(parsed["values"][3], Value::from(-5));
