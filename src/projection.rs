@@ -267,6 +267,7 @@ mod tests {
         assert_eq!(decoded.account_id(), "account-one");
         assert_eq!(decoded.last_success_at(), 1_783_180_800);
         assert_eq!(decoded.items().len(), 1);
+        assert_eq!(decoded.items()[0].title(), "Example Account");
         assert_eq!(decoded.items()[0].username(), "mañana用户");
         assert_eq!(decoded.items()[0].password(), expected);
         assert_eq!(
