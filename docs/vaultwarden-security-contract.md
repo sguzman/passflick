@@ -32,6 +32,14 @@ The new projection **must have a separate file identity, encryption key, session
 
 These are implementation requirements, **not claims that current Passflick behaves this way**. A03/A04 and C03/G04 remain open until the native backend, cache key lifecycle and real Wayland tests substantiate them.
 
+## Native read-only HTTPS admission (test-only baseline)
+
+The isolated `src/bitwarden/transport.rs` sends an HTTPS GET only to the selected server's derived `/api/sync` endpoint. The adapter rejects insecure endpoint schemes, credentials embedded in URLs, queries/fragments, invalid bearer header characters, redirects and non-success HTTP statuses. Connection and total timeouts bound stalls; a 64 MiB limit applies to both declared and actually read body bytes. All network and parsing errors have sanitized messages. The bearer token is supplied by a future authentication layer and is not persisted by this transport.
+
+TLS chain and hostname verification remain enabled using rustls with native trust roots. **Actual private-CA acceptance, invalid certificate, mismatch and disposable Vaultwarden runs remain unverified** and are required for B05. No real credentials may be used to bridge this gap. The full response must match an expected account identity before moving to decryption.
+
+`strict_json.rs` now rejects duplicate JSON keys *before* the normal `Value` parser could discard an earlier key, including conflicting profile identities, archive/deletion timestamps and password visibility fields. The JSON decoder still has no authority to update the old encrypted cache.
+
 ## Snapshot admission and update rules
 
 - Require a valid complete, bounded remote sync response. Preserve upstream cipher IDs; abort the entire refresh for duplicate/malformed IDs or missing/malformed status fields.

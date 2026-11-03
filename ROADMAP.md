@@ -46,7 +46,7 @@ New scope replaces the previous multi-browser-source objective, so old and new p
 | B02 🔑 | Authenticate self-hosted account safely | 5 | ⬜ | Support an explicitly configured endpoint, supported primary auth, session expiration, token refresh and MFA/error handling appropriate to selected backend; no token leaks; B01 |
 | B03 🔐 | Retrieve/decrypt compatible vault items | 6 | 🟡 | Correctly handle supported login cipher types, key derivation, server sync and distinct IDs in fictional fixture; reject unknown encryption formats safely; B02 |
 | B04 🧱 | Enforce read-only adapter boundary | 3 | ⬜ | Adapter exposes fetch/list only, no upstream mutations; tests demonstrate absence of write operations under normal/error paths; B03 |
-| B05 🧷 | Self-hosted HTTPS and CA trust | 2 | ⬜ | System/private CA support and hostname validation pass; bad-chain, MITM-like mismatch and inaccessible server fail closed; B02 |
+| B05 🧷 | Self-hosted HTTPS and CA trust | 2 | 🟡 | System/private CA support and hostname validation pass; bad-chain, MITM-like mismatch and inaccessible server fail closed; B02 |
 
 **Backend decision gate:** Bitwarden's *internal* Rust password-manager SDK is explicitly unsupported for external consumers; the public SDK is primarily for Secrets Manager. `rbw` is an MIT Rust CLI/agent with modules but not a promised stable embedded client API. Neither option is adopted yet. Measure working functionality before importing large dependency trees. An official `bw` CLI integration may serve as a synthetic comparison oracle; production fallback requires an explicit architectural decision.
 
@@ -151,12 +151,22 @@ The test-only sync filter was extended to honor the upstream `viewPassword` rest
 
 **Next:** implement an isolated HTTPS, read-only `/sync` transport and a reviewed native Rust authentication/decryption implementation, then connect admitted data to the schema and a distinct encrypted snapshot. The `rbw` high-level `Client::sync` remains unsuitable unchanged because it discards archive and permission metadata. Validate against a disposable server before handling any real credentials.
 
+### 2026-11-03 native Rust read-only HTTPS transport (verification in progress)
+
+**Touched:** B01 🧪, B05 🧷, and the admission/security boundary. No new weighted acceptance criteria are complete.
+
+- `src/bitwarden/transport.rs` is an isolated, **test-only** `reqwest` HTTPS adapter. The dependency is `dev-dependencies` only so the production picker does not acquire network access or this dependency. It issues exactly one GET to the derived `/api/sync` endpoint, using a token supplied by a future auth layer. It never edits upstream records, accepts HTTP endpoints, follows redirects, or bypasses certificate verification.
+- Its request policy enforces HTTPS, rejects URL credentials/query/fragment and malformed bearer tokens, applies connection/request timeouts, bounds `Content-Length` and actual streamed payload bytes, classifies auth failures without printing response bodies, and requires the complete response to match an **expected upstream account ID** before returning the JSON.
+- `src/bitwarden/strict_json.rs` rejects **duplicate JSON keys at any nesting depth**, preventing serde's ordinary last-value-wins behavior from hiding conflicting `profile.id`, `archivedDate`, `viewPassword` or encrypted login fields. Admission failures return sanitized error variants.
+- `Cargo.lock` was resolved by a temporary GitHub Actions workflow. The one-time workflow was then removed from the repository. Tests use exclusively fictional data and make no authenticated requests.
+- **Still missing:** actual native Bitwarden authentication/MFA/token renewal/decryption, an HTTPS fixture verifying private CA trust and bad certificates/hostnames, and encrypted cache publishing. This is **not** a complete or usable Vaultwarden adapter. No additional weighted points are earned beyond the existing **13/100 (13% → 13%, +0 pp)**.
+
 ## 📍 Durable checkpoint
 
-- **Repository:** `sguzman/passflick`, branch `main`; audited head at adoption `7fd71fde7c4d`. Latest code commit with both CI workflows green: `b4f91d4`; follow-up documentation commit(s) do not alter the tested Rust code.
+- **Repository:** `sguzman/passflick`, branch `main`; audited head at adoption `7fd71fde7c4d`. Previously green code checkpoint: `8224699`; the native HTTPS transport and duplicate-key parser are in a newer isolated test-only slice undergoing CI verification.
 - **Verified reuse:** existing Rust+egui picker, keyboard selection, sensitive clipboard, local encrypted vault, session/keyring architecture and prior synthetic CI evidence. These are not proof of a working Vaultwarden integration.
-- **Unimplemented:** backend auth and sync, native Bitwarden item decryption, upstream-ID projection, update, correct lock/revocation policy, adaptation and legacy retirement.
-- **Next actionable work:** A03/A04/B01 — make an isolated native Rust backend spike with fictional Vaultwarden data; assess compatibility/licensing and document the concrete interface before changing the production cache.
+- **Unimplemented:** upstream authentication/MFA/token lifecycle, usable authenticated sync, actual native Bitwarden item decryption, encrypted projection persistence/update, correct lock/revocation policy, picker adaptation and legacy retirement. A native HTTPS GET transport exists only behind `#[cfg(test)]`.
+- **Next actionable work:** A03/B01/B02/B03/B05 — integrate native authentication/Bitwarden-compatible crypto with the validated read-only HTTPS path using a disposable test server, verify CA and hostname failures, and preserve the old encrypted vault until new cache acceptance.
 - **No private data:** no user server hostnames, personal vault contents, tokens, passwords, exported records or private repository paths are required in public code or issue logs.
 
 See [`docs/vaultwarden-architecture.md`](docs/vaultwarden-architecture.md) for the planned component boundaries and decision risks.

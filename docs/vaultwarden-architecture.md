@@ -10,6 +10,14 @@ A full `/sync` response must include the `object: "sync"` marker, a profile ID, 
 
 The new projection model has no browser-provider identity and never deduplicates separate Vaultwarden item IDs. Its JSON representation is plaintext **only inside a zeroizing in-memory buffer**; it is not a file format until a distinct authenticated-encryption store, rollback checks, key lifecycle and atomic publish are implemented and tested.
 
+## Isolated native HTTPS read-only transport (2026-11-03)
+
+The test-only `src/bitwarden/transport.rs` contains a native Rust `reqwest` client for a single read-only `GET /api/sync`. It uses the Linux system trust store through rustls, rejects non-HTTPS root URLs, does not follow redirects, validates the expected account ID, and bounds streamed responses to 64 MiB. It has no login or session manager: a future authenticated caller must supply the bearer token and expected account ID. The module remains excluded from the production binary, and `reqwest` is only a dev dependency.
+
+`src/bitwarden/strict_json.rs` rejects duplicate keys before any regular `serde_json::Value` admission, including nested conflicting lifecycle/visibility metadata. The existing complete sync envelope check and projection pipeline remain downstream. No plaintext cache is written and no real credentials are used.
+
+**This is not a working Vaultwarden client.** It still requires native authentication and reviewed decryption, an HTTPS test server with trusted and bad-chain/hostname cases, encrypted transactional snapshot storage and real host acceptance. The single GET transport does not satisfy those requirements by itself.
+
 ## Responsibilities
 
 | Component | Owns | Does not own |
