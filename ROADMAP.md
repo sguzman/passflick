@@ -33,8 +33,8 @@ New scope replaces the previous multi-browser-source objective, so old and new p
 | --- | --- | ---: | --- | --- |
 | A01 🔍 | Audit existing code, CI, dependencies, historical roadmap and reusable components | 3 | ✅ | Identify real source importer, independent encrypted vault, picker, keyring and security gates from repository evidence; initial audit recorded below |
 | A02 🎯 | Establish new user contract and non-goals | 3 | ✅ | Single upstream authority, explicit refresh, encrypted cache, offline semantics, picker and read-only scope documented in this roadmap and PROJECT.md |
-| A03 ⚖️ | Decide and document supported native Rust integration approach | 3 | ⬜ | Prototype/auth feasibility and dependency stability/license findings; select an implementation only after evidence; requires A02 |
-| A04 🛡️ | Threat model and lock/freshness/revocation policy | 3 | ⬜ | Define access after Vaultwarden logout or account revocation, local unlock, stolen-disk/session threat, cache destruction, and update failure behavior; requires A03 |
+| A03 ⚖️ | Decide and document supported native Rust integration approach | 3 | 🟡 | Prototype/auth feasibility and dependency stability/license findings; select an implementation only after evidence; requires A02 |
+| A04 🛡️ | Threat model and lock/freshness/revocation policy | 3 | 🟡 | Define access after Vaultwarden logout or account revocation, local unlock, stolen-disk/session threat, cache destruction, and update failure behavior; requires A03 |
 
 **Existing state:** `src/app.rs`, `src/search.rs`, `src/clipboard.rs`, `src/vault.rs`, `src/session.rs` and `src/desktop_keyring.rs` contain candidate reusable behavior. `src/import.rs`, `src/discovery.rs`, `src/source_status.rs` and browser-specific source ranking are legacy. Current `PROJECT.md`, `docs/queue.md`, `docs/sources.md` and existing CI are for the original product and require careful reconciliation. Preserve privacy and historical evidence.
 
@@ -42,7 +42,7 @@ New scope replaces the previous multi-browser-source objective, so old and new p
 
 | ID | Task | w | Status | Acceptance / dependency |
 | --- | --- | ---: | --- | --- |
-| B01 🧪 | Protocol/library evaluation and isolated spike | 4 | ⬜ | Test currently relevant `rbw`-derived APIs, Bitwarden SDK boundaries, and feasibility of a native adapter against a disposable server; document license, stability, maintenance and version risks; A03 candidate |
+| B01 🧪 | Protocol/library evaluation and isolated spike | 4 | 🟡 | Test currently relevant `rbw`-derived APIs, Bitwarden SDK boundaries, and feasibility of a native adapter against a disposable server; document license, stability, maintenance and version risks; A03 candidate |
 | B02 🔑 | Authenticate self-hosted account safely | 5 | ⬜ | Support an explicitly configured endpoint, supported primary auth, session expiration, token refresh and MFA/error handling appropriate to selected backend; no token leaks; B01 |
 | B03 🔐 | Retrieve/decrypt compatible vault items | 6 | ⬜ | Correctly handle supported login cipher types, key derivation, server sync and distinct IDs in fictional fixture; reject unknown encryption formats safely; B02 |
 | B04 🧱 | Enforce read-only adapter boundary | 3 | ⬜ | Adapter exposes fetch/list only, no upstream mutations; tests demonstrate absence of write operations under normal/error paths; B03 |
@@ -118,6 +118,16 @@ New scope replaces the previous multi-browser-source objective, so old and new p
 3. **Behavior gate:** synthetic local Vaultwarden update → disconnect network → summon/search/copy locally → restart → update again; test archive and password change after sync without duplicate accumulation.
 4. **Retirement gate:** do not remove working legacy code or user's existing encrypted data until the replacement passes all critical tests.
 5. **Target/release gate:** real Wayland/Hyprland, offline/security tests, documentation, packaging and owner-approved release. No new release tags without explicit authorization.
+
+## 🧪 2026-11-03 implementation checkpoint
+
+**Scope touched:** A03 ⚖️, A04 🛡️ and B01 🧪 (all **active, not verified complete**). In addition to the previously completed roadmap, a **test-only native Rust sync admission prototype** was added at `src/bitwarden/sync_filter.rs` and wired only under `#[cfg(test)]`. It applies fail-closed archive/trash filtering to raw sync envelopes and preserves item IDs. Seven synthetic unit tests exercise normal, malformed, archived, deleted, duplicate-ID and case-variant cases. It does **not** authenticate, decrypt, fetch, refresh the persistent vault, or affect production runtime behavior.
+
+The API audit found a concrete compatibility gap in `rbw` v1.15.0: its current `SyncResCipher` has `deleted_date` but no `archived_date`; `Client::sync` converts ciphers into entries before exposing them, losing the archive state. Thus consuming `rbw`'s existing entries directly is **not acceptable** for this project's legacy-archive requirements. The backend choice remains under investigation; a reviewed, archive-aware native Rust adapter and disposable-server proof are required before B01/A03 can be verified.
+
+See [security and lifecycle contract](docs/vaultwarden-security-contract.md) for offline/local lock and refresh invariants. This contract is a design gate, not a completed security audit.
+
+**Progress accounting:** 13/100 weighted points remain verified. The prototype is tracked as partial work within unfinished B01; no points are awarded until its acceptance criteria (including a disposable-server integration) pass. Prior and current percentages: **13% → 13% (+0 pp)**.
 
 ## 📍 Durable checkpoint
 
