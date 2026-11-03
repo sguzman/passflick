@@ -248,10 +248,10 @@ fn mfa_required(raw: &[u8]) -> bool {
         .or_else(|| value.get("twoFactorProviders"))
         .and_then(serde_json::Value::as_array)
         .is_some_and(|providers| {
-            providers
-                .iter()
-                .any(|p| p.as_u64().is_some_and(|v| v == 0 || v == 1)
-                    || p.as_str().is_some_and(|v| v == "0" || v == "1"))
+            providers.iter().any(|p| {
+                p.as_u64().is_some_and(|v| v == 0 || v == 1)
+                    || p.as_str().is_some_and(|v| v == "0" || v == "1")
+            })
         })
 }
 
