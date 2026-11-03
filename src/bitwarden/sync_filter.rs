@@ -272,7 +272,10 @@ mod tests {
         let mut restricted = active("restricted-org");
         restricted["viewPassword"] = json!(false);
         let entries = active_logins(&json!({"ciphers":[active("personal"), restricted]})).unwrap();
-        assert_eq!(entries.iter().map(|item| item.id).collect::<Vec<_>>(), vec!["personal"]);
+        assert_eq!(
+            entries.iter().map(|item| item.id).collect::<Vec<_>>(),
+            vec!["personal"]
+        );
     }
 
     #[test]
@@ -316,7 +319,8 @@ mod tests {
             ("viewPassword", "ViewPassword"),
         ] {
             let mut item = active("ambiguous");
-            item[upper] = item[lower].clone();
+            let duplicate = item[lower].clone();
+            item[upper] = duplicate;
             assert_eq!(
                 active_logins(&json!({"ciphers":[item]})).unwrap_err(),
                 SyncFilterError::AmbiguousFields
