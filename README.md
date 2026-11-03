@@ -6,7 +6,7 @@ Passflick gives Linux users a single, encrypted, searchable view of credentials 
 
 `summon → search → copy → gone`
 
-## Daily use
+## Planned Vaultwarden-only direction\n\nPassflick is transitioning from manual Edge/Chrome/Firefox/Apple CSV snapshots to a **read-only projection of a Bitwarden-compatible vault**, including self-hosted Vaultwarden. The goal is an explicit `passflick update` operation and a persistent encrypted local projection, so everyday search and copy never require a network request. **That integration is not implemented yet; the instructions below describe the existing pre-release CSV-based application.** See [the weighted roadmap](ROADMAP.md) and [architecture design](docs/vaultwarden-architecture.md) for the adoption plan and verification gates.\n\n## Daily use
 
 Launch `passflick` from your compositor shortcut. Typing immediately searches **sites and URLs**. Press **Ctrl+Space** (or Tab) to switch to **User**, then type a username to search only within the matching sites. Both filters stay active when you switch back; the top match is selected.
 
