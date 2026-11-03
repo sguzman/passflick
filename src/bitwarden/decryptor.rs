@@ -54,7 +54,8 @@ impl PersonalLoginDecryptor {
             }
             KdfType::Argon2id
                 if !(1..=MAX_KDF_ITERATIONS_ARGON2).contains(&iterations)
-                    || !memory_mib.is_some_and(|memory| (16..=MAX_KDF_MEMORY_MIB).contains(&memory))
+                    || !memory_mib
+                        .is_some_and(|memory| (16..=MAX_KDF_MEMORY_MIB).contains(&memory))
                     || !parallelism.is_some_and(|threads| (1..=8).contains(&threads)) =>
             {
                 return Err(DecodeError::InvalidCipher);
@@ -91,10 +92,7 @@ fn locked_keys(bytes: &[u8]) -> Result<Keys, DecodeError> {
     Ok(Keys::new(protected))
 }
 
-fn decrypt_authenticated(
-    encrypted: &str,
-    keys: &Keys,
-) -> Result<Zeroizing<Vec<u8>>, DecodeError> {
+fn decrypt_authenticated(encrypted: &str, keys: &Keys) -> Result<Zeroizing<Vec<u8>>, DecodeError> {
     if encrypted.len() > MAX_ENCRYPTED_FIELD_BYTES
         || !encrypted.starts_with("2.")
         || encrypted.split('|').count() != 3
@@ -133,7 +131,11 @@ fn encrypted_string<'a>(
         .ok_or(DecodeError::InvalidCipher)
 }
 
-fn field<'a>(object: &'a Map<String, Value>, lower: &str, upper: &str) -> Result<Option<&'a Value>, DecodeError> {
+fn field<'a>(
+    object: &'a Map<String, Value>,
+    lower: &str,
+    upper: &str,
+) -> Result<Option<&'a Value>, DecodeError> {
     if object.contains_key(lower) && object.contains_key(upper) {
         return Err(DecodeError::InvalidCipher);
     }
@@ -149,10 +151,8 @@ impl LoginDecryptor for PersonalLoginDecryptor {
         // Prevent bypassing upstream master-password re-prompt protection and
         // unsupported organization policy. This is intentionally fail-closed:
         // no partially decrypted projection may be published.
-        if field(raw_cipher, "organizationId", "OrganizationId")?
-            .is_some_and(|v| !v.is_null())
-            || field(raw_cipher, "reprompt", "Reprompt")?
-                .is_some_and(|v| v.as_u64() != Some(0))
+        if field(raw_cipher, "organizationId", "OrganizationId")?.is_some_and(|v| !v.is_null())
+            || field(raw_cipher, "reprompt", "Reprompt")?.is_some_and(|v| v.as_u64() != Some(0))
         {
             return Err(DecodeError::InvalidCipher);
         }
@@ -271,11 +271,17 @@ mod tests {
         let user_keys = keys();
         let entry = locked_keys(&[b'J'; 64]).unwrap();
         let mut record = login_cipher("item-a", &entry);
-        record["key"] = json!(CipherString::encrypt_symmetric(&user_keys, &[b'J'; 64])
-            .unwrap().to_string());
+        record["key"] = json!(
+            CipherString::encrypt_symmetric(&user_keys, &[b'J'; 64])
+                .unwrap()
+                .to_string()
+        );
         let decoder = PersonalLoginDecryptor::from_synthetic_keys(&[b'K'; 64]);
         assert_eq!(
-            decoder.decrypt_login("item-a", record.as_object().unwrap()).unwrap().username(),
+            decoder
+                .decrypt_login("item-a", record.as_object().unwrap())
+                .unwrap()
+                .username(),
             "niño用户"
         );
     }
@@ -288,14 +294,22 @@ mod tests {
         macless.truncate(macless.rfind('|').unwrap());
         record["name"] = json!(macless);
         let decoder = PersonalLoginDecryptor::from_synthetic_keys(&[b'K'; 64]);
-        assert!(decoder.decrypt_login("item-a", record.as_object().unwrap()).is_err());
+        assert!(
+            decoder
+                .decrypt_login("item-a", record.as_object().unwrap())
+                .is_err()
+        );
 
         record["name"] = json!(cipher("Fictional Service", &keys));
         let mut broken = record["name"].as_str().unwrap().to_owned();
         broken.pop();
         broken.push('A');
         record["name"] = json!(broken);
-        assert!(decoder.decrypt_login("item-a", record.as_object().unwrap()).is_err());
+        assert!(
+            decoder
+                .decrypt_login("item-a", record.as_object().unwrap())
+                .is_err()
+        );
     }
 
     #[test]
@@ -304,10 +318,18 @@ mod tests {
         let decoder = PersonalLoginDecryptor::from_synthetic_keys(&[b'K'; 64]);
         let mut record = login_cipher("item-a", &keys);
         record["organizationId"] = json!("org-restricted");
-        assert!(decoder.decrypt_login("item-a", record.as_object().unwrap()).is_err());
+        assert!(
+            decoder
+                .decrypt_login("item-a", record.as_object().unwrap())
+                .is_err()
+        );
         record["organizationId"] = Value::Null;
         record["reprompt"] = json!(1);
-        assert!(decoder.decrypt_login("item-a", record.as_object().unwrap()).is_err());
+        assert!(
+            decoder
+                .decrypt_login("item-a", record.as_object().unwrap())
+                .is_err()
+        );
     }
 
     #[test]
@@ -325,7 +347,9 @@ mod tests {
         });
         let admitted = envelope::admit(&payload, Some("synthetic-account")).unwrap();
         let decoder = PersonalLoginDecryptor::from_synthetic_keys(&[b'K'; 64]);
-        let projected = pipeline::project_full_sync(admitted, "https://vault.example.test", 1, &decoder).unwrap();
+        let projected =
+            pipeline::project_full_sync(admitted, "https://vault.example.test", 1, &decoder)
+                .unwrap();
         assert_eq!(projected.items().len(), 2);
         assert_eq!(projected.items()[0].id(), "first");
         assert_eq!(projected.items()[1].id(), "second");
@@ -345,22 +369,55 @@ mod tests {
             None,
         )
         .unwrap();
-        let protected_user_key = CipherString::encrypt_symmetric(
-            &identity.keys,
-            &[b'K'; 64],
-        ).unwrap().to_string();
-        assert!(PersonalLoginDecryptor::unlock(
-            email, "wrong password", KdfType::Pbkdf2, 1500, None, None, &protected_user_key
-        ).is_err());
+        let protected_user_key = CipherString::encrypt_symmetric(&identity.keys, &[b'K'; 64])
+            .unwrap()
+            .to_string();
+        assert!(
+            PersonalLoginDecryptor::unlock(
+                email,
+                "wrong password",
+                KdfType::Pbkdf2,
+                1500,
+                None,
+                None,
+                &protected_user_key
+            )
+            .is_err()
+        );
         let unlocked = PersonalLoginDecryptor::unlock(
-            email, "fictional master password", KdfType::Pbkdf2, 1500, None, None, &protected_user_key
-        ).unwrap();
+            email,
+            "fictional master password",
+            KdfType::Pbkdf2,
+            1500,
+            None,
+            None,
+            &protected_user_key,
+        )
+        .unwrap();
         assert_eq!(unlocked.account_keys.enc_key(), &[b'K'; 32]);
-        assert!(PersonalLoginDecryptor::unlock(
-            email, "fictional master password", KdfType::Pbkdf2, 0, None, None, &protected_user_key
-        ).is_err());
-        assert!(PersonalLoginDecryptor::unlock(
-            email, "fictional master password", KdfType::Argon2id, 3, None, None, &protected_user_key
-        ).is_err());
+        assert!(
+            PersonalLoginDecryptor::unlock(
+                email,
+                "fictional master password",
+                KdfType::Pbkdf2,
+                0,
+                None,
+                None,
+                &protected_user_key
+            )
+            .is_err()
+        );
+        assert!(
+            PersonalLoginDecryptor::unlock(
+                email,
+                "fictional master password",
+                KdfType::Argon2id,
+                3,
+                None,
+                None,
+                &protected_user_key
+            )
+            .is_err()
+        );
     }
 }
