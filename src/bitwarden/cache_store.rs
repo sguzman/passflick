@@ -82,6 +82,17 @@ impl CacheKey {
         Ok(Self(wrapped))
     }
 
+    /// Generate an independent key; never reuse Vaultwarden or legacy vault key material.
+    pub fn generate() -> Result<Self, CacheError> {
+        let mut key = Zeroizing::new([0_u8; KEY_LEN]);
+        getrandom::fill(&mut *key).map_err(|_| CacheError::Io)?;
+        Ok(Self(key))
+    }
+
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+
     fn cipher(&self) -> Result<XChaCha20Poly1305, CacheError> {
         XChaCha20Poly1305::new_from_slice(&*self.0).map_err(|_| CacheError::InvalidKey)
     }
