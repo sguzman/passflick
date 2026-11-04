@@ -155,6 +155,20 @@ fn is_url_shaped_title(value: &str) -> bool {
     })
 }
 
+/// Shared safe display title for a legacy credential or a native projection.
+/// Never show URI paths, queries, fragments, userinfo or bidi spoofing text.
+pub(crate) fn safe_site_title(label: &str, fallback_url: &str) -> String {
+    let stripped = label.trim();
+    let visible = if stripped.is_empty() {
+        public_site_preview(fallback_url)
+    } else if is_url_shaped_title(stripped) {
+        public_site_preview(stripped)
+    } else {
+        label
+    };
+    safe_display_text(visible)
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Credential {
     pub source: Source,
@@ -197,15 +211,7 @@ impl Credential {
     /// session or password-reset tokens in URLs; full URLs are kept unchanged
     /// in the encrypted vault for identity and search.
     pub fn display_title(&self) -> String {
-        let stripped = self.label.trim();
-        let visible = if stripped.is_empty() {
-            public_site_preview(&self.url)
-        } else if is_url_shaped_title(stripped) {
-            public_site_preview(stripped)
-        } else {
-            &self.label
-        };
-        safe_display_text(visible)
+        safe_site_title(&self.label, &self.url)
     }
     pub fn display_label(&self) -> String {
         let title = self.display_title();

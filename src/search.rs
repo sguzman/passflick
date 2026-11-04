@@ -170,7 +170,7 @@ fn score(rec: &Credential, query: &str) -> Option<i32> {
     .max()
 }
 
-fn field_score(field: &str, query: &str) -> Option<i32> {
+pub(crate) fn field_score(field: &str, query: &str) -> Option<i32> {
     if field == query {
         return Some(1000);
     }
