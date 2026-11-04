@@ -488,6 +488,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
             .env("PASSFLICK_PREVIEW_BINARY", binary)
             .env("PASSFLICK_DISPOSABLE_TEST_DATA", data)
             .env("PASSFLICK_DISPOSABLE_TEST_LEGACY", &legacy)
+            .env("PASSFLICK_NATIVE_LOCAL_PASSPHRASE", local)
             .env(
                 "PASSFLICK_NATIVE_FIRST_PASSWORD",
                 if first_id < second_id {

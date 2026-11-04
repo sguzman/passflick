@@ -9,6 +9,7 @@ umask 077
 : "${PASSFLICK_DISPOSABLE_TEST_DATA:?missing synthetic projection directory}"
 : "${PASSFLICK_DISPOSABLE_TEST_LEGACY:?missing fictional legacy vault path}"
 : "${PASSFLICK_NATIVE_FIRST_PASSWORD:?missing synthetic ordering hint}"
+: "${PASSFLICK_NATIVE_LOCAL_PASSPHRASE:?missing fictional local unlock passphrase}"
 [[ "${PASSFLICK_NATIVE_FIRST_PASSWORD}" == first || "${PASSFLICK_NATIVE_FIRST_PASSWORD}" == second ]]
 [[ "${PASSFLICK_PREVIEW_BINARY}" == /* ]]
 [[ -n "${DISPLAY:-}" ]] || { echo 'Nested Weston requires virtual X11 host.' >&2; exit 1; }
@@ -169,4 +170,68 @@ await_close
 assert_clipboard Escape
 env -u DISPLAY wl-copy --clear >/dev/null 2>&1 || true
 
-echo 'Native Wayland populated picker copied exact fictional credentials and preserved clipboard on Escape.'
+# Additional native Wayland locked-GUI test, following the separate populated
+# copy actions above. The local passphrase is fictional and never printed.
+# This runs with the SAME independent projection directory and Linux keyring
+# as the executable. No Vaultwarden server or historical vault is accessed.
+projection_cli() {
+  env -u DISPLAY -u WINIT_UNIX_BACKEND \
+    XDG_DATA_HOME="$PASSFLICK_DISPOSABLE_TEST_DATA" \
+    PASSFLICK_VAULT="$PASSFLICK_DISPOSABLE_TEST_LEGACY" \
+    "$PASSFLICK_PREVIEW_BINARY" projection "$1" </dev/null 2>/dev/null
+}
+projection_cli lock >"$root/lock.status"
+grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
+projection_cli status >"$root/lock.status"
+grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
+
+# A known fictional sensitive selection must be preserved by *both* unlock
+# attempts. This proves that a focused masked field's Enter is not a copy.
+printf 'fictional pre-unlock clipboard marker' >"$root/expected"
+env -u DISPLAY wl-copy --sensitive <"$root/expected"
+assert_clipboard before-unlock
+
+launch
+xdotool type --clearmodifiers --delay 15 -- 'fictional wrong native passphrase'
+xdotool key --clearmodifiers Return
+# The bogus KDF must finish before we type into the now-cleared masked input.
+sleep 3
+[[ -n "$picker_pid" ]] && kill -0 "$picker_pid"
+projection_cli status >"$root/lock.status"
+grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
+assert_clipboard wrong-unlock
+
+xdotool type --clearmodifiers --delay 15 -- "$PASSFLICK_NATIVE_LOCAL_PASSPHRASE"
+xdotool key --clearmodifiers Return
+# Wait for an independent authenticated keyring status, not a blind sleep.
+unlocked=0
+for _ in $(seq 1 120); do
+  if projection_cli status >"$root/lock.status" &&
+      grep -Fq 'Offline projection unlocked:' "$root/lock.status"; then
+    unlocked=1
+    break
+  fi
+  [[ -n "$picker_pid" ]] && kill -0 "$picker_pid" || {
+    echo 'Native Wayland locked picker exited unexpectedly during unlock.' >&2
+    exit 1
+  }
+  sleep 0.1
+done
+[[ "$unlocked" == 1 ]] || {
+  echo 'Native Wayland masked GUI unlock failed to authenticate local projection.' >&2
+  exit 1
+}
+assert_clipboard correct-unlock
+
+# A second deliberate Enter, after successful local unlock, may copy a secret.
+xdotool key --clearmodifiers Return
+await_close
+if [[ "$PASSFLICK_NATIVE_FIRST_PASSWORD" == first ]]; then
+  printf '  🗝️ contraseña  ' >"$root/expected"
+else
+  printf 'second secret' >"$root/expected"
+fi
+assert_clipboard after-unlock-copy
+env -u DISPLAY wl-copy --clear >/dev/null 2>&1 || true
+
+echo 'Native Wayland populated and masked-unlock picker passed exact fictional clipboard and lock checks.'
