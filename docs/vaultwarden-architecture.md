@@ -24,6 +24,14 @@ The test-only `src/bitwarden/decryptor.rs` now uses `rbw` 1.15.0's MIT-licensed 
 
 The separate `src/bitwarden/auth.rs` performs native HTTPS prelogin and password-grant exchange, accepts TOTP/email-code MFA and models refresh/expiry with zeroizing in-memory session tokens. The same strict HTTPS CA/no-redirect client is reused. This layer is **not connected to the actual picker**, has not been exercised against a disposable Vaultwarden server, and has no token persistence. `rbw` is currently a **dev-only** dependency: adopting it for production still needs audited licensing/compatibility and stable API selection.
 
+## Encrypted offline projection and trusted private CA (2026-11-04)
+
+The isolated synthetic full-sync pipeline now decrypts **real authenticated type-2 personal-login cipherstrings** with reviewed `rbw` primitives, validates a complete upstream-ID-indexed projection, encrypts it with XChaCha20-Poly1305 under a distinct caller-supplied local key, and writes `projection.pfsnapshot` through a private owner-owned atomic file-publish path. Reopening the authenticated snapshot requires no network request. Failed or mismatched update candidates do not replace prior valid ciphertext; the legacy `vault.passvault` is never repurposed.
+
+The disposable OpenSSL HTTPS test proves CA trust and hostname validation with no insecure fallback. It is not a working Vaultwarden integration. `reqwest` and `rbw` remain dev dependencies of test-only modules; production keyring, manual update and picker migration are **not** enabled. Synthetic CI passed all 188 Rust tests, fmt, CLI/desktop/encrypted-recovery smoke, Clippy and GUI on code commit `58ae8b3`.
+
+**Next:** Validate full authentication, MFA and sync against a disposable real Vaultwarden; then review local key provisioning and explicit update/logout/lock UX before any production cutover.
+
 ## Responsibilities
 
 | Component | Owns | Does not own |

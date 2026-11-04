@@ -48,6 +48,14 @@ TLS chain and hostname verification remain enabled using rustls with native trus
 
 `strict_json.rs` now rejects duplicate JSON keys *before* the normal `Value` parser could discard an earlier key, including conflicting profile identities, archive/deletion timestamps and password visibility fields. The JSON decoder still has no authority to update the old encrypted cache.
 
+## New encrypted projection and CA regression results (2026-11-04)
+
+A separate test-only `projection.pfsnapshot` is encrypted with XChaCha20-Poly1305 and an independent local key provided by the caller; neither the key nor ciphertext is borrowed from legacy `vault.passvault`. A versioned authenticated header, private owner-owned directory, 0600 regular file, bounded reads, symlink/hardlink defenses, advisory exclusive lock and synced atomic publish protect the candidate. The old snapshot is authenticated before replacement, with cross-account/server and timestamp rollback rejection. Synthetic tests also verify offline decoding, exact Unicode secrets, and failure-preservation when any admitted record cannot decrypt or the sync is incomplete.
+
+A temporary OpenSSL CA signs a localhost-only leaf. The native trusted-root path correctly rejects the untrusted CA, accepts it after **explicit root provision**, and rejects a hostname mismatch despite a valid chain. Custom CA PEM parsing rejects empty/malformed bundles; disabling TLS verification is not an option.
+
+**CI evidence:** [Rust 188/188 tests and full gates](https://github.com/sguzman/passflick/actions/runs/41748051101) and [synthetic GUI success](https://github.com/sguzman/passflick/actions/runs/41748051062), for tested commit `58ae8b3`. **Not proven:** actual Vaultwarden login/sync, a permanent secure local unlock key lifecycle, remote revocation, true power-cut recovery or target-host security acceptance. The above Rust implementation remains excluded from production.
+
 ## Snapshot admission and update rules
 
 - Require a valid complete, bounded remote sync response. Preserve upstream cipher IDs; abort the entire refresh for duplicate/malformed IDs or missing/malformed status fields.
