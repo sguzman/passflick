@@ -198,7 +198,10 @@ impl ProjectionPicker {
             let current = offline_command::read_for_picker()
                 .map_err(|_| "Projection locked or authentication failed.")?
                 .ok_or("Projection is locked; unlock it before copying.")?;
-            let displayed = self.snapshot.as_ref().ok_or("Projection window is locked.")?;
+            let displayed = self
+                .snapshot
+                .as_ref()
+                .ok_or("Projection window is locked.")?;
             if !selected_item_unchanged(displayed, &current, &id) {
                 return Err(
                     "Offline record changed during this picker session. Close and reopen before copying.",
