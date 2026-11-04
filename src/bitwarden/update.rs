@@ -47,12 +47,8 @@ pub fn commit_full_sync<D: LoginDecryptor>(
     path: &Path,
 ) -> Result<usize, UpdateError> {
     let admitted = envelope::admit(payload, Some(expected_account))?;
-    let candidate = pipeline::project_full_sync(
-        admitted,
-        endpoint.server_identity(),
-        timestamp,
-        decoder,
-    )?;
+    let candidate =
+        pipeline::project_full_sync(admitted, endpoint.server_identity(), timestamp, decoder)?;
     let count = candidate.items().len();
     cache_store::publish(path, key, &candidate)?;
     Ok(count)
@@ -89,8 +85,8 @@ pub fn refresh_explicit<D: LoginDecryptor>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::decryptor::PersonalLoginDecryptor;
+    use super::*;
     use crate::projection::ProjectionSnapshot;
     use rbw::api::KdfType;
     use rbw::cipherstring::CipherString;
@@ -219,8 +215,15 @@ mod tests {
         ]);
         assert_eq!(
             commit_full_sync(
-                &first, &endpoint(), "test-account", 100, &decoder(), &key(), &dir.cache()
-            ).unwrap(),
+                &first,
+                &endpoint(),
+                "test-account",
+                100,
+                &decoder(),
+                &key(),
+                &dir.cache()
+            )
+            .unwrap(),
             2
         );
         let actual = offline(&dir);
@@ -238,8 +241,15 @@ mod tests {
         let dir = PrivateTestDir::new();
         let original = full(vec![login("a", "old"), login("b", "old")]);
         commit_full_sync(
-            &original, &endpoint(), "test-account", 100, &decoder(), &key(), &dir.cache()
-        ).unwrap();
+            &original,
+            &endpoint(),
+            "test-account",
+            100,
+            &decoder(),
+            &key(),
+            &dir.cache(),
+        )
+        .unwrap();
 
         let mut archived = login("b", "archived");
         archived["archivedDate"] = json!("2026-11-03T21:00:00Z");
@@ -250,8 +260,15 @@ mod tests {
         let changed = full(vec![login("a", "new"), archived, hidden, deleted]);
         assert_eq!(
             commit_full_sync(
-                &changed, &endpoint(), "test-account", 101, &decoder(), &key(), &dir.cache()
-            ).unwrap(),
+                &changed,
+                &endpoint(),
+                "test-account",
+                101,
+                &decoder(),
+                &key(),
+                &dir.cache()
+            )
+            .unwrap(),
             1
         );
         let current = offline(&dir);
@@ -266,8 +283,14 @@ mod tests {
         let dir = PrivateTestDir::new();
         commit_full_sync(
             &full(vec![login("original", "preserved")]),
-            &endpoint(), "test-account", 100, &decoder(), &key(), &dir.cache()
-        ).unwrap();
+            &endpoint(),
+            "test-account",
+            100,
+            &decoder(),
+            &key(),
+            &dir.cache(),
+        )
+        .unwrap();
         let original_bytes = fs::read(dir.cache()).unwrap();
 
         let mut corrupted = login("wrong", "wrong");
@@ -275,7 +298,12 @@ mod tests {
         assert!(matches!(
             commit_full_sync(
                 &full(vec![login("valid", "valid"), corrupted]),
-                &endpoint(), "test-account", 101, &decoder(), &key(), &dir.cache()
+                &endpoint(),
+                "test-account",
+                101,
+                &decoder(),
+                &key(),
+                &dir.cache()
             ),
             Err(UpdateError::Projection(_))
         ));
@@ -283,7 +311,13 @@ mod tests {
         let incomplete = json!({"object":"sync","profile":{"id":"test-account"},"folders":[]});
         assert!(matches!(
             commit_full_sync(
-                &incomplete, &endpoint(), "test-account", 101, &decoder(), &key(), &dir.cache()
+                &incomplete,
+                &endpoint(),
+                "test-account",
+                101,
+                &decoder(),
+                &key(),
+                &dir.cache()
             ),
             Err(UpdateError::Admission(_))
         ));
@@ -293,7 +327,13 @@ mod tests {
         });
         assert!(matches!(
             commit_full_sync(
-                &wrong_account, &endpoint(), "test-account", 101, &decoder(), &key(), &dir.cache()
+                &wrong_account,
+                &endpoint(),
+                "test-account",
+                101,
+                &decoder(),
+                &key(),
+                &dir.cache()
             ),
             Err(UpdateError::Admission(_))
         ));
@@ -306,13 +346,24 @@ mod tests {
         let dir = PrivateTestDir::new();
         commit_full_sync(
             &full(vec![login("one", "newer")]),
-            &endpoint(), "test-account", 150, &decoder(), &key(), &dir.cache()
-        ).unwrap();
+            &endpoint(),
+            "test-account",
+            150,
+            &decoder(),
+            &key(),
+            &dir.cache(),
+        )
+        .unwrap();
         let bytes = fs::read(dir.cache()).unwrap();
         assert!(matches!(
             commit_full_sync(
                 &full(vec![login("one", "older")]),
-                &endpoint(), "test-account", 149, &decoder(), &key(), &dir.cache()
+                &endpoint(),
+                "test-account",
+                149,
+                &decoder(),
+                &key(),
+                &dir.cache()
             ),
             Err(UpdateError::Cache(CacheError::Rollback))
         ));
