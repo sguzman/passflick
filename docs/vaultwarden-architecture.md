@@ -48,6 +48,8 @@ The separate test-only `session_cache` module introduces projection-only Linux s
 
 These pass [Rust CI](https://github.com/sguzman/passflick/actions/runs/41758871921), [live disposable server](https://github.com/sguzman/passflick/actions/runs/41758871854) and [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41758871891), all for code commit `e2ffb82`. This is implementation work toward C03, **not** production unlock, actual kernel-keyring QA, or a completed login/logout lifecycle.
 
+**Additional accepted test-only boundary (2026-11-04):** Before a local session key is considered, its projection scope is recomputed from the full cache path, server and account. A mismatch never reaches the keyring or passphrase keywrap. [Rust CI: 199 passing tests](https://github.com/sguzman/passflick/actions/runs/41759929489) and the disposable-server/GUI workflows are green on `af45a51`; runtime Linux keyctl and target-host desktop semantics remain unverified.
+
 ## Responsibilities
 
 | Component | Owns | Does not own |

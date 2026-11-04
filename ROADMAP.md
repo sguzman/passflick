@@ -220,6 +220,14 @@ The test-only sync filter was extended to honor the upstream `viewPassword` rest
 - **Not yet accepted:** production `passflick update`, local keywrap/passphrase setup UX, persistent Secret Service enrollment, end-to-end lock/logout/purge, explicit key lifecycle across a real kernel session, offline/stale UI and real Hyprland focus/copy acceptance. No real credentials or old vaults were migrated.
 - **Weighted progress:** **23/100 → 23/100 (23%, +0 percentage points)**; C03 is active but earns no partial points.
 
+### 2026-11-04 projection session scope binding verified
+
+The isolated local key-cache adapter now checks that its lookup scope matches the **actual snapshot path, Vaultwarden HTTPS server identity, and upstream account ID before any keyring/keywrap access**. It rejects a mismatched scope without reading or writing local keyring state. The regression tests cover mismatched account, server, and path. This is an extra defense alongside mandatory authenticated decryption; it does not weaken or replace AEAD checks.
+
+**Green CI on code commit `af45a51a4729b0a72342504bc9813969f8f1fbf0`:** [Rust](https://github.com/sguzman/passflick/actions/runs/41759929489) **199 passed, 0 failed, 1 intentionally ignored live test**, formatting, desktop/CLI/encrypted-recovery smoke and Clippy; [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41759929565); and [real disposable Vaultwarden 1.37.5](https://github.com/sguzman/passflick/actions/runs/41759929533). The real kernel session backend remains compile-checked only, not functionally exercised on the target desktop.
+
+**C03 remains 🟡 active, not complete. Verified progress stays 23/100 = 23% → 23%, +0 percentage points.** Target-host kernel session and desktop keyring behavior, local lock/logout/purge, passphrase UX, production command/picker integration, and offline freshness acceptance still remain.
+
 ## 📍 Durable checkpoint
 
 - **Repository:** `sguzman/passflick`, branch `main`; audited head at adoption `7fd71fde7c4d`. Latest synthetic CI-verified code commit: `58ae8b3` (188 Rust tests and all Rust/GUI CI gates green). Later documentation-only commits do not change the tested Rust code.

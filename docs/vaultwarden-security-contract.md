@@ -48,6 +48,12 @@ The session-cache prototype has **separate** key/lock namespaces and a fail-clos
 
 [CI evidence: 198 Rust tests and security gates](https://github.com/sguzman/passflick/actions/runs/41758871921), [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41758871891) and [disposable Vaultwarden 1.37.5](https://github.com/sguzman/passflick/actions/runs/41758871854) passed on `e2ffb82`. Remains unverified: real local keyring, Secret Service enrollment, terminal/GUI secret entry and cleanup, logout/purge and target-host Wayland acceptance.
 
+## Projection session-scope identity binding (2026-11-04)
+
+In the test-only session cache, each attempted cached read or explicit passphrase unlock first recomputes its scope from the actual encrypted projection filename, canonical parent path, HTTPS server identity, and upstream account. A scope supplied for a different path/server/account is rejected **before touching the kernel-keyring or keywrap adapter**. The session label is only a lookup hint: every successful read still authenticates the full encrypted snapshot and verifies the account/source binding. No production picker or legacy-keyring path is changed.
+
+[All 199 Rust tests, smoke and Clippy](https://github.com/sguzman/passflick/actions/runs/41759929489), [disposable real server acceptance](https://github.com/sguzman/passflick/actions/runs/41759929533), and [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41759929565) passed for code commit `af45a51`. Real kernel keyring operations were **not** exercised; scope and lock backend tests use a synthetic store.
+
 ## Native Bitwarden crypto and token lifecycle boundaries (test-only)
 
 The adapter currently uses the pinned MIT `rbw` Rust library for master-password KDF, wrapped user key, type-2 ciphertext decoding and HMAC verification. Since the library's verifier assumes a fixed 32-byte decoded MAC, Passflick rejects malformed decoded lengths, missing MAC, incorrect IV length and non-block-aligned ciphertext **before** dispatching to it. Error types must remain non-secret and failed candidate updates must never mutate the prior encrypted cache.
