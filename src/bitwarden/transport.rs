@@ -84,6 +84,12 @@ impl ServerEndpoint {
         url
     }
 
+    /// Canonical HTTPS origin and optional proxy prefix. Persist only this
+    /// stable server identity inside authenticated local cache data.
+    pub fn server_identity(&self) -> &str {
+        self.root.as_str()
+    }
+
     /// Construct only the Bitwarden-compatible read-only user sync endpoint.
     /// The caller cannot use this adapter to create, modify or delete ciphers.
     pub fn sync_url(&self) -> Url {
