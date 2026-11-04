@@ -229,6 +229,11 @@ echo 'Native Wayland fresh masked local unlock authenticated; clipboard was unch
 # input cycle instead of sending Return in the same frame as key publication.
 sleep 0.8
 timeout 10s xdotool windowfocus --sync "$weston_window"
+# Unlike masked text entry, wl-copy requires a fresh Weston seat input
+# serial. Establish that serial *after* the editor is gone, using the same
+# pointer interaction as the already-unlocked native copy tests.
+xdotool mousemove --window "$weston_window" 430 125 click 1
+sleep 0.3
 # A second deliberate Enter, after successful local unlock, may copy a secret.
 xdotool key --clearmodifiers Return
 await_close masked-unlock-copy
