@@ -77,14 +77,8 @@ pub fn refresh_explicit<D: LoginDecryptor>(
     if session.bearer_token().is_none() {
         transport.refresh_session(request.endpoint, session)?;
     }
-    let bearer = session
-        .bearer_token()
-        .ok_or(AuthError::InvalidResponse)?;
-    let payload = transport.fetch_sync(
-        request.endpoint,
-        bearer,
-        request.expected_account,
-    )?;
+    let bearer = session.bearer_token().ok_or(AuthError::InvalidResponse)?;
+    let payload = transport.fetch_sync(request.endpoint, bearer, request.expected_account)?;
     commit_full_sync(
         &payload,
         request.endpoint,
