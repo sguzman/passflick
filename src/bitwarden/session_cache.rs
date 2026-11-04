@@ -626,10 +626,7 @@ mod tests {
             premature.is_none(),
             "manual lock raced with in-flight unlock"
         );
-        done_rx
-            .recv_timeout(SCHEDULE_WAIT)
-            .unwrap()
-            .unwrap();
+        done_rx.recv_timeout(SCHEDULE_WAIT).unwrap().unwrap();
         assert!(matches!(
             cached_read(store.as_ref(), &scope, &dir.snapshot(), SERVER, ACCOUNT),
             Err(AccessError::Locked)
