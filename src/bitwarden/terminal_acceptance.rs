@@ -23,6 +23,50 @@ pub(super) fn run_cli(
     answers: &[(&str, &str)],
     should_succeed: bool,
 ) {
+    run_arguments(
+        binary,
+        data_dir,
+        legacy,
+        &["update"],
+        answers,
+        should_succeed,
+        None,
+    );
+}
+
+/// Exercise a *new* process per offline action, with the same synthetic
+/// data directory and inherited kernel session keyring as its parent.
+/// No credential or protected identity is supplied through argv.
+pub(super) fn run_projection_cli(
+    binary: &Path,
+    data_dir: &Path,
+    legacy: &Path,
+    operation: &str,
+    answers: &[(&str, &str)],
+    should_succeed: bool,
+    expected_output: &str,
+) {
+    assert!(matches!(operation, "lock" | "unlock" | "status"));
+    run_arguments(
+        binary,
+        data_dir,
+        legacy,
+        &["projection", operation],
+        answers,
+        should_succeed,
+        Some(expected_output),
+    );
+}
+
+fn run_arguments(
+    binary: &Path,
+    data_dir: &Path,
+    legacy: &Path,
+    arguments: &[&str],
+    answers: &[(&str, &str)],
+    should_succeed: bool,
+    expected_output: Option<&str>,
+) {
     assert!(binary.is_absolute());
     let mut master_fd = -1;
     let mut slave_fd = -1;
@@ -43,7 +87,7 @@ pub(super) fn run_cli(
 
     let mut command = Command::new(binary);
     command
-        .arg("update")
+        .args(arguments)
         .env("XDG_DATA_HOME", data_dir)
         .env("PASSFLICK_VAULT", legacy)
         .stdin(Stdio::from(slave.try_clone().unwrap()))
@@ -144,6 +188,12 @@ pub(super) fn run_cli(
         should_succeed,
         "CLI returned unexpected exit status"
     );
+    if let Some(expected) = expected_output {
+        assert!(
+            transcript.windows(expected.len()).any(|part| part == expected.as_bytes()),
+            "projection CLI did not report expected safe status"
+        );
+    }
     // These inputs are fictional, but echoed input is still a terminal
     // privacy failure. Do not leak transcript bytes into assertions/logs.
     for (_, reply) in answers {

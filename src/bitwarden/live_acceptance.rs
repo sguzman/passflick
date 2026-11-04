@@ -353,6 +353,14 @@ fn disposable_server_auth_sync_encrypted_offline() {
         fs::write(&legacy, original_legacy).unwrap();
         let local = std::str::from_utf8(LOCAL_PASSPHRASE).unwrap();
         let ca = ca_path.as_str();
+        // Install one inherited Linux session keyring in the parent BEFORE
+        // invoking separate CLI children. Each process must see the same
+        // authenticated key and explicit manual-lock marker.
+        let _shared_keyring = linux_keyutils::KeyRing::from_special_id(
+            linux_keyutils::KeyRingIdentifier::Session,
+            true,
+        )
+        .expect("disposable runner cannot initialize the Linux session keyring");
         super::terminal_acceptance::run_cli(
             binary,
             data,
@@ -417,6 +425,46 @@ fn disposable_server_auth_sync_encrypted_offline() {
             true,
         );
         assert_ne!(fs::read(&path).unwrap(), first_bytes);
+        assert_eq!(fs::read(&devicepath).unwrap(), device);
+        assert_eq!(fs::read(&legacy).unwrap(), original_legacy);
+
+        // Separate executable invocations must cooperate via the SAME
+        // session ring. The remote server is never contacted by these
+        // commands: only the encrypted projection and local keywrap exist.
+        let invoke = |action: &str,
+                      input: &[(&str, &str)],
+                      success: bool,
+                      expected: &str| {
+            super::terminal_acceptance::run_projection_cli(
+                binary, data, &legacy, action, input, success, expected,
+            );
+        };
+        invoke(
+            "status", &[], true, "Offline projection not unlocked in this Linux keyring session.",
+        );
+        invoke(
+            "unlock",
+            &[("Independent local projection passphrase: ", local)],
+            true,
+            "Offline projection unlocked: 2 login items.",
+        );
+        invoke("status", &[], true, "Offline projection unlocked: 2 login items.");
+        invoke("lock", &[], true, "Offline projection manually locked.");
+        invoke("status", &[], true, "Offline projection manually locked.");
+        invoke(
+            "unlock",
+            &[("Independent local projection passphrase: ", "fictional incorrect passphrase")],
+            false,
+            "offline projection keyring or cache authentication failed",
+        );
+        invoke("status", &[], true, "Offline projection manually locked.");
+        invoke(
+            "unlock",
+            &[("Independent local projection passphrase: ", local)],
+            true,
+            "Offline projection unlocked: 2 login items.",
+        );
+        invoke("status", &[], true, "Last successful remote sync (Unix seconds):");
         assert_eq!(fs::read(&devicepath).unwrap(), device);
         assert_eq!(fs::read(&legacy).unwrap(), original_legacy);
     }
