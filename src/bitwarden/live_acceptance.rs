@@ -392,15 +392,13 @@ fn disposable_server_auth_sync_encrypted_offline() {
         .expect("refresh after soft deletion failed"),
         1
     );
-    let final_snapshot = cache_store::load(
-        &path,
-        &cache_key,
-        endpoint.server_identity(),
-        &account,
-    )
-    .expect("final projection could not be reopened offline");
+    let final_snapshot = cache_store::load(&path, &cache_key, endpoint.server_identity(), &account)
+        .expect("final projection could not be reopened offline");
     assert_eq!(final_snapshot.items()[0].id(), first_id);
-    assert_eq!(final_snapshot.items()[0].password(), "edited 🔐 contraseña 🧪");
+    assert_eq!(
+        final_snapshot.items()[0].password(),
+        "edited 🔐 contraseña 🧪"
+    );
 
     // A real authenticated response with the wrong account binding must not
     // overwrite the last successful encrypted snapshot.
