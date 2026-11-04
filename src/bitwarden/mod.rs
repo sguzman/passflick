@@ -10,4 +10,5 @@ pub mod pipeline;
 pub mod strict_json;
 pub mod sync_filter;
 pub mod transport;
+mod tls_acceptance;
 pub mod update;
