@@ -98,10 +98,7 @@ fn private_parent(path: &Path) -> Result<(), CacheError> {
     validate_filename(path)?;
     let parent = path.parent().ok_or(CacheError::InvalidPath)?;
     let meta = fs::symlink_metadata(parent).map_err(CacheError::from)?;
-    if !meta.is_dir()
-        || meta.permissions().mode() & 0o077 != 0
-        || !owned_by_current_user(&meta)
-    {
+    if !meta.is_dir() || meta.permissions().mode() & 0o077 != 0 || !owned_by_current_user(&meta) {
         return Err(CacheError::UnsafeDirectory);
     }
     Ok(())
@@ -258,10 +255,11 @@ fn write_atomic(path: &Path, encrypted: &[u8]) -> Result<(), CacheError> {
         // Creating a new cache must not replace a surprise preexisting file.
         // An existing authenticated cache can be replaced by an atomic rename.
         match fs::symlink_metadata(path) {
-            Ok(meta) if !meta.is_file()
-                || meta.permissions().mode() & 0o077 != 0
-                || !owned_by_current_user(&meta)
-                || meta.nlink() != 1 =>
+            Ok(meta)
+                if !meta.is_file()
+                    || meta.permissions().mode() & 0o077 != 0
+                    || !owned_by_current_user(&meta)
+                    || meta.nlink() != 1 =>
             {
                 return Err(CacheError::UnsafeFile);
             }
@@ -297,10 +295,7 @@ mod tests {
                 "passflick-projection-test-{:016x}",
                 u64::from_le_bytes(unique)
             ));
-            fs::DirBuilder::new()
-                .mode(0o700)
-                .create(&path)
-                .unwrap();
+            fs::DirBuilder::new().mode(0o700).create(&path).unwrap();
             Self(path)
         }
 
@@ -341,11 +336,18 @@ mod tests {
         let dir = TestDir::new();
         let path = dir.cache();
         let secret = "  🗝️ contraseña\n  ";
-        publish(&path, &key(), &snapshot("https://vault.example.test", "account", 123, secret))
-            .unwrap();
+        publish(
+            &path,
+            &key(),
+            &snapshot("https://vault.example.test", "account", 123, secret),
+        )
+        .unwrap();
         let raw = fs::read(&path).unwrap();
         assert!(raw.starts_with(MAGIC));
-        assert!(!raw.windows(secret.len()).any(|part| part == secret.as_bytes()));
+        assert!(
+            !raw.windows(secret.len())
+                .any(|part| part == secret.as_bytes())
+        );
         let got = load(&path, &key(), "https://vault.example.test", "account").unwrap();
         assert_eq!(got.items()[0].password(), secret);
         assert_eq!(got.items()[0].username(), "mañana用户");
@@ -358,8 +360,12 @@ mod tests {
     fn wrong_key_cross_account_and_tampering_fail_closed() {
         let dir = TestDir::new();
         let path = dir.cache();
-        publish(&path, &key(), &snapshot("https://vault.example.test", "one", 100, "secret"))
-            .unwrap();
+        publish(
+            &path,
+            &key(),
+            &snapshot("https://vault.example.test", "one", 100, "secret"),
+        )
+        .unwrap();
         let wrong = CacheKey::from_slice(&[18; 32]).unwrap();
         assert!(matches!(
             load(&path, &wrong, "https://vault.example.test", "one"),
@@ -377,7 +383,11 @@ mod tests {
             Err(CacheError::AuthenticationFailed)
         ));
         assert!(matches!(
-            publish(&path, &key(), &snapshot("https://vault.example.test", "one", 101, "new")),
+            publish(
+                &path,
+                &key(),
+                &snapshot("https://vault.example.test", "one", 101, "new")
+            ),
             Err(CacheError::AuthenticationFailed)
         ));
     }
@@ -386,15 +396,27 @@ mod tests {
     fn rejected_identity_and_timestamp_never_replace_last_good_ciphertext() {
         let dir = TestDir::new();
         let path = dir.cache();
-        publish(&path, &key(), &snapshot("https://vault.example.test", "one", 200, "original"))
-            .unwrap();
+        publish(
+            &path,
+            &key(),
+            &snapshot("https://vault.example.test", "one", 200, "original"),
+        )
+        .unwrap();
         let original = fs::read(&path).unwrap();
         assert!(matches!(
-            publish(&path, &key(), &snapshot("https://vault.example.test", "two", 300, "other")),
+            publish(
+                &path,
+                &key(),
+                &snapshot("https://vault.example.test", "two", 300, "other")
+            ),
             Err(CacheError::IdentityMismatch)
         ));
         assert!(matches!(
-            publish(&path, &key(), &snapshot("https://vault.example.test", "one", 199, "stale")),
+            publish(
+                &path,
+                &key(),
+                &snapshot("https://vault.example.test", "one", 199, "stale")
+            ),
             Err(CacheError::Rollback)
         ));
         assert_eq!(fs::read(&path).unwrap(), original);
@@ -404,8 +426,12 @@ mod tests {
     fn successful_replacement_drops_removed_ids_and_rotates_nonce() {
         let dir = TestDir::new();
         let path = dir.cache();
-        publish(&path, &key(), &snapshot("https://vault.example.test", "one", 200, "old"))
-            .unwrap();
+        publish(
+            &path,
+            &key(),
+            &snapshot("https://vault.example.test", "one", 200, "old"),
+        )
+        .unwrap();
         let first = fs::read(&path).unwrap();
         let next = ProjectionSnapshot::new(
             "https://vault.example.test".to_owned(),
@@ -445,7 +471,14 @@ mod tests {
         fs::write(&other, b"fictional ciphertext").unwrap();
         symlink(&other, &path).unwrap();
         assert!(load(&path, &key(), "https://vault.example.test", "one").is_err());
-        assert!(publish(&path, &key(), &snapshot("https://vault.example.test", "one", 1, "x")).is_err());
+        assert!(
+            publish(
+                &path,
+                &key(),
+                &snapshot("https://vault.example.test", "one", 1, "x")
+            )
+            .is_err()
+        );
         fs::remove_file(&path).unwrap();
 
         fs::hard_link(&other, &path).unwrap();
@@ -457,7 +490,11 @@ mod tests {
 
         fs::set_permissions(&dir.0, fs::Permissions::from_mode(0o755)).unwrap();
         assert!(matches!(
-            publish(&path, &key(), &snapshot("https://vault.example.test", "one", 1, "x")),
+            publish(
+                &path,
+                &key(),
+                &snapshot("https://vault.example.test", "one", 1, "x")
+            ),
             Err(CacheError::UnsafeDirectory)
         ));
     }
@@ -466,10 +503,18 @@ mod tests {
     fn incomplete_temporary_file_is_not_an_offline_projection() {
         let dir = TestDir::new();
         let path = dir.cache();
-        publish(&path, &key(), &snapshot("https://vault.example.test", "one", 10, "valid"))
-            .unwrap();
+        publish(
+            &path,
+            &key(),
+            &snapshot("https://vault.example.test", "one", 10, "valid"),
+        )
+        .unwrap();
         let truncated = fs::read(&path).unwrap();
-        fs::write(dir.0.join(".passflick-projection.tmp.incomplete"), &truncated[..16]).unwrap();
+        fs::write(
+            dir.0.join(".passflick-projection.tmp.incomplete"),
+            &truncated[..16],
+        )
+        .unwrap();
         let reopened = load(&path, &key(), "https://vault.example.test", "one").unwrap();
         assert_eq!(reopened.last_success_at(), 10);
     }
