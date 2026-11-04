@@ -386,7 +386,12 @@ impl eframe::App for ProjectionPicker {
                 let enter = ctx.input(|input| {
                     crate::copy_shortcut::enter_copy_username(&input.events).is_some()
                 });
-                if ui.button("Unlock offline").clicked() || (field.has_focus() && enter) {
+                // A single-line editor may relinquish focus while handling
+                // Enter, before this branch observes the same key event.
+                // In the locked view, Enter always submits the masked local
+                // passphrase; otherwise a lost-focus frame silently ignores
+                // the unlock and leaves subsequent typing unfocused.
+                if ui.button("Unlock offline").clicked() || enter {
                     request_unlock = true;
                 }
                 if let Some(notice) = self.notice {
