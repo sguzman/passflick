@@ -3,7 +3,8 @@
 //! A manual lock marker always outranks a cached key, and every cached key
 //! must authenticate the complete local ciphertext before returning records.
 //! No HTTP request or remote session credential is involved.
-//! This module remains test-only until target-host and CLI/GUI acceptance.
+//! Only the opt-in preview CLI uses this module outside tests; target-host
+//! keyring and normal-picker acceptance remain pending.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -155,8 +156,8 @@ pub fn lock<S: SessionStore>(
     // Serialize with explicit unlock and transactional snapshot publication.
     // Otherwise an in-flight unlock could reinstall the key after a manual
     // lock removed it and clear the denial marker.
-    let _guard = crate::write_lock::acquire(snapshot_path)
-        .map_err(|_| AccessError::Coordination)?;
+    let _guard =
+        crate::write_lock::acquire(snapshot_path).map_err(|_| AccessError::Coordination)?;
     backend.put(&scope.lock, b"1")?;
     backend.remove(&scope.key)
 }
@@ -206,8 +207,8 @@ pub fn unlock<S: SessionStore>(
     // Keep the cross-process guard through authenticated snapshot opening
     // and BOTH keyring mutations, so a concurrent manual lock cannot be
     // silently undone by an already-running explicit unlock.
-    let _guard = crate::write_lock::acquire(snapshot_path)
-        .map_err(|_| AccessError::Coordination)?;
+    let _guard =
+        crate::write_lock::acquire(snapshot_path).map_err(|_| AccessError::Coordination)?;
     let key = keywrap::unlock(keywrap_path, passphrase, server, account)?;
     let snapshot = cache_store::load(snapshot_path, &key, server, account)?;
     backend.put(&scope.key, key.as_bytes())?;
@@ -491,7 +492,10 @@ mod tests {
         )
         .unwrap();
         backend.fail_key_remove.set(true);
-        assert_eq!(lock(&backend, &scope, &dir.snapshot(), SERVER, ACCOUNT), Err(AccessError::Keyring));
+        assert_eq!(
+            lock(&backend, &scope, &dir.snapshot(), SERVER, ACCOUNT),
+            Err(AccessError::Keyring)
+        );
         assert!(backend.entries.borrow().contains_key(&scope.lock));
         assert!(backend.entries.borrow().contains_key(&scope.key));
         assert!(matches!(
@@ -499,7 +503,6 @@ mod tests {
             Err(AccessError::Locked)
         ));
     }
-
 
     /// Reproduce the former race: unlock stops just before inserting its
     /// cached key, while lock tries to invalidate the key and set its marker.
@@ -517,7 +520,12 @@ mod tests {
 
         impl SessionStore for PausingStore {
             fn read(&self, label: &str) -> Result<Option<Zeroizing<Vec<u8>>>, AccessError> {
-                Ok(self.entries.lock().unwrap().get(label).map(|v| Zeroizing::new(v.to_vec())))
+                Ok(self
+                    .entries
+                    .lock()
+                    .unwrap()
+                    .get(label)
+                    .map(|v| Zeroizing::new(v.to_vec())))
             }
             fn exists(&self, label: &str) -> Result<bool, AccessError> {
                 Ok(self.entries.lock().unwrap().contains_key(label))
@@ -527,11 +535,16 @@ mod tests {
                     let entered = self.entered.lock().unwrap().take();
                     if let Some(tx) = entered {
                         tx.send(()).map_err(|_| AccessError::Keyring)?;
-                        self.resume.lock().unwrap().recv_timeout(Duration::from_secs(5))
+                        self.resume
+                            .lock()
+                            .unwrap()
+                            .recv_timeout(Duration::from_secs(5))
                             .map_err(|_| AccessError::Keyring)?;
                     }
                 }
-                self.entries.lock().unwrap()
+                self.entries
+                    .lock()
+                    .unwrap()
                     .insert(label.to_owned(), Zeroizing::new(contents.to_vec()));
                 Ok(())
             }
@@ -555,8 +568,15 @@ mod tests {
         let keywrap = dir.wrapped();
         let first_path = dir.snapshot();
         let unlocker = std::thread::spawn(move || {
-            unlock(first_store.as_ref(), &first_scope, &keywrap, &first_path,
-                   PASSPHRASE, SERVER, ACCOUNT)
+            unlock(
+                first_store.as_ref(),
+                &first_scope,
+                &keywrap,
+                &first_path,
+                PASSPHRASE,
+                SERVER,
+                ACCOUNT,
+            )
         });
         entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
 
@@ -567,8 +587,13 @@ mod tests {
         let (done_tx, done_rx) = mpsc::channel();
         let locker = std::thread::spawn(move || {
             started_tx.send(()).unwrap();
-            let result = lock(second_store.as_ref(), &second_scope,
-                              &second_path, SERVER, ACCOUNT);
+            let result = lock(
+                second_store.as_ref(),
+                &second_scope,
+                &second_path,
+                SERVER,
+                ACCOUNT,
+            );
             done_tx.send(result).unwrap();
         });
         started_rx.recv_timeout(Duration::from_secs(5)).unwrap();
@@ -576,8 +601,14 @@ mod tests {
         resume_tx.send(()).unwrap();
         unlocker.join().unwrap().unwrap();
         locker.join().unwrap();
-        assert!(premature.is_none(), "manual lock raced with in-flight unlock");
-        done_rx.recv_timeout(Duration::from_secs(5)).unwrap().unwrap();
+        assert!(
+            premature.is_none(),
+            "manual lock raced with in-flight unlock"
+        );
+        done_rx
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap()
+            .unwrap();
         assert!(matches!(
             cached_read(store.as_ref(), &scope, &dir.snapshot(), SERVER, ACCOUNT),
             Err(AccessError::Locked)
