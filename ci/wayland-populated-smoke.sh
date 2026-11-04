@@ -129,6 +129,15 @@ else
   printf 'second secret' > "$root/expected"
 fi
 cmp "$root/expected" "$root/actual"
+
+# Escape must close the populated native Wayland picker WITHOUT copying or
+# clearing the existing clipboard. Reuse the fictional password already copied
+# above so the test does not create another clipboard owner or rely on a mock.
+launch
+xdotool key --clearmodifiers Escape
+await_close
+read_clipboard
+cmp "$root/expected" "$root/actual"
 env -u DISPLAY wl-copy --clear >/dev/null 2>&1 || true
 
-echo 'Native Wayland populated picker copied exact fictional credentials via sensitive wl-clipboard.'
+echo 'Native Wayland populated picker copied exact fictional credentials and preserved clipboard on Escape.'
