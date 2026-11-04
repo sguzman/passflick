@@ -55,13 +55,28 @@ for _ in $(seq 1 120); do
 done
 [[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]] || { echo 'Weston socket unavailable.' >&2; exit 1; }
 
+# Weston sets an X11 UTF-8 output title using its configurable output
+# name. It is NOT guaranteed to contain "Weston" (the old search failed).
+# In this isolated Xvfb server, find the *mapped 960x700 output window*
+# instead of relying on the compositor title/class or a locale.
 weston_window=""
 for _ in $(seq 1 120); do
-  weston_window="$(xdotool search --onlyvisible --name 'Weston' 2>/dev/null | head -n 1 || true)"
+  while IFS= read -r candidate; do
+    [[ -n "$candidate" ]] || continue
+    geometry="$(xdotool getwindowgeometry --shell "$candidate" 2>/dev/null || true)"
+    if [[ "$geometry" == *"WIDTH=960"* && "$geometry" == *"HEIGHT=700"* ]]; then
+      weston_window="$candidate"
+      break
+    fi
+  done < <(xdotool search --onlyvisible --name '.*' 2>/dev/null || true)
   [[ -n "$weston_window" ]] && break
+  if ! kill -0 "$weston_pid" 2>/dev/null; then
+    echo 'Nested Weston compositor exited before creating X11 output.' >&2
+    exit 1
+  fi
   sleep 0.1
 done
-[[ -n "$weston_window" ]] || { echo 'Weston X11 output was not visible.' >&2; exit 1; }
+[[ -n "$weston_window" ]] || { echo 'Nested Weston X11 output geometry was not discoverable.' >&2; exit 1; }
 
 launch() {
   env -u DISPLAY -u WINIT_UNIX_BACKEND \
@@ -78,7 +93,7 @@ launch() {
     fi
     sleep 0.1
   done
-  xdotool windowfocus --sync "$weston_window"
+  timeout 10s xdotool windowfocus --sync "$weston_window"
   # A real input serial and surface focus are required before wl-copy can
   # become the Wayland clipboard selection owner.
   xdotool mousemove --window "$weston_window" 430 125 click 1
