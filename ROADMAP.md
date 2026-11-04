@@ -1,6 +1,6 @@
 # 🗺️ Passflick — Vaultwarden projection roadmap
 
-**Status:** native adapter verified in disposable Vaultwarden CI, still test-only; production picker remains on legacy vault.  
+**Status:** native adapter verified in disposable Vaultwarden CI; an opt-in, non-default native update preview is available behind `vaultwarden-preview`. The installed production picker remains on the encrypted legacy vault. Do not use personal credentials for acceptance until target-host security gates pass.  
 **Target:** Rust + egui on Linux/Wayland (EndeavourOS/Hyprland first).  
 **Mission:** Passflick is a small, fast, keyboard-first, **read-only downstream projection of a Bitwarden-compatible personal vault**, not an independent password manager or a browser CSV aggregator.
 
@@ -23,7 +23,7 @@ New scope replaces the previous multi-browser-source objective, so old and new p
 
 **Rebaseline: 13/100 weighted points verified (13%) as of adoption.** Current verified completion: **29/100 weighted points (29%)**, including accepted native architecture/local-cache policy, the versioned projection schema (C01), and native HTTPS/CA acceptance (B05). Both newly credited components have passing synthetic/security acceptance; their surrounding native integration remains test-only. **This is not a production-ready Vaultwarden picker.** The disposable live-server evidence is documented below.
 
-`█████▊░░░░░░░░░░░░░░` **29%** (previous verified 23% → 29%, **+6 percentage points** this development round; adoption baseline 13%).
+`█████▊░░░░░░░░░░░░░░` **29%** (previous verified 29% → 29%, **+0 percentage points** this development round; adoption baseline 13%).
 
 **Status key:** ✅ verified complete | 🟡 active | ⬜ pending | ⛔ blocked. Every item's bracketed **w** is its share of the 100-point overall estimate. An item earns all its weight only after its acceptance check passes; partial activity is documented but not counted. Adjust weights transparently if discoveries materially change the project.
 
@@ -66,7 +66,7 @@ New scope replaces the previous multi-browser-source objective, so old and new p
 
 | ID | Task | w | Status | Acceptance / dependency |
 | --- | --- | ---: | --- | --- |
-| D01 ⬆️ | Implement `passflick update` | 4 | ⬜ | Explicit on-demand refresh with private error output, exit codes, unchanged cache on failure, and no console secrets; C04 |
+| D01 ⬆️ | Implement `passflick update` | 4 | 🟡 | Explicit on-demand refresh with private error output, exit codes, unchanged cache on failure, and no console secrets; C04 |
 | D02 🎚️ | Provide compact in-picker update control | 3 | ⬜ | Keyboard-accessible action that does not block everyday search/copy or require refresh for each launch; D01 |
 | D03 ⏳ | Show last success, stale/failed update and offline status | 2 | ⬜ | Clear distinction between snapshot age and password validity; user can distinguish server failure from bad login; C05 |
 | D04 🧾 | Handle upstream archive, deletion, folders and updates | 3 | ⬜ | After refresh active view excludes archived/deleted records; preserves duplicates with different IDs; folder labels do not trigger upstream writes; B03, C04 |
@@ -244,12 +244,21 @@ The isolated local key-cache adapter now checks that its lookup scope matches th
 - **CI on [`50e2a18`](https://github.com/sguzman/passflick/commit/50e2a182dc84b7d9e1da51f52536376e6bf8135c):** [Rust](https://github.com/sguzman/passflick/actions/runs/41763434948) **206 passed / 0 failed / 1 intentionally ignored live test**, formatting, install/CLI/encrypted-recovery smoke and Clippy; [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41763434980) passed; [disposable real Vaultwarden](https://github.com/sguzman/passflick/actions/runs/41763434898) passed.
 - **Progress:** **23/100 → 29/100 (+6 percentage points)**. B02/B03/C02/C03/C04 remain active and uncredited. No `passflick update` CLI, live kernel-keyring verification, production picker cutover or release was performed.
 
+### 2026-11-04 opt-in native updater CLI preview (CI verified)
+
+- **D01 ⬆️ active, not complete:** the non-default Cargo feature `vaultwarden-preview` builds an experimental `passflick update` command. Default builds, normal picker launches and legacy `vault.passvault` behavior remain unchanged. The command accepts **no secret-bearing command arguments**; it obtains server URL, email, master password, optional TOTP/email MFA code, optional additional trusted CA PEM path, and an independent local passphrase through masked terminal prompts. Remote session/access/refresh tokens remain in memory and are not persisted.
+- **Read-only sync and local publication:** the preview authenticates to the explicitly provided HTTPS server, derives the server-issued account identity from an admitted complete sync, and decrypts the full candidate. First use installs only the new create-only `projection.pfkey` and `projection.pfsnapshot` files; subsequent updates require the local passphrase and authenticate the existing ciphertext before atomic replacement. Failed local authentication preserves the exact prior bytes. Legacy path overrides are not reused for the new projection.
+- **Tests:** a real disposable Vaultwarden 1.37.5 acceptance exercises preview publication after authenticated sync, wrong local-passphrase failure, and offline reopen. Synthetic tests verify initial install, replacement refusal, successful update, private directory rejection and preservation of fictional legacy data. Unused future keyring/picker APIs remain test-only, rather than entering the preview build.
+- **Green code CI on [`89e93fa`](https://github.com/sguzman/passflick/commit/89e93fa78f18dc8bc63ca82bd516b83e78b6110b):** [Rust](https://github.com/sguzman/passflick/actions/runs/41767285591) **206 baseline tests passed, 0 failed, 1 deliberately ignored live test; 2 dedicated preview tests passed**, plus formatting, installation/CLI/encrypted-recovery smoke and strict default/preview Clippy; [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41767285478) passed; [disposable HTTPS Vaultwarden](https://github.com/sguzman/passflick/actions/runs/41767285570) passed with the preview feature.
+- **Not production-ready:** interactive terminal/PTY security QA, real local kernel-keyring behavior, stable per-install device identity and remote logout/revocation, persistent endpoint setup, support for all vault policy variants, default-build activation, offline picker consumption and target-host Wayland acceptance remain outstanding. The preview currently generates a fresh device identifier for each explicit invocation and prompts for local unlock each time. No release tag or user-data migration was performed.
+- **Weighted progress:** **29/100 → 29/100 (29%, +0 percentage points)**. D01 is 🟡 active but earns no milestone points until its complete acceptance and dependencies pass.
+
 ## 📍 Durable checkpoint — 2026-11-04
 
-- **Repository:** `sguzman/passflick`, `main`. Latest verified code commit: [`50e2a18`](https://github.com/sguzman/passflick/commit/50e2a182dc84b7d9e1da51f52536376e6bf8135c), with green Rust / synthetic GUI / disposable Vaultwarden CI linked above.
-- **Verified:** A01–A04, B01, B05, C01, E01 and G01 = **29/100 weighted points**. Native first-run account discovery, encrypted create-only installation and interruption recovery are implemented and tested within still-unaccepted integration milestones.
-- **Current implementation:** native Vaultwarden 1.37.5 password/TOTP login, token refresh, complete read-only sync/decryption, archive/deletion filtering, first-time server account discovery, and encrypted projection storage; independent Argon2id keywrap and synthetic projection lock boundaries. All new integration modules remain test-only under `#[cfg(test)]`.
-- **Unfinished:** production masked passphrase setup/unlock UX, explicit `passflick update`, real Linux kernel-keyring behavior, logout/lock/purge, offline freshness, picker identity/UI migration, reversible legacy retirement and target-host Hyprland acceptance.
-- **Next action:** wire the guarded native update and local unlock lifecycle into an opt-in, secret-safe CLI path with verified failure/rollback behavior; then integrate picker and verify target-host security. The historical `vault.passvault` is never overwritten, deleted, or silently re-keyed.
+- **Repository:** `sguzman/passflick`, branch `main`. Latest verified code commit: [`89e93fa`](https://github.com/sguzman/passflick/commit/89e93fa78f18dc8bc63ca82bd516b83e78b6110b) with green Rust, synthetic GUI and disposable Vaultwarden CI linked above.
+- **Verified weighted milestones:** A01–A04, B01, B05, C01, E01, G01 = **29/100 points**. D01 is active but still uncredited.
+- **Native preview now present:** explicit masked terminal update, native HTTPS password/TOTP/email-code authentication, account-bound full sync, separate passphrase-wrapped encrypted projection, create-only initial install, authenticated all-or-nothing replacement, synthetic regression and disposable-server integration.
+- **Still unfinished:** persistent secure per-install remote device identity, production local lock/unlock/session-keyring lifecycle, terminal and real EndeavourOS/Hyprland QA, normal picker consumption, freshness display, default native updater cutover, legacy CSV retirement and release.
+- **Next action:** test the preview terminal UX and device lifecycle using synthetic accounts, then connect reviewed local lock/offline picker behavior without touching the existing `vault.passvault` or upstream credentials. Do not claim that the preview represents a completed migration.
 
-See [Vaultwarden architecture](docs/vaultwarden-architecture.md), [local security policy](docs/adr-002-local-cache-security.md), and [security contract](docs/vaultwarden-security-contract.md) for the remaining gates.
+See [Vaultwarden architecture](docs/vaultwarden-architecture.md), [local security policy](docs/adr-002-local-cache-security.md), and [security contract](docs/vaultwarden-security-contract.md).

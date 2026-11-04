@@ -70,6 +70,16 @@ Initial publication is **create-only under a writer lock**, including a second e
 
 [Green Rust CI: 206 passing tests](https://github.com/sguzman/passflick/actions/runs/41763434948), [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41763434980), and [real disposable Vaultwarden 1.37.5](https://github.com/sguzman/passflick/actions/runs/41763434898) on code commit `50e2a18`. Separately, B05 HTTPS/CA trust and C01 versioned projection schema now meet their objective acceptance criteria; all production migration and keyring gates stay open.
 
+## Opt-in experimental masked terminal update (2026-11-04)
+
+The new `vaultwarden-preview` Cargo feature exposes a **preview-only** `passflick update` command while keeping it absent from the default executable. Server URL, email, master password, optional MFA code, optional trusted custom CA PEM path and local passphrase are entered through masked prompts; credentials and tokens are never accepted as command arguments. Access and refresh tokens are in-memory only, with no automatic or picker-triggered network requests. Errors are sanitized and non-secret.
+
+The preview uses a server-issued account ID from a complete authenticated sync and encrypts the new local projection under the independent Argon2id-wrapped local content key. A first install is create-only, and any subsequent refresh must successfully decrypt the prior snapshot bound to the same account/server before atomic replacement. Wrong local passphrases and identity/AEAD failures preserve existing ciphertext. The historical `vault.passvault` remains untouched, including when `PASSFLICK_VAULT` is set.
+
+**Limits:** the preview still generates a fresh device ID on each explicit invocation, cannot enforce instant remote revocation of an offline copy, has no verified real Linux kernel-keyring lock lifecycle or stable device enrollment, and is not integrated into the normal picker or a validated terminal/Wayland installation. Only synthetic and disposable-server secrets were used for verification; this is not owner authorization to migrate personal vaults.
+
+[Rust CI on `89e93fa`: 206 baseline + 2 preview tests, strict Clippy and smoke](https://github.com/sguzman/passflick/actions/runs/41767285591), [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41767285478) and [disposable HTTPS Vaultwarden](https://github.com/sguzman/passflick/actions/runs/41767285570) are green. D01 remains active and uncredited pending default-build, terminal and lifecycle acceptance.
+
 ## Native Bitwarden crypto and token lifecycle boundaries (test-only)
 
 The adapter currently uses the pinned MIT `rbw` Rust library for master-password KDF, wrapped user key, type-2 ciphertext decoding and HMAC verification. Since the library's verifier assumes a fixed 32-byte decoded MAC, Passflick rejects malformed decoded lengths, missing MAC, incorrect IV length and non-block-aligned ciphertext **before** dispatching to it. Error types must remain non-secret and failed candidate updates must never mutate the prior encrypted cache.

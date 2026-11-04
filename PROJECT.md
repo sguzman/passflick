@@ -2,7 +2,7 @@
 
 Passflick is a low-latency, keyboard-first **read-only password projection for Linux**, with a Bitwarden-compatible server (including self-hosted Vaultwarden) as the **sole source of truth**. Passflick is not an independent password manager, password editor or browser-export aggregator.
 
-**Transition status:** a native Rust Vaultwarden integration now passes a **disposable real-server CI test** (including password login, TOTP, token refresh and complete encrypted read-only sync), but remains **test-only**. The production picker still implements the original browser CSV ingestion and independent encrypted local vault. ADR-001 fixes the integration architecture without enabling production migration. See [ROADMAP.md](ROADMAP.md), [the architecture design](docs/vaultwarden-architecture.md) and [ADR-001](docs/adr-001-native-vaultwarden-adapter.md) for the migration and verification gates.
+**Transition status:** the native Rust Vaultwarden adapter passes disposable real-server CI (including password login, TOTP, token refresh and encrypted read-only sync). A **non-default, opt-in `vaultwarden-preview` feature** now compiles an experimental masked-terminal `passflick update` command, but neither the normal release binary nor production picker uses the new projection. The default picker still uses its historical encrypted vault/CSV flow. ADR-001 fixes the integration architecture without authorizing production migration. See [ROADMAP.md](ROADMAP.md), [the architecture design](docs/vaultwarden-architecture.md) and [ADR-001](docs/adr-001-native-vaultwarden-adapter.md) for the migration and verification gates.
 
 ## Accepted user experience
 

@@ -58,6 +58,14 @@ The create-only `install_initial_projection` path stores a separately wrapped lo
 
 **Acceptance update:** C01 (schema) and B05 (native trusted HTTPS/CA failures) are verified; the full session/lock/setup UI, production updater, real kernel keyring and target-host migration remain incomplete. Earlier dated sections below describe prior historical checkpoints.
 
+## Explicit CLI update preview (2026-11-04)
+
+An **optional, non-default** `vaultwarden-preview` Cargo feature now exposes a masked-terminal `passflick update` proof of integration. It reuses native login, trusted no-redirect TLS, complete account-bound read-only sync, independent Argon2id keywrap, authenticated offline schema and atomic publication. The default picker and legacy encrypted vault are unchanged. The command deliberately avoids persistent tokens, command-line secrets or automatic polling, while the first-run setup and refresh paths remain explicit.
+
+Future session-keyring and picker-only APIs remain test-only so the preview binary contains only its necessary components. A trusted custom PEM CA may be selected without bypassing hostname verification. New local ciphertext is written to dedicated fixed XDG paths, never to a legacy vault override. Preview-specific tests and real disposable Vaultwarden acceptance are green at [code commit `89e93fa`](https://github.com/sguzman/passflick/commit/89e93fa78f18dc8bc63ca82bd516b83e78b6110b).
+
+**Still pending:** persistent device ID, end-to-end terminal/Wayland acceptance, real kernel lock and logout, offline picker integration and migration safety. See the new D01 checkpoint in ROADMAP.md; it has **no additional weighted completion credit yet**.
+
 ## Responsibilities
 
 | Component | Owns | Does not own |
