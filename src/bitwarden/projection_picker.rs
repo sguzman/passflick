@@ -200,7 +200,9 @@ impl ProjectionPicker {
                 .ok_or("Projection is locked; unlock it before copying.")?;
             let displayed = self.snapshot.as_ref().ok_or("Projection window is locked.")?;
             if !selected_item_unchanged(displayed, &current, &id) {
-                return Err("Offline record changed during this picker session. Close and reopen before copying.");
+                return Err(
+                    "Offline record changed during this picker session. Close and reopen before copying.",
+                );
             }
             let text = copy_value(&current, &id, username)?;
             crate::clipboard::copy_sensitive(text)
