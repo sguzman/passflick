@@ -122,7 +122,14 @@ fn write_stub(dir: &Path) -> PathBuf {
 /// Exercises a populated snapshot through separate GUI processes and the
 /// original sensitive Wayland copy adapter's CLI contract (stubbed on X11).
 /// The private GUI reads local encrypted data, not network data.
-pub(super) fn run(binary: &Path, data: &Path, legacy: &Path, first_id: &str, second_id: &str) {
+pub(super) fn run(
+    binary: &Path,
+    data: &Path,
+    legacy: &Path,
+    first_id: &str,
+    second_id: &str,
+    refresh_selected: impl FnOnce(),
+) {
     assert!(
         std::env::var_os("DISPLAY").is_some(),
         "Xvfb DISPLAY required"
@@ -173,6 +180,30 @@ pub(super) fn run(binary: &Path, data: &Path, legacy: &Path, first_id: &str, sec
     };
     assert_eq!(fs::read(&clipboard).unwrap(), expected);
     fs::remove_file(&clipboard).unwrap();
+
+    // A successful remote update may replace the password under the same
+    // upstream ID while this GUI still displays the old record. Such a GUI
+    // must NOT copy the new, unseen value: the user must reopen first.
+    {
+        let mut child = launch(binary, data, legacy, &clipboard, &bin);
+        visible_window(&mut child);
+        refresh_selected();
+        // Refocus after the separate CLI update process to guarantee this
+        // Return key is received by the pre-refresh GUI instance.
+        visible_window(&mut child);
+        xdo(&["key", "--clearmodifiers", "Return"]);
+        thread::sleep(Duration::from_millis(300));
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "stale picker unexpectedly closed after changed-record copy"
+        );
+        assert!(
+            !clipboard.exists(),
+            "stale picker copied a changed credential without reopening"
+        );
+        xdo(&["key", "--clearmodifiers", "Escape"]);
+        await_exit(&mut child);
+    }
 
     // An already-open picker cannot copy after another real process commits
     // a manual lock. No GUI copy may create a new keyring entry to bypass it.

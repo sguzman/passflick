@@ -480,7 +480,45 @@ fn disposable_server_auth_sync_encrypted_offline() {
         );
         // Read and copy actual fictional remote credentials through a real
         // egui process under Xvfb, then lock that process from another CLI.
-        super::gui_acceptance::run(binary, data, &legacy, &first_id, &second_id);
+        super::gui_acceptance::run(
+            binary,
+            data,
+            &legacy,
+            &first_id,
+            &second_id,
+            || {
+                // Only the disposable fixture client may edit the upstream
+                // synthetic Vaultwarden account. A separate real Passflick
+                // update process publishes the replacement local snapshot
+                // while the GUI remains open with the *old* selected row.
+                let selected_id = if first_id < second_id {
+                    &first_id
+                } else {
+                    &second_id
+                };
+                fixture_update_password(
+                    &client,
+                    &url,
+                    bearer,
+                    &account,
+                    selected_id,
+                    "fictional-UPDATED-password",
+                );
+                super::terminal_acceptance::run_cli(
+                    binary,
+                    data,
+                    &legacy,
+                    &[
+                        ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                        ("Vaultwarden login email: ", EMAIL),
+                        ("Vaultwarden master password: ", PASSWORD),
+                        ("Custom trusted CA PEM path (empty for system trust): ", ca),
+                        ("Local projection passphrase: ", local),
+                    ],
+                    true,
+                );
+            },
+        );
         assert_eq!(fs::read(&devicepath).unwrap(), device);
         assert_eq!(fs::read(&legacy).unwrap(), original_legacy);
     }
