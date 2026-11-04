@@ -68,7 +68,6 @@ pub struct UpdateRequest<'a, D: LoginDecryptor> {
 /// has expired; the resulting encrypted snapshot is entirely local.
 ///
 /// This entrypoint is not called until real-server integration is proven.
-#[expect(dead_code, reason = "isolated until disposable Vaultwarden acceptance")]
 pub fn refresh_explicit<D: LoginDecryptor>(
     transport: &ReadOnlySyncTransport,
     session: &mut RemoteSession,

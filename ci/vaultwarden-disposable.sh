@@ -60,7 +60,18 @@ docker run -d --name "$proxy" --network "$network" \
   caddy:2.10.2-alpine >/dev/null
 
 ready=0
-for _ in $(seq 1 90); do
+for _ in $(seq 1 45); do
+  if ! docker inspect "$vault" --format '{{.State.Running}}' 2>/dev/null | grep -qx true; then
+    echo 'Disposable Vaultwarden container exited unexpectedly' >&2
+    docker inspect "$vault" --format 'Exit: {{.State.ExitCode}}' >&2 || true
+    docker logs --tail 60 "$vault" >&2 || true
+    exit 1
+  fi
+  if ! docker inspect "$proxy" --format '{{.State.Running}}' 2>/dev/null | grep -qx true; then
+    echo 'Synthetic HTTPS proxy exited unexpectedly' >&2
+    docker logs --tail 60 "$proxy" >&2 || true
+    exit 1
+  fi
   if curl -fsS --max-time 2 --cacert "$work/certs/root.pem" \
       https://localhost:18443/api/config >/dev/null 2>&1; then
     ready=1
@@ -69,8 +80,12 @@ for _ in $(seq 1 90); do
   sleep 2
 done
 if [[ "$ready" != 1 ]]; then
-  echo 'Disposable server did not become healthy' >&2
+  echo 'Disposable HTTPS server did not become healthy' >&2
+  curl -sS --max-time 5 --cacert "$work/certs/root.pem" \
+    https://localhost:18443/api/config >/dev/null || true
   docker ps --filter name=passflick --format '{{.Names}}: {{.Status}}' >&2
+  docker logs --tail 40 "$proxy" >&2 || true
+  docker logs --tail 40 "$vault" >&2 || true
   exit 1
 fi
 
