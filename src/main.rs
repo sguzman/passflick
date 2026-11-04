@@ -77,7 +77,7 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
         #[cfg(feature = "vaultwarden-preview")]
         Some("update") => {
             no_extra_args(&mut args)?;
-            bitwarden::command::run().map_err(|_| "native preview update failed")?;
+            bitwarden::command::run()?;
         }
         Some("list") => {
             no_extra_args(&mut args)?;

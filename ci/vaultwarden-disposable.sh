@@ -92,5 +92,5 @@ fi
 
 PASSFLICK_DISPOSABLE_URL=https://localhost:18443/ \
 PASSFLICK_DISPOSABLE_CA="$work/certs/root.pem" \
-  cargo test --locked bitwarden::live_acceptance::disposable_server_auth_sync_encrypted_offline \
+  cargo test --locked --features vaultwarden-preview bitwarden::live_acceptance::disposable_server_auth_sync_encrypted_offline \
   -- --ignored --nocapture

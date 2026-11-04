@@ -404,6 +404,55 @@ fn disposable_server_auth_sync_encrypted_offline() {
     let ciphertext = fs::read(&path).unwrap();
     assert!(!ciphertext.windows(6).any(|w| w == b"second"));
 
+    #[cfg(feature = "vaultwarden-preview")]
+    {
+        // The preview publication path performs an authenticated full sync,
+        // then insists on the independent local keywrap and existing AEAD.
+        let refreshed = update::prepare_initial_sync(
+            &transport,
+            &mut session,
+            &endpoint,
+            1_800_000_001,
+            &decoder,
+        )
+        .unwrap();
+        let before = fs::read(&path).unwrap();
+        assert!(matches!(
+            super::command::publish_candidate(
+                &refreshed,
+                &path,
+                b"fictional incorrect local passphrase",
+                false
+            ),
+            Err(super::command::PreviewError::Local)
+        ));
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert_eq!(
+            super::command::publish_candidate(
+                &refreshed,
+                &path,
+                LOCAL_PASSPHRASE,
+                false
+            )
+            .unwrap(),
+            2
+        );
+        let reopened = cache_store::load(
+            &path,
+            &keywrap::unlock(
+                &keywrap_path,
+                LOCAL_PASSPHRASE,
+                endpoint.server_identity(),
+                &account,
+            )
+            .unwrap(),
+            endpoint.server_identity(),
+            &account,
+        )
+        .unwrap();
+        assert_eq!(reopened.items().len(), 2);
+    }
+
     // Simulate local token expiry and exercise the *actual* remote refresh
     // grant from the explicit-update entrypoint, with no upstream cipher write.
     session.expire_for_test();
