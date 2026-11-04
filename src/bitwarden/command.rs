@@ -65,8 +65,12 @@ fn read_device_id(path: &Path) -> Result<String, PreviewError> {
         return Err(PreviewError::Storage);
     }
     let mut bytes = [0_u8; 32];
-    file.read_exact(&mut bytes).map_err(|_| PreviewError::Storage)?;
-    if !bytes.iter().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte)) {
+    file.read_exact(&mut bytes)
+        .map_err(|_| PreviewError::Storage)?;
+    if !bytes
+        .iter()
+        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
+    {
         return Err(PreviewError::Storage);
     }
     String::from_utf8(bytes.to_vec()).map_err(|_| PreviewError::Storage)
@@ -382,12 +386,22 @@ mod tests {
         fs::write(&legacy, b"original fictional legacy encrypted data").unwrap();
         let first = device_id(&fixture.snapshot()).unwrap();
         assert_eq!(first.len(), 32);
-        assert!(first.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
+        assert!(
+            first
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        );
         assert_eq!(device_id(&fixture.snapshot()).unwrap(), first);
         let path = fixture.0.join("projection.pfdevice");
         assert_eq!(fs::read(&path).unwrap(), first.as_bytes());
-        assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
-        assert_eq!(fs::read(legacy).unwrap(), b"original fictional legacy encrypted data");
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        assert_eq!(
+            fs::read(legacy).unwrap(),
+            b"original fictional legacy encrypted data"
+        );
     }
 
     #[test]
