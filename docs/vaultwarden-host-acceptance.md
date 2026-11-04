@@ -12,6 +12,10 @@
 
 ## Unresolved native post-error interaction (not an accepted gate)
 
+**Restored-green reference:** [disposable run `41904159228`](https://github.com/sguzman/passflick/actions/runs/41904159228) passed again after the experimental native post-error input assertions were removed. This confirms fresh correct native unlock and strict copy/clipboard behavior; it does **not** prove the post-error same-window sequence.
+
+
+
 Disposable Weston runs [`41901413863`](https://github.com/sguzman/passflick/actions/runs/41901413863), [`41902226022`](https://github.com/sguzman/passflick/actions/runs/41902226022) and [`41903527352`](https://github.com/sguzman/passflick/actions/runs/41903527352) exposed a failure to process a second unlock or Escape after a wrong fictional passphrase. The tested native input/focus sequences did not establish whether this is a compositor test-input limitation or a production GUI defect. **Do not use this as evidence that wrong-then-correct recovery passes on Wayland.** The last verified native fresh-correct unlock/clipboard assertions remain separate and intact. In target-host QA, check whether the window stays responsive after a wrong attempt and whether keyboard input can be restored without restarting the picker.
 
 ## Verified disposable CI evidence (not target-host acceptance)
