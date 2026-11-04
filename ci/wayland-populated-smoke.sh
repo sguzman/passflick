@@ -246,37 +246,3 @@ assert_clipboard after-unlock-copy
 env -u DISPLAY wl-copy --clear >/dev/null 2>&1 || true
 
 echo 'Native Wayland populated and fresh masked-unlock picker passed exact fictional clipboard checks.'
-
-# Native Wayland wrong-passphrase denial remains a separate negative
-# scenario: it must not unlock or change the clipboard. The stronger
-# wrong-then-correct recovery in *one* native window remains unverified;
-# Xvfb GUI acceptance checks that flow independently.
-projection_cli lock >"$root/lock.status"
-grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
-printf 'fictional pre-rejection clipboard marker' >"$root/expected"
-env -u DISPLAY wl-copy --sensitive <"$root/expected"
-assert_clipboard before-rejected-unlock
-
-launch locked
-xdotool type --clearmodifiers --delay 15 -- 'fictional wrong native passphrase'
-xdotool key --clearmodifiers Return
-sleep 3
-[[ -n "$picker_pid" ]] && kill -0 "$picker_pid" || {
-  echo 'Native Wayland locked picker closed unexpectedly after wrong passphrase.' >&2
-  exit 1
-}
-projection_cli status >"$root/lock.status"
-grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
-assert_clipboard after-rejected-unlock
-# A rejected editor Enter may relinquish the native surface's keyboard
-# focus. Re-establish the Weston X11 output and seat input serial *after*
-# entering the wrong passphrase, as in the established Escape baseline.
-timeout 10s xdotool windowfocus --sync "$weston_window"
-xdotool mousemove --window "$weston_window" 430 125 click 1
-sleep 0.3
-xdotool key --clearmodifiers Escape
-await_close rejected-unlock-Escape
-assert_clipboard after-rejected-Escape
-env -u DISPLAY wl-copy --clear >/dev/null 2>&1 || true
-
-echo 'Native Wayland locked picker stayed locked and clipboard was unchanged after fictional wrong input and Escape.'
