@@ -500,13 +500,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
     let bearer = session.bearer_token().unwrap();
     let totp_key = fixture_enable_totp(&client, &url, bearer);
     assert!(matches!(
-        transport.authenticate(
-            &endpoint,
-            EMAIL,
-            PASSWORD,
-            "passflick-second-device",
-            None,
-        ),
+        transport.authenticate(&endpoint, EMAIL, PASSWORD, "passflick-second-device", None,),
         Err(AuthError::MfaRequired)
     ));
     assert!(
