@@ -376,7 +376,10 @@ mod tests {
         let stored = fs::read(&path).unwrap();
         assert_eq!(stored.len(), FILE_BYTES);
         assert_eq!(&stored[..8], MAGIC);
-        assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         assert!(!stored.windows(9).any(|w| w == b"fictional"));
 
         let snapshot = ProjectionSnapshot::new(
@@ -408,7 +411,11 @@ mod tests {
         let _key = initialize(&path, PASSPHRASE, SERVER, ACCOUNT).unwrap();
         let original = fs::read(&path).unwrap();
         for (passphrase, server, account) in [
-            (b"fictional wrong local password".as_slice(), SERVER, ACCOUNT),
+            (
+                b"fictional wrong local password".as_slice(),
+                SERVER,
+                ACCOUNT,
+            ),
             (PASSPHRASE, "https://other.example.test/", ACCOUNT),
             (PASSPHRASE, SERVER, "other-account"),
         ] {
@@ -446,16 +453,14 @@ mod tests {
             initialize(&dir.keywrap(), PASSPHRASE, SERVER, ACCOUNT),
             Err(KeywrapError::AlreadyExists)
         ));
-        assert_eq!(fs::read(legacy).unwrap(), b"fictional untouched legacy bytes");
+        assert_eq!(
+            fs::read(legacy).unwrap(),
+            b"fictional untouched legacy bytes"
+        );
         assert!(key.as_bytes().len() == KEY_BYTES);
         assert_eq!(fs::read(dir.keywrap()).unwrap(), ciphertext);
         assert!(matches!(
-            initialize(
-                &dir.0.join("vault.passvault"),
-                PASSPHRASE,
-                SERVER,
-                ACCOUNT
-            ),
+            initialize(&dir.0.join("vault.passvault"), PASSPHRASE, SERVER, ACCOUNT),
             Err(KeywrapError::InvalidPath)
         ));
         let linked = TestDir::new();
