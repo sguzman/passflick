@@ -1,0 +1,416 @@
+//! Experimental read-only offline Vaultwarden picker. No network access,
+//! no browser source imports, and never opens the legacy encrypted vault.
+//! The sensitive clipboard path is the existing Wayland --sensitive adapter.
+//! The cached session is authenticated at startup and again under the shared
+//! flock before each copy, so a completed manual lock cannot be bypassed by
+//! a previously opened window.
+
+use std::collections::HashMap;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use eframe::egui;
+use zeroize::{Zeroize, Zeroizing};
+
+use super::offline_command;
+use super::projection_search::{display_row, rank_projection};
+use crate::projection::ProjectionSnapshot;
+
+const POLL_INTERVAL: Duration = Duration::from_millis(800);
+
+fn snapshot_age(timestamp: u64, now: u64) -> (String, bool) {
+    let age = now.saturating_sub(timestamp);
+    let description = if timestamp > now {
+        "Sync timestamp is in the future".to_owned()
+    } else if age < 120 {
+        "Synced less than 2 minutes ago".to_owned()
+    } else if age < 7_200 {
+        format!("Synced {} minutes ago", age / 60)
+    } else if age < 172_800 {
+        format!("Synced {} hours ago", age / 3_600)
+    } else {
+        format!("Synced {} days ago", age / 86_400)
+    };
+    (description, timestamp > now || age >= 86_400)
+}
+
+fn now_epoch() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs())
+}
+
+fn copy_value<'a>(
+    snapshot: &'a ProjectionSnapshot,
+    selected_id: &str,
+    username: bool,
+) -> Result<&'a str, &'static str> {
+    let record = snapshot
+        .items()
+        .iter()
+        .find(|record| record.id() == selected_id)
+        .ok_or("The selected item was removed from the offline projection.")?;
+    let value = if username {
+        record.username()
+    } else {
+        record.password()
+    };
+    if value.is_empty() {
+        return Err("The selected item has no value for this copy action.");
+    }
+    if value.contains('\0') {
+        return Err("The selected value contains a NUL byte; copy was refused.");
+    }
+    Ok(value)
+}
+
+struct ProjectionPicker {
+    snapshot: Option<ProjectionSnapshot>,
+    site_query: Zeroizing<String>,
+    username_query: Zeroizing<String>,
+    rows: Vec<usize>,
+    labels: HashMap<usize, Zeroizing<String>>,
+    selected: usize,
+    focused: bool,
+    notice: Option<&'static str>,
+    error: Option<&'static str>,
+    theme: egui::ThemePreference,
+    last_poll: Instant,
+}
+
+impl ProjectionPicker {
+    fn new(snapshot: Option<ProjectionSnapshot>, notice: Option<&'static str>) -> Self {
+        let rows = snapshot
+            .as_ref()
+            .map(|data| rank_projection(data, "", ""))
+            .unwrap_or_default();
+        Self {
+            snapshot,
+            site_query: Zeroizing::new(String::new()),
+            username_query: Zeroizing::new(String::new()),
+            rows,
+            labels: HashMap::new(),
+            selected: 0,
+            focused: false,
+            notice,
+            error: None,
+            theme: egui::ThemePreference::System,
+            last_poll: Instant::now(),
+        }
+    }
+
+    fn clear_sensitive(&mut self) {
+        self.snapshot = None;
+        self.rows.clear();
+        self.labels.clear();
+        self.site_query.zeroize();
+        self.username_query.zeroize();
+        self.selected = 0;
+        self.focused = false;
+    }
+
+    fn update_matches(&mut self) {
+        self.rows = self.snapshot
+            .as_ref()
+            .map(|snapshot| rank_projection(snapshot, &self.site_query, &self.username_query))
+            .unwrap_or_default();
+        self.selected = 0;
+    }
+
+    fn poll_lock(&mut self) {
+        if self.last_poll.elapsed() < POLL_INTERVAL {
+            return;
+        }
+        self.last_poll = Instant::now();
+        match offline_command::session_present_for_picker() {
+            Ok(false) | Err(_) => {
+                if self.snapshot.is_some() {
+                    self.clear_sensitive();
+                }
+                self.notice = Some("Projection locked or unavailable. Unlock in this login session.");
+            }
+            Ok(true) if self.snapshot.is_none() => {
+                if let Ok(Some(snapshot)) = offline_command::read_for_picker() {
+                    self.snapshot = Some(snapshot);
+                    self.notice = None;
+                    self.update_matches();
+                }
+            }
+            Ok(true) => {}
+        }
+    }
+
+    fn move_selection(&mut self, amount: isize) {
+        if self.rows.is_empty() {
+            self.selected = 0;
+        } else if amount.is_negative() {
+            self.selected = self.selected.saturating_sub(amount.unsigned_abs());
+        } else {
+            self.selected = self.selected.saturating_add(amount as usize).min(self.rows.len() - 1);
+        }
+    }
+
+    fn copy_selected(&mut self, ctx: &egui::Context, username: bool) {
+        let id = self.snapshot.as_ref()
+            .and_then(|snapshot| self.rows.get(self.selected).and_then(|i| snapshot.items().get(*i)))
+            .map(|item| Zeroizing::new(item.id().to_owned()));
+        let Some(id) = id else { return };
+
+        // A lock cannot report success while this action holds the same
+        // cross-process file guard used by lock/unlock and publication.
+        let result = (|| {
+            let path = crate::paths::projection_path().map_err(|_| "Projection unavailable.")?;
+            let _guard = crate::write_lock::acquire(&path)
+                .map_err(|_| "Projection access could not be coordinated.")?;
+            let current = offline_command::read_for_picker()
+                .map_err(|_| "Projection locked or authentication failed.")?
+                .ok_or("Projection is locked; unlock it before copying.")?;
+            let text = copy_value(&current, &id, username)?;
+            crate::clipboard::copy_sensitive(text)
+                .map_err(|_| "Sensitive Wayland clipboard copy failed.")
+        })();
+        match result {
+            Ok(()) => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+            Err(error) => {
+                self.error = Some(error);
+                // Do not retain an unlocked projection after an unexpected
+                // cross-process authentication or clipboard failure.
+                if offline_command::session_present_for_picker() != Ok(true) {
+                    self.clear_sensitive();
+                }
+            }
+        }
+    }
+}
+
+impl eframe::App for ProjectionPicker {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+        ctx.request_repaint_after(POLL_INTERVAL);
+        self.poll_lock();
+        if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        }
+        if ctx.input(|input| input.key_pressed(egui::Key::ArrowUp)) {
+            self.move_selection(-1);
+        }
+        if ctx.input(|input| input.key_pressed(egui::Key::ArrowDown)) {
+            self.move_selection(1);
+        }
+        let toggle = ctx.input_mut(|input| {
+            input.consume_key(egui::Modifiers::CTRL, egui::Key::Space)
+        });
+
+        egui::CentralPanel::default().show(ui, |ui| {
+            ui.add_space(10.0);
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new("PASSFLICK  /  PROJECTION").strong().size(12.0));
+                    ui.heading(egui::RichText::new("Find a credential").size(27.0).strong());
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    self.theme.radio_buttons(ui);
+                });
+            });
+            ui.add_space(5.0);
+            ui.label(
+                egui::RichText::new("OFFLINE · READ-ONLY · VAULTWARDEN PREVIEW")
+                    .size(11.0)
+                    .weak(),
+            );
+            ui.add_space(10.0);
+            if let Some(snapshot) = self.snapshot.as_ref() {
+                let (age, stale) = snapshot_age(snapshot.last_success_at(), now_epoch());
+                let description = format!(
+                    "{}   ·   {} separate login items   ·   Offline copy may be stale",
+                    age, snapshot.items().len()
+                );
+                let info = egui::RichText::new(description).size(12.0);
+                ui.label(if stale {
+                    info.color(ui.visuals().warn_fg_color)
+                } else {
+                    info.weak()
+                });
+                ui.add_space(10.0);
+
+                let site = ui.horizontal(|ui| {
+                    ui.label("Website");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut *self.site_query)
+                            .desired_width(f32::INFINITY)
+                            .hint_text("Name or any website URI"),
+                    )
+                }).inner;
+                let user = ui.horizontal(|ui| {
+                    ui.label("Account");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut *self.username_query)
+                            .desired_width(f32::INFINITY)
+                            .hint_text("Username within matching websites"),
+                    )
+                }).inner;
+                if !self.focused {
+                    site.request_focus();
+                    self.focused = true;
+                }
+                if toggle {
+                    if site.has_focus() { user.request_focus(); }
+                    else { site.request_focus(); }
+                }
+                if site.changed() || user.changed() {
+                    self.update_matches();
+                    self.error = None;
+                }
+
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(6.0);
+                if self.rows.is_empty() {
+                    ui.label(egui::RichText::new("No matching login items").weak());
+                } else {
+                    ui.label(
+                        egui::RichText::new(format!("{} MATCHING ACCOUNTS", self.rows.len()))
+                            .size(11.0)
+                            .strong()
+                            .weak(),
+                    );
+                    egui::ScrollArea::vertical()
+                        .max_height(240.0)
+                        .show(ui, |ui| {
+                            let start = self.selected.saturating_sub(7);
+                            for (pos, index) in self.rows.iter().copied().enumerate().skip(start).take(8) {
+                                let label = self.labels
+                                    .entry(index)
+                                    .or_insert_with(|| {
+                                        display_row(snapshot, index)
+                                            .unwrap_or_else(|| Zeroizing::new("Unavailable".to_owned()))
+                                    });
+                                let selected = pos == self.selected;
+                                let button = egui::Button::selectable(selected, label.as_str());
+                                if ui.add_sized([ui.available_width(), 30.0], button).clicked() {
+                                    self.selected = pos;
+                                }
+                            }
+                        });
+                }
+            } else {
+                ui.add_space(26.0);
+                ui.heading("Projection locked");
+                ui.label("No credentials were loaded into this window.");
+                ui.label(
+                    "Use 'passflick update' to create a preview snapshot, then run                      'passflick projection unlock' in this login session.",
+                );
+                if let Some(notice) = self.notice {
+                    ui.add_space(8.0);
+                    ui.label(egui::RichText::new(notice).weak());
+                }
+            }
+            if let Some(error) = self.error {
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new(error).color(ui.visuals().error_fg_color));
+            }
+            ui.add_space(14.0);
+            ui.separator();
+            ui.label(
+                egui::RichText::new(
+                    "Ctrl+Space  Switch filter     ↑↓  Select     Enter  Copy password     Shift+Enter  Copy username     Esc  Close"
+                )
+                .size(11.0)
+                .weak(),
+            );
+        });
+        ctx.set_theme(self.theme);
+        if ctx.input(|input| input.key_pressed(egui::Key::Enter)) {
+            let username = ctx.input(|input| input.modifiers.shift);
+            self.copy_selected(&ctx, username);
+        }
+    }
+}
+
+pub fn run() -> eframe::Result {
+    let (snapshot, notice) = match offline_command::read_for_picker() {
+        Ok(Some(snapshot)) => (Some(snapshot), None),
+        Ok(None) => (None, Some("No unlocked projection key is available in this session.")),
+        Err(_) => (None, Some("Offline projection is missing, locked or unauthenticated.")),
+    };
+    let options = eframe::NativeOptions {
+        renderer: eframe::Renderer::Glow,
+        viewport: egui::ViewportBuilder::default()
+            .with_app_id("passflick-projection-preview")
+            .with_title("Passflick · Offline Projection")
+            .with_inner_size([740.0, 495.0])
+            .with_resizable(true)
+            .with_always_on_top(),
+        ..Default::default()
+    };
+    eframe::run_native(
+        "Passflick · Offline Projection",
+        options,
+        Box::new(move |cc| {
+            cc.egui_ctx.set_theme(egui::ThemePreference::System);
+            Ok(Box::new(ProjectionPicker::new(snapshot, notice)))
+        }),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::projection::LoginItem;
+
+    fn fixture() -> ProjectionSnapshot {
+        ProjectionSnapshot::new(
+            "https://vault.example.test/".to_owned(),
+            "fictional-account".to_owned(),
+            1_800_000_000,
+            vec![
+                LoginItem::new("distinct-a".to_owned(), "Example".to_owned(),
+                    vec!["https://example.test/login".to_owned()], "alice".to_owned(),
+                    "fictional-password".to_owned(), None),
+                LoginItem::new("distinct-z".to_owned(), "Example".to_owned(),
+                    vec!["https://example.test/login".to_owned()], "alice".to_owned(),
+                    "fictional-password".to_owned(), None),
+            ],
+        ).unwrap()
+    }
+
+    #[test]
+    fn picker_preserves_distinct_upstream_ids_and_safe_secret_selection() {
+        let snapshot = fixture();
+        let mut app = ProjectionPicker::new(Some(snapshot), None);
+        assert_eq!(app.rows.len(), 2);
+        assert_eq!(app.snapshot.as_ref().unwrap().items()[app.rows[0]].id(), "distinct-a");
+        app.move_selection(1);
+        let id = app.snapshot.as_ref().unwrap().items()[app.rows[app.selected]].id();
+        assert_eq!(id, "distinct-z");
+        assert_eq!(copy_value(app.snapshot.as_ref().unwrap(), id, false).unwrap(), "fictional-password");
+        assert_eq!(copy_value(app.snapshot.as_ref().unwrap(), id, true).unwrap(), "alice");
+        assert_eq!(copy_value(app.snapshot.as_ref().unwrap(), "unrelated-id", false),
+                   Err("The selected item was removed from the offline projection."));
+        app.site_query.push_str("different-domain");
+        app.update_matches();
+        assert!(app.rows.is_empty());
+        app.clear_sensitive();
+        assert!(app.snapshot.is_none());
+        assert!(app.site_query.is_empty());
+    }
+
+    #[test]
+    fn stale_timestamp_is_not_confused_with_remote_account_revocation() {
+        assert!(snapshot_age(1, 100_000).1);
+        assert!(!snapshot_age(100_000, 100_100).1);
+        assert!(snapshot_age(200_000, 100_000).1);
+    }
+
+    #[test]
+    fn copy_validation_refuses_empty_and_nul_bytes() {
+        let snapshot = ProjectionSnapshot::new(
+            "https://vault.example.test/".to_owned(), "fictional-account".to_owned(),
+            1_800_000_000,
+            vec![LoginItem::new("id".to_owned(), "Example".to_owned(),
+                vec![], "".to_owned(), "nul\0credential".to_owned(), None)]
+        ).unwrap();
+        assert!(copy_value(&snapshot, "id", false).is_err());
+        assert!(copy_value(&snapshot, "id", true).is_err());
+    }
+}

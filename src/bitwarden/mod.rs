@@ -16,10 +16,10 @@ pub mod offline_command;
 pub mod pipeline;
 #[cfg(feature = "vaultwarden-preview")]
 pub mod projection_identity;
-// Until the new offline picker consumes this search model, keep it as
-// synthetic acceptance code. Do not ship dead preview-only interfaces.
-#[cfg(all(test, feature = "vaultwarden-preview"))]
-mod projection_search;
+#[cfg(feature = "vaultwarden-preview")]
+pub mod projection_search;
+#[cfg(feature = "vaultwarden-preview")]
+pub mod projection_picker;
 #[cfg(any(test, feature = "vaultwarden-preview"))]
 pub mod session_cache;
 pub mod strict_json;

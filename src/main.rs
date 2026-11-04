@@ -85,7 +85,11 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
                 .next()
                 .ok_or("projection requires unlock, lock or status")?;
             no_extra_args(&mut args)?;
-            bitwarden::offline_command::run(&operation)?;
+            if operation == "picker" {
+                bitwarden::projection_picker::run()?;
+            } else {
+                bitwarden::offline_command::run(&operation)?;
+            }
         }
         Some("list") => {
             no_extra_args(&mut args)?;
@@ -702,7 +706,7 @@ fn print_help() {
     #[cfg(feature = "vaultwarden-preview")]
     println!("  passflick update            EXPERIMENTAL native Vaultwarden refresh");
     #[cfg(feature = "vaultwarden-preview")]
-    println!("  passflick projection <unlock|lock|status>   EXPERIMENTAL offline key lifecycle");
+    println!("  passflick projection <unlock|lock|status|picker>   EXPERIMENTAL offline projection");
     println!("  passflick sources           Show per-source counts and refresh age");
     println!("  passflick discover          Find local browser profiles, no secret access");
     println!("  passflick demo              Open picker with synthetic test credentials");

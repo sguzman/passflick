@@ -186,6 +186,19 @@ pub fn cached_read<S: SessionStore>(
     Ok(Some(snapshot))
 }
 
+/// Lightweight session-presence check used **only** for dropping visible
+/// in-memory picker records after manual lock, never for authorizing copy.
+/// Actual copy must re-authenticate the snapshot under the writer guard.
+pub fn session_present<S: SessionStore>(
+    backend: &S,
+    scope: &ProjectionScope,
+) -> Result<bool, AccessError> {
+    if backend.exists(&scope.lock)? {
+        return Ok(false);
+    }
+    backend.exists(&scope.key)
+}
+
 /// Explicit passphrase unlock; authenticate keywrap and the local snapshot
 /// before caching any key. A failed lock-marker cleanup leaves a deny marker,
 /// not a claimed unlocked session.

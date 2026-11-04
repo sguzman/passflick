@@ -83,6 +83,30 @@ fn lock_with<S: SessionStore>(backend: &S, path: &Path) -> Result<(), OfflineErr
         .map_err(|_| OfflineError::Access)
 }
 
+/// Authenticated local snapshot read for the separate opt-in graphical picker.
+/// Never contacts Vaultwarden or reads the historical encrypted vault.
+pub(super) fn read_for_picker() -> Result<Option<ProjectionSnapshot>, OfflineError> {
+    let path = crate::paths::projection_path().map_err(|_| OfflineError::Identity)?;
+    let (identity, scope) = scope(&path)?;
+    session_cache::cached_read(
+        &KernelSessionStore,
+        &scope,
+        &path,
+        identity.server(),
+        identity.account(),
+    )
+    .map_err(|_| OfflineError::Access)
+}
+
+/// A fast, non-authoritative availability check for clearing memory in a
+/// running picker. Successful results never replace authenticated reads.
+pub(super) fn session_present_for_picker() -> Result<bool, OfflineError> {
+    let path = crate::paths::projection_path().map_err(|_| OfflineError::Identity)?;
+    let (_, scope) = scope(&path)?;
+    session_cache::session_present(&KernelSessionStore, &scope)
+        .map_err(|_| OfflineError::Access)
+}
+
 /// Returns only non-secret aggregate metadata. Status never decrypts a local
 /// snapshot unless the session keyring already contains a valid unlocked key.
 pub fn run(action: &str) -> Result<(), OfflineError> {
