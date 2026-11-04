@@ -490,12 +490,19 @@ fn disposable_server_auth_sync_encrypted_offline() {
             .env("PASSFLICK_DISPOSABLE_TEST_LEGACY", &legacy)
             .env(
                 "PASSFLICK_NATIVE_FIRST_PASSWORD",
-                if first_id < second_id { "first" } else { "second" },
+                if first_id < second_id {
+                    "first"
+                } else {
+                    "second"
+                },
             );
         let status = native
             .status()
             .expect("native Wayland populated picker acceptance did not start");
-        assert!(status.success(), "native Wayland populated picker acceptance failed");
+        assert!(
+            status.success(),
+            "native Wayland populated picker acceptance failed"
+        );
 
         // Read and copy actual fictional remote credentials through a real
         // egui process under Xvfb, then lock that process from another CLI.
