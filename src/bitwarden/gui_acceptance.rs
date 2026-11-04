@@ -103,7 +103,7 @@ fn write_stub(dir: &Path) -> PathBuf {
     // captured bytes to CI logs, and reject omission of --sensitive.
     fs::write(
         &stub,
-        "#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"\u0024{1:-}\" == \"--help\" ]]; then\n  echo '  --sensitive  Hint that clipboard content is sensitive'\n  exit 0\nfi\ncase \" \u0024* \" in *' --sensitive '*) ;; *) exit 91 ;; esac\ncase \" \u0024* \" in *' --trim-newline '*) exit 92 ;; esac\ncat > \"\u0024{PASSFLICK_TEST_CLIPBOARD}\"\n",
+        "#!/usr/bin/env bash\nset -euo pipefail\nif [[ \"${1:-}\" == \"--help\" ]]; then\n  echo '  --sensitive  Hint that clipboard content is sensitive'\n  exit 0\nfi\ncase \" $* \" in *' --sensitive '*) ;; *) exit 91 ;; esac\ncase \" $* \" in *' --trim-newline '*) exit 92 ;; esac\ncat > \"${PASSFLICK_TEST_CLIPBOARD}\"\n",
     )
     .unwrap();
     fs::set_permissions(&stub, Permissions::from_mode(0o700)).unwrap();
