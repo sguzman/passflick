@@ -23,7 +23,7 @@ New scope replaces the previous multi-browser-source objective, so old and new p
 
 **Rebaseline: 13/100 weighted points verified (13%) as of adoption.** Current verified completion: **23/100 weighted points (23%)**, including accepted native architecture and local-cache threat-model policies. Verified points represent only the existing implementation audit, written replacement contract, and independently evidenced pre-existing picker/synthetic test capabilities. These milestones do **not** represent a production-ready Vaultwarden integration. At initial roadmap authoring no new-backend tests had been run; the later disposable live-server acceptance is documented below.
 
-`████▋░░░░░░░░░░░░░░░` **23%** (previous verified 20% → 23%, **+3 percentage points**; adoption baseline 13%).
+`████▋░░░░░░░░░░░░░░░` **23%** (previous verified 23% → 23%, **+0 percentage points** this development round; adoption baseline 13%). Historical A04 acceptance added three points earlier.
 
 **Status key:** ✅ verified complete | 🟡 active | ⬜ pending | ⛔ blocked. Every item's bracketed **w** is its share of the 100-point overall estimate. An item earns all its weight only after its acceptance check passes; partial activity is documented but not counted. Adjust weights transparently if discoveries materially change the project.
 
@@ -228,12 +228,19 @@ The isolated local key-cache adapter now checks that its lookup scope matches th
 
 **C03 remains 🟡 active, not complete. Verified progress stays 23/100 = 23% → 23%, +0 percentage points.** Target-host kernel session and desktop keyring behavior, local lock/logout/purge, passphrase UX, production command/picker integration, and offline freshness acceptance still remain.
 
-## 📍 Durable checkpoint
+### 2026-11-04 keywrap path pairing and remote token endpoint binding (CI verified)
 
-- **Repository:** `sguzman/passflick`, branch `main`; audited head at adoption `7fd71fde7c4d`. Latest synthetic CI-verified code commit: `58ae8b3` (188 Rust tests and all Rust/GUI CI gates green). Later documentation-only commits do not change the tested Rust code.
-- **Verified reuse:** existing Rust+egui picker, keyboard selection, sensitive clipboard, local encrypted vault, session/keyring architecture and prior synthetic CI evidence. These are not proof of a working Vaultwarden integration.
-- **Unimplemented in production:** end-to-end authenticated live update, persistent encrypted projection, lock/revocation lifecycle, picker adaptation, legacy retirement and server/host acceptance. Native authentication and real personal-login decryption now exist only in isolated `#[cfg(test)]` modules; no real-server integration has been verified.
-- **Next actionable work:** A03/B01/B02/B03/B05 — integrate native authentication/Bitwarden-compatible crypto with the validated read-only HTTPS path using a disposable test server, verify CA and hostname failures, and preserve the old encrypted vault until new cache acceptance.
-- **No private data:** no user server hostnames, personal vault contents, tokens, passwords, exported records or private repository paths are required in public code or issue logs.
+- **C03 🔒 local keywrap boundary:** explicit offline unlock now rejects any `projection.pfkey` path that is not the exact sibling of the selected `projection.pfsnapshot` path, before opening the keywrap or changing keyring state. Synthetic regression covers foreign directories and filenames; commit [`6327b84`](https://github.com/sguzman/passflick/commit/6327b84c159115eb2dc4f022c2ed0198d1e92a9a).
+- **B02 🔑 remote session boundary:** the token pair is now bound in memory to the authenticated server endpoint (including its reverse-proxy root). A different host or proxy root is rejected before a refresh-token request; the explicit update orchestrator also checks before using an unexpired bearer token. Synthetic regression covers both mismatches; commit [`675523b`](https://github.com/sguzman/passflick/commit/675523bf356d391044bc2a6214043f82e659d2ff).
+- **Full green code CI on `675523b`:** [Rust](https://github.com/sguzman/passflick/actions/runs/41761539145) 201 passed / 0 failed / 1 intentionally ignored (run in dedicated live-server job), formatting, installation and recovery smoke, CLI smoke, and Clippy; [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41761539259) passed; [disposable Vaultwarden 1.37.5](https://github.com/sguzman/passflick/actions/runs/41761539159) passed.
+- These are **test-only safeguards**. Neither B02 nor C03 meets full production acceptance, so **verified progress remains 23/100 (23% → 23%, +0 percentage points)**. Real kernel-keyring session semantics and CLI/GUI integration remain unverified.
 
-See [`docs/vaultwarden-architecture.md`](docs/vaultwarden-architecture.md) for the planned component boundaries and decision risks.
+## 📍 Durable checkpoint — 2026-11-04
+
+- **Repository:** `sguzman/passflick`, `main`. Latest verified code commit: [`675523b`](https://github.com/sguzman/passflick/commit/675523bf356d391044bc2a6214043f82e659d2ff); green Rust / synthetic GUI / disposable Vaultwarden acceptance as linked above.
+- **Verified scope:** A01–A04, B01, and existing synthetic picker/regression baseline total **23/100 weighted points**; current active work covers B02/B03/B05 and C01–C04. Production native adapter remains deliberately isolated under `#[cfg(test)]`.
+- **Working in isolation:** native Vaultwarden 1.37.5 password/TOTP login, access-token refresh, read-only raw sync, personal-login decryption, archive/delete filtering, authenticated offline snapshot, Argon2id local keywrap, synthetic session lock and identity safeguards.
+- **Still unaccepted:** masked local unlock/setup UX, real Linux session-keyring operation, actual `passflick update` and picker integration, stale/offline status UI, rollback/migration and target-host Wayland acceptance. Do not remove or reinterpret `vault.passvault`.
+- **Next priority:** build the guarded local unlock/lock lifecycle and on-demand update command with synthetic acceptance and host security verification. Preserve upstream read-only semantics, source isolation, secret-free diagnostics and existing keyboard/clipboard behavior.
+
+See [Vaultwarden architecture](docs/vaultwarden-architecture.md), [local security policy](docs/adr-002-local-cache-security.md) and [security contract](docs/vaultwarden-security-contract.md) for the remaining gates.

@@ -54,6 +54,14 @@ In the test-only session cache, each attempted cached read or explicit passphras
 
 [All 199 Rust tests, smoke and Clippy](https://github.com/sguzman/passflick/actions/runs/41759929489), [disposable real server acceptance](https://github.com/sguzman/passflick/actions/runs/41759929533), and [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41759929565) passed for code commit `af45a51`. Real kernel keyring operations were **not** exercised; scope and lock backend tests use a synthetic store.
 
+## Keywrap sibling pairing and remote token endpoint binding (2026-11-04)
+
+The isolated local passphrase unlock requires its `projection.pfkey` file to be the **exact sibling** of the requested `projection.pfsnapshot`. A foreign-directory or renamed envelope is rejected before keywrap or kernel-keyring access, alongside the existing authenticated server/account/snapshot checks.
+
+Native `RemoteSession` now records the canonical HTTPS server endpoint that issued the token pair. Refreshing against a different host or reverse-proxy root fails **before** a refresh-token HTTP request. The explicit updater also checks the session/endpoint match before sending an unexpired bearer token. This does not imply that arbitrary account/org policy support or production secret entry is complete.
+
+[Verified Rust CI: 201 passed, 0 failed](https://github.com/sguzman/passflick/actions/runs/41761539145), [synthetic GUI CI](https://github.com/sguzman/passflick/actions/runs/41761539259), [real disposable Vaultwarden 1.37.5](https://github.com/sguzman/passflick/actions/runs/41761539159), on code commit [`675523b`](https://github.com/sguzman/passflick/commit/675523bf356d391044bc2a6214043f82e659d2ff). Both boundaries remain test-only; target-host kernel-keyring and final local lock/unlock are not yet verified.
+
 ## Native Bitwarden crypto and token lifecycle boundaries (test-only)
 
 The adapter currently uses the pinned MIT `rbw` Rust library for master-password KDF, wrapped user key, type-2 ciphertext decoding and HMAC verification. Since the library's verifier assumes a fixed 32-byte decoded MAC, Passflick rejects malformed decoded lengths, missing MAC, incorrect IV length and non-block-aligned ciphertext **before** dispatching to it. Error types must remain non-secret and failed candidate updates must never mutate the prior encrypted cache.
