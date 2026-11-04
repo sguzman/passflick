@@ -478,6 +478,25 @@ fn disposable_server_auth_sync_encrypted_offline() {
             true,
             "Last successful remote sync (Unix seconds):",
         );
+        // Also run the *populated* preview as a native Wayland client using
+        // nested Weston. X11/Xvfb only carries keyboard input into Weston;
+        // the application and real sensitive wl-copy/wl-paste use Wayland.
+        // The fixture still holds an unlocked Linux session keyring here.
+        let mut native = std::process::Command::new("bash");
+        native
+            .arg("ci/wayland-populated-smoke.sh")
+            .env("PASSFLICK_PREVIEW_BINARY", binary)
+            .env("PASSFLICK_DISPOSABLE_TEST_DATA", data)
+            .env("PASSFLICK_DISPOSABLE_TEST_LEGACY", &legacy)
+            .env(
+                "PASSFLICK_NATIVE_FIRST_PASSWORD",
+                if first_id < second_id { "first" } else { "second" },
+            );
+        let status = native
+            .status()
+            .expect("native Wayland populated picker acceptance did not start");
+        assert!(status.success(), "native Wayland populated picker acceptance failed");
+
         // Read and copy actual fictional remote credentials through a real
         // egui process under Xvfb, then lock that process from another CLI.
         super::gui_acceptance::run(binary, data, &legacy, &first_id, &second_id, || {

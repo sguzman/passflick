@@ -34,6 +34,19 @@ jobs:
       - name: Install Rust desktop build prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwayland-dev libxkbcommon-dev libx11-dev libx11-xcb-dev libxcursor-dev libxi-dev libxrandr-dev libgl1-mesa-dev openssl curl xvfb xauth xdotool libgl1-mesa-dri libxkbcommon-x11-0
+          sudo apt-get install -y libwayland-dev libxkbcommon-dev libx11-dev libx11-xcb-dev libxcursor-dev libxi-dev libxrandr-dev libgl1-mesa-dev openssl curl xvfb xauth xdotool libgl1-mesa-dri libxkbcommon-x11-0 weston wl-clipboard libegl1 meson ninja-build wayland-protocols
+      - name: Checkout pinned wl-clipboard 2.3.0 for native Wayland secret handling
+        uses: actions/checkout@v7
+        with:
+          repository: bugaevc/wl-clipboard
+          ref: 67a7b937895bceec1ae5ccebb10216f63f70ca1b
+          path: .ci-wl-clipboard
+          persist-credentials: false
+      - name: Build sensitive-capable native Wayland clipboard helper
+        run: |
+          meson setup .ci-wl-build .ci-wl-clipboard --buildtype=release
+          meson compile -C .ci-wl-build
+          ./.ci-wl-build/src/wl-copy --help | grep -q -- '--sensitive'
+          echo "${GITHUB_WORKSPACE}/.ci-wl-build/src" >> "${GITHUB_PATH}"
       - name: Test real disposable Vaultwarden over trusted HTTPS
         run: bash ci/vaultwarden-disposable.sh
