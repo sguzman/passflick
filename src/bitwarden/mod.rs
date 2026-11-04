@@ -4,14 +4,18 @@
 
 pub mod auth;
 pub mod cache_store;
+#[cfg(feature = "vaultwarden-preview")]
+pub mod command;
 pub mod decryptor;
 pub mod envelope;
 pub mod keywrap;
+#[cfg(test)]
 mod live_acceptance;
 pub mod pipeline;
 pub mod session_cache;
 pub mod strict_json;
 pub mod sync_filter;
+#[cfg(test)]
 mod tls_acceptance;
 pub mod transport;
 pub mod update;

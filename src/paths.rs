@@ -39,7 +39,17 @@ pub fn vault_path() -> Result<PathBuf, PathError> {
     if let Some(path) = env::var_os("PASSFLICK_VAULT") {
         return absolute_file_path(PathBuf::from(path));
     }
+    absolute_file_path(data_home()?.join("passflick/vault.passvault"))
+}
 
+/// The native projection must not inherit legacy PASSFLICK_VAULT overrides.
+/// It always uses a different fixed filename under the XDG data directory.
+#[cfg(any(test, feature = "vaultwarden-preview"))]
+pub fn projection_path() -> Result<PathBuf, PathError> {
+    absolute_file_path(data_home()?.join("passflick/projection.pfsnapshot"))
+}
+
+fn data_home() -> Result<PathBuf, PathError> {
     let data_home = if let Some(path) = env::var_os("XDG_DATA_HOME").filter(|p| !p.is_empty()) {
         PathBuf::from(path)
     } else {
@@ -49,7 +59,7 @@ pub fn vault_path() -> Result<PathBuf, PathError> {
         PathBuf::from(home).join(".local/share")
     };
 
-    absolute_file_path(data_home.join("passflick/vault.passvault"))
+    Ok(data_home)
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 mod app;
 mod backup;
-#[cfg(test)]
+#[cfg(any(test, feature = "vaultwarden-preview"))]
 mod bitwarden;
 mod clipboard;
 mod desktop_keyring;
@@ -10,7 +10,7 @@ mod model;
 mod passphrase;
 mod paths;
 mod process_security;
-#[cfg(test)]
+#[cfg(any(test, feature = "vaultwarden-preview"))]
 mod projection;
 mod search;
 mod session;
@@ -73,6 +73,11 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
         Some("status") => {
             no_extra_args(&mut args)?;
             status()?;
+        }
+        #[cfg(feature = "vaultwarden-preview")]
+        Some("update") => {
+            no_extra_args(&mut args)?;
+            bitwarden::command::run().map_err(|_| "native preview update failed")?;
         }
         Some("list") => {
             no_extra_args(&mut args)?;
@@ -686,6 +691,8 @@ fn print_help() {
     println!("  passflick import SOURCE CSV|- Replace source projection from CSV or stdin");
     println!("  passflick list              Show labels only (never passwords)");
     println!("  passflick status            Display vault/keyring status");
+    #[cfg(feature = "vaultwarden-preview")]
+    println!("  passflick update            EXPERIMENTAL native Vaultwarden refresh");
     println!("  passflick sources           Show per-source counts and refresh age");
     println!("  passflick discover          Find local browser profiles, no secret access");
     println!("  passflick demo              Open picker with synthetic test credentials");
