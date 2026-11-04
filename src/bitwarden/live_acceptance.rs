@@ -506,7 +506,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
 
         // Read and copy actual fictional remote credentials through a real
         // egui process under Xvfb, then lock that process from another CLI.
-        super::gui_acceptance::run(binary, data, &legacy, &first_id, &second_id, || {
+        super::gui_acceptance::run(binary, data, &legacy, &first_id, &second_id, local, || {
             // Only the disposable fixture client may edit the upstream
             // synthetic Vaultwarden account. A separate real Passflick
             // update process publishes the replacement local snapshot

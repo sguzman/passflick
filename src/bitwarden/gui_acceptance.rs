@@ -128,6 +128,7 @@ pub(super) fn run(
     legacy: &Path,
     first_id: &str,
     second_id: &str,
+    local_passphrase: &str,
     refresh_selected: impl FnOnce(),
 ) {
     assert!(
@@ -233,4 +234,48 @@ pub(super) fn run(
         xdo(&["key", "--clearmodifiers", "Escape"]);
         await_exit(&mut child);
     }
+
+    // The new masked GUI unlock is local-only and must not copy a password
+    // on the same Enter event used to unlock. Wrong input must leave the
+    // locked picker open, with no clipboard write. The correct local
+    // passphrase is synthetic and is never printed to CI logs.
+    {
+        let mut child = launch(binary, data, legacy, &clipboard, &bin);
+        visible_window(&mut child);
+        xdo(&[
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "15",
+            "fictional wrong offline passphrase",
+        ]);
+        xdo(&["key", "--clearmodifiers", "Return"]);
+        thread::sleep(Duration::from_millis(350));
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "wrong local passphrase unexpectedly closed the picker"
+        );
+        assert!(
+            !clipboard.exists(),
+            "wrong local passphrase triggered a clipboard copy"
+        );
+
+        xdo(&["type", "--clearmodifiers", "--delay", "15", local_passphrase]);
+        xdo(&["key", "--clearmodifiers", "Return"]);
+        thread::sleep(Duration::from_millis(400));
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "in-picker unlock also triggered a credential copy"
+        );
+        assert!(
+            !clipboard.exists(),
+            "Enter for GUI unlock unexpectedly wrote to clipboard"
+        );
+
+        // A second Enter intentionally copies the selected current secret.
+        xdo(&["key", "--clearmodifiers", "Return"]);
+        await_exit(&mut child);
+    }
+    assert_eq!(fs::read(&clipboard).unwrap(), b"fictional-UPDATED-password");
+    fs::remove_file(&clipboard).unwrap();
 }
