@@ -56,7 +56,9 @@ pub fn rank_projection(
         })
         .collect();
     matches.sort_by(|(a, score_a), (b, score_b)| {
-        score_b.cmp(score_a).then_with(|| snapshot.items()[*a].id().cmp(snapshot.items()[*b].id()))
+        score_b
+            .cmp(score_a)
+            .then_with(|| snapshot.items()[*a].id().cmp(snapshot.items()[*b].id()))
     });
     matches.into_iter().map(|(index, _)| index).collect()
 }
@@ -64,10 +66,7 @@ pub fn rank_projection(
 /// Render a visible non-secret label. If several items have the same visible
 /// site and username, distinguish them with stable upstream-ID order instead
 /// of collapsing them or showing sensitive raw upstream IDs.
-pub fn display_row(
-    snapshot: &ProjectionSnapshot,
-    index: usize,
-) -> Option<Zeroizing<String>> {
+pub fn display_row(snapshot: &ProjectionSnapshot, index: usize) -> Option<Zeroizing<String>> {
     let item = snapshot.items().get(index)?;
     let title = visible_title(item);
     let user = Zeroizing::new(safe_display_text(item.username()));
@@ -119,13 +118,33 @@ mod tests {
     #[test]
     fn different_upstream_ids_remain_separate_even_with_identical_passwords() {
         let data = fixture(vec![
-            entry("z", "Shared", &["https://example.test/login"], "alice", "same-secret"),
-            entry("a", "Shared", &["https://example.test/login"], "alice", "same-secret"),
-            entry("q", "Shared", &["https://example.test/login"], "alice", "other-secret"),
+            entry(
+                "z",
+                "Shared",
+                &["https://example.test/login"],
+                "alice",
+                "same-secret",
+            ),
+            entry(
+                "a",
+                "Shared",
+                &["https://example.test/login"],
+                "alice",
+                "same-secret",
+            ),
+            entry(
+                "q",
+                "Shared",
+                &["https://example.test/login"],
+                "alice",
+                "other-secret",
+            ),
         ]);
         let hits = rank_projection(&data, "shared", "alice");
         assert_eq!(
-            hits.iter().map(|i| data.items()[*i].id()).collect::<Vec<_>>(),
+            hits.iter()
+                .map(|i| data.items()[*i].id())
+                .collect::<Vec<_>>(),
             vec!["a", "q", "z"]
         );
         assert!(display_row(&data, 1).unwrap().ends_with("Variant 1/3"));
@@ -141,8 +160,20 @@ mod tests {
     #[test]
     fn separate_site_and_username_queries_cover_all_uris() {
         let data = fixture(vec![
-            entry("first", "One", &["https://unrelated.test", "https://second.test/login"], "alice", "secret-never-search"),
-            entry("second", "Another", &["https://second.test/"], "bob", "another-secret"),
+            entry(
+                "first",
+                "One",
+                &["https://unrelated.test", "https://second.test/login"],
+                "alice",
+                "secret-never-search",
+            ),
+            entry(
+                "second",
+                "Another",
+                &["https://second.test/"],
+                "bob",
+                "another-secret",
+            ),
         ]);
         assert_eq!(rank_projection(&data, "second.test", "alice"), vec![0]);
         assert_eq!(rank_projection(&data, "second.test", "bob"), vec![1]);
@@ -153,9 +184,20 @@ mod tests {
     #[test]
     fn labels_hide_private_uri_tokens_and_control_characters() {
         let data = fixture(vec![
-            entry("id1", "https://user:secret@accounts.example.test/reset?token=PRIVATE_TOKEN",
-                  &["https://accounts.example.test/"], "alice\u{202e}admin", "fictional-private"),
-            entry("id2", "", &["https://site.example.test/path?token=OTHER_TOKEN"], "", "secret"),
+            entry(
+                "id1",
+                "https://user:secret@accounts.example.test/reset?token=PRIVATE_TOKEN",
+                &["https://accounts.example.test/"],
+                "alice\u{202e}admin",
+                "fictional-private",
+            ),
+            entry(
+                "id2",
+                "",
+                &["https://site.example.test/path?token=OTHER_TOKEN"],
+                "",
+                "secret",
+            ),
         ]);
         assert_eq!(rank_projection(&data, "private_token", "").len(), 1);
         assert_eq!(rank_projection(&data, "other_token", "").len(), 1);
@@ -185,7 +227,10 @@ mod tests {
         for snapshot in [&forward, &reverse] {
             let ordered = rank_projection(snapshot, "", "");
             assert_eq!(
-                ordered.iter().map(|i| snapshot.items()[*i].id()).collect::<Vec<_>>(),
+                ordered
+                    .iter()
+                    .map(|i| snapshot.items()[*i].id())
+                    .collect::<Vec<_>>(),
                 vec!["a", "z"]
             );
         }
