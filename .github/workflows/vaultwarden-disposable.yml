@@ -1,0 +1,39 @@
+name: Disposable Vaultwarden acceptance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/bitwarden/**'
+      - 'src/projection.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'ci/vaultwarden-disposable.sh'
+      - '.github/workflows/vaultwarden-disposable.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: passflick-disposable-vaultwarden
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  live-fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-bin: "false"
+      - name: Install Rust desktop build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev libxkbcommon-dev libx11-dev libx11-xcb-dev libxcursor-dev libxi-dev libxrandr-dev libgl1-mesa-dev openssl curl
+      - name: Test real disposable Vaultwarden over trusted HTTPS
+        run: bash ci/vaultwarden-disposable.sh
