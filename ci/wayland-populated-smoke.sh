@@ -114,7 +114,7 @@ await_close() {
     fi
     sleep 0.1
   done
-  echo 'Native Wayland picker did not exit after copy action.' >&2
+  echo "Native Wayland picker did not exit during ${1:-copy action}." >&2
   exit 1
 }
 # The clipboard owner can become visible after the picker has exited.
@@ -222,10 +222,16 @@ done
   exit 1
 }
 assert_clipboard correct-unlock
+echo 'Native Wayland fresh masked local unlock authenticated; clipboard was unchanged.'
 
+# The keyring can become available before the egui frame swaps the locked
+# password input for the unlocked website field. Give that redraw a focused
+# input cycle instead of sending Return in the same frame as key publication.
+sleep 0.8
+timeout 10s xdotool windowfocus --sync "$weston_window"
 # A second deliberate Enter, after successful local unlock, may copy a secret.
 xdotool key --clearmodifiers Return
-await_close
+await_close masked-unlock-copy
 if [[ "$PASSFLICK_NATIVE_FIRST_PASSWORD" == first ]]; then
   printf '  🗝️ contraseña  ' >"$root/expected"
 else
