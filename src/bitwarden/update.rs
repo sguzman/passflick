@@ -73,6 +73,8 @@ pub fn refresh_explicit<D: LoginDecryptor>(
     session: &mut RemoteSession,
     request: UpdateRequest<'_, D>,
 ) -> Result<usize, UpdateError> {
+    // Guard even an unexpired bearer token against cross-server replay.
+    session.ensure_endpoint(request.endpoint)?;
     if session.bearer_token().is_none() {
         transport.refresh_session(request.endpoint, session)?;
     }

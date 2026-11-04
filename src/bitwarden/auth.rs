@@ -35,6 +35,8 @@ pub enum AuthError {
     MfaRequired,
     #[error("authentication response malformed")]
     InvalidResponse,
+    #[error("authentication session belongs to a different server")]
+    SessionEndpointMismatch,
     #[error("unsupported or excessive password KDF parameters")]
     UnsupportedKdf,
     #[error("could not unlock the returned personal vault key")]
@@ -146,12 +148,22 @@ impl Drop for RefreshReply {
 }
 
 pub struct RemoteSession {
+    endpoint_identity: String,
     access_token: Zeroizing<String>,
     refresh_token: Zeroizing<String>,
     expires_at: Instant,
 }
 
 impl RemoteSession {
+    /// Prevent a cached bearer or refresh token from being sent to another
+    /// origin or a different reverse-proxy root on the same origin.
+    pub(crate) fn ensure_endpoint(&self, endpoint: &ServerEndpoint) -> Result<(), AuthError> {
+        if self.endpoint_identity != endpoint.server_identity() {
+            return Err(AuthError::SessionEndpointMismatch);
+        }
+        Ok(())
+    }
+
     pub fn bearer_token(&self) -> Option<&str> {
         (Instant::now() < self.expires_at).then_some(self.access_token.as_str())
     }
@@ -163,9 +175,10 @@ impl RemoteSession {
         self.expires_at = Instant::now();
     }
 
-    fn new(reply: &mut LoginReply) -> Result<Self, AuthError> {
+    fn new(reply: &mut LoginReply, endpoint: &ServerEndpoint) -> Result<Self, AuthError> {
         let expires_at = token_expiration(reply.expires_in)?;
         Ok(Self {
+            endpoint_identity: endpoint.server_identity().to_owned(),
             access_token: Zeroizing::new(std::mem::take(&mut reply.access_token)),
             refresh_token: Zeroizing::new(std::mem::take(&mut reply.refresh_token)),
             expires_at,
@@ -369,7 +382,7 @@ impl ReadOnlySyncTransport {
             &reply.encrypted_user_key,
         )
         .map_err(|_| AuthError::UnlockFailed)?;
-        let session = RemoteSession::new(&mut reply)?;
+        let session = RemoteSession::new(&mut reply, endpoint)?;
         Ok((session, decryptor))
     }
 
@@ -381,6 +394,7 @@ impl ReadOnlySyncTransport {
         endpoint: &ServerEndpoint,
         session: &mut RemoteSession,
     ) -> Result<(), AuthError> {
+        session.ensure_endpoint(endpoint)?;
         if session.refresh_token.is_empty()
             || session.refresh_token.len() > 8192
             || session
@@ -461,7 +475,11 @@ mod tests {
         let mut login = decode_login(
             br#"{"access_token":"old-access","refresh_token":"old-refresh","Key":"2.key","expires_in":3600}"#
         ).unwrap();
-        let mut session = RemoteSession::new(&mut login).unwrap();
+        let mut session = RemoteSession::new(
+            &mut login,
+            &ServerEndpoint::parse("https://vault.example.test/").unwrap(),
+        )
+        .unwrap();
         assert_eq!(session.bearer_token(), Some("old-access"));
 
         let mut invalid = RefreshReply {
@@ -534,11 +552,37 @@ mod tests {
             encrypted_user_key: "2.example".into(),
             expires_in: 60,
         };
-        let mut session = RemoteSession::new(&mut reply).unwrap();
+        let mut session = RemoteSession::new(&mut reply, &endpoint).unwrap();
         assert!(matches!(
             transport.refresh_session(&endpoint, &mut session),
             Err(AuthError::InvalidSettings)
         ));
+    }
+
+    #[test]
+    fn remote_session_rejects_other_host_and_proxy_root_before_token_send() {
+        let transport = ReadOnlySyncTransport::new().unwrap();
+        let original = ServerEndpoint::parse("https://vault.example.test/personal").unwrap();
+        let other_host = ServerEndpoint::parse("https://attacker.example.test/personal").unwrap();
+        let other_root = ServerEndpoint::parse("https://vault.example.test/another").unwrap();
+        let mut login = decode_login(
+            br#"{"access_token":"fictional-access","refresh_token":"fictional-refresh","Key":"2.fixture","expires_in":60}"#,
+        )
+        .unwrap();
+        let mut session = RemoteSession::new(&mut login, &original).unwrap();
+        assert_eq!(session.ensure_endpoint(&original), Ok(()));
+        for wrong in [&other_host, &other_root] {
+            assert_eq!(
+                session.ensure_endpoint(wrong),
+                Err(AuthError::SessionEndpointMismatch)
+            );
+            assert!(matches!(
+                transport.refresh_session(wrong, &mut session),
+                Err(AuthError::SessionEndpointMismatch)
+            ));
+        }
+        assert_eq!(session.bearer_token(), Some("fictional-access"));
+        assert_eq!(session.refresh_token.as_str(), "fictional-refresh");
     }
 
     #[test]
