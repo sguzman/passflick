@@ -201,9 +201,9 @@ fn fixture_update_password(
     id: &str,
     new_secret: &str,
 ) {
-    let route = format!("api/ciphers/{id}");
+    let endpoint = format!("api/ciphers/{id}");
     let response = client
-        .put(route(base, &route))
+        .put(route(base, &endpoint))
         .bearer_auth(bearer)
         .json(&fixture_cipher_payload(account, new_secret))
         .send()
