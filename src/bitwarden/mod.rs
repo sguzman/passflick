@@ -3,6 +3,7 @@
 //! archive/permission filtering and transactional cache have passed acceptance.
 
 pub mod auth;
+pub mod cache_store;
 pub mod decryptor;
 pub mod envelope;
 pub mod pipeline;
