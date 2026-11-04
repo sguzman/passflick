@@ -115,11 +115,23 @@ impl ReadOnlySyncTransport {
         Self::with_builder(Client::builder())
     }
 
-    /// Additional trusted private CA, never a bypass of TLS verification.
-    /// The same hostname checks and redirect policy apply as in new().
+    /// Additional trusted private CA certificate(s), never a TLS bypass.
+    /// Parse the PEM bundle now instead of deferring validation until a
+    /// connection. Standard trust roots and hostname verification remain.
     pub fn with_additional_root_pem(pem: &[u8]) -> Result<Self, TransportError> {
-        let root = reqwest::Certificate::from_pem(pem).map_err(|_| TransportError::ClientSetup)?;
-        Self::with_builder(Client::builder().add_root_certificate(root))
+        if pem.is_empty() || pem.len() > 1024 * 1024 {
+            return Err(TransportError::ClientSetup);
+        }
+        let roots = reqwest::Certificate::from_pem_bundle(pem)
+            .map_err(|_| TransportError::ClientSetup)?;
+        if roots.is_empty() {
+            return Err(TransportError::ClientSetup);
+        }
+        let mut builder = Client::builder();
+        for root in roots {
+            builder = builder.add_root_certificate(root);
+        }
+        Self::with_builder(builder)
     }
 
     fn with_builder(builder: reqwest::blocking::ClientBuilder) -> Result<Self, TransportError> {
