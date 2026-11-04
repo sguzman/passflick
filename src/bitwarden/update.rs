@@ -17,6 +17,7 @@ use super::{
     pipeline::{self, LoginDecryptor, ProjectionPipelineError},
     transport::{ReadOnlySyncTransport, ServerEndpoint, TransportError},
 };
+use crate::projection::ProjectionSnapshot;
 
 #[derive(Debug, thiserror::Error)]
 pub enum UpdateError {
@@ -50,6 +51,28 @@ pub fn commit_full_sync<D: LoginDecryptor>(
     let count = candidate.items().len();
     cache_store::publish(path, key, &candidate)?;
     Ok(count)
+}
+
+/// Build the first complete projection from the authenticated server's own
+/// account ID. This step never touches disk or allocates a local keywrap;
+/// caller must separately confirm local setup before any initial publication.
+/// Existing installations MUST use the account-bound refresh_explicit path.
+pub fn prepare_initial_sync<D: LoginDecryptor>(
+    transport: &ReadOnlySyncTransport,
+    session: &mut RemoteSession,
+    endpoint: &ServerEndpoint,
+    timestamp: u64,
+    decoder: &D,
+) -> Result<ProjectionSnapshot, UpdateError> {
+    session.ensure_endpoint(endpoint)?;
+    if session.bearer_token().is_none() {
+        transport.refresh_session(endpoint, session)?;
+    }
+    let bearer = session.bearer_token().ok_or(AuthError::InvalidResponse)?;
+    let payload = transport.fetch_initial_sync(endpoint, bearer)?;
+    let admitted = envelope::admit(&payload, None)?;
+    pipeline::project_full_sync(admitted, endpoint.server_identity(), timestamp, decoder)
+        .map_err(UpdateError::from)
 }
 
 /// The explicitly supplied account and local cache identity for one update.

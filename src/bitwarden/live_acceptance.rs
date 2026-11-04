@@ -139,26 +139,6 @@ fn register(client: &Client, base: &str) {
     );
 }
 
-fn initial_account_id(client: &Client, base: &str, bearer: &str) -> String {
-    // Read-only fixture provisioning shortcut used only to obtain the
-    // server-issued account ID; the real adapter enforces envelope admission.
-    let response = client
-        .get(route(base, "api/sync"))
-        .bearer_auth(bearer)
-        .send()
-        .expect("fixture initial sync failed");
-    assert!(
-        response.status().is_success(),
-        "fixture initial sync rejected"
-    );
-    let body: Value = response.json().unwrap();
-    body["profile"]["id"]
-        .as_str()
-        .or_else(|| body["Profile"]["Id"].as_str())
-        .expect("Vaultwarden response has no profile ID")
-        .to_owned()
-}
-
 fn fixture_cipher_payload(account: &str, secret: &str) -> Value {
     json!({
         "encryptedFor": account,
@@ -332,12 +312,18 @@ fn disposable_server_auth_sync_encrypted_offline() {
         .authenticate(&endpoint, EMAIL, PASSWORD, DEVICE_ID, None)
         .expect("native password-grant against disposable Vaultwarden failed");
 
+    let initial = update::prepare_initial_sync(
+        &transport,
+        &mut session,
+        &endpoint,
+        1_800_000_000,
+        &decoder,
+    )
+    .expect("native authenticated initial account discovery failed");
+    assert!(initial.items().is_empty());
+    let account = initial.account_id().to_owned();
+    assert_eq!(initial.server_identity(), endpoint.server_identity());
     let bearer = session.bearer_token().unwrap();
-    let account = initial_account_id(&client, &url, bearer);
-    let initial = transport
-        .fetch_sync(&endpoint, bearer, &account)
-        .expect("native initial read-only /sync failed");
-    assert!(initial["ciphers"].as_array().is_some());
 
     let first_id = provision_cipher(&client, &url, bearer, &account, "  🗝️ contraseña  ");
     let second_id = provision_cipher(&client, &url, bearer, &account, "second secret");

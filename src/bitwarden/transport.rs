@@ -158,8 +158,28 @@ impl ReadOnlySyncTransport {
         bearer_token: &str,
         expected_account_id: &str,
     ) -> Result<Value, TransportError> {
-        validate_token(bearer_token)?;
         validate_account(expected_account_id)?;
+        self.fetch_complete_sync(endpoint, bearer_token, Some(expected_account_id))
+    }
+
+    /// Initial authenticated read, before the server-issued account ID is
+    /// known. The caller must first bind its login session to this endpoint.
+    /// The result is fully admitted but never stored by this transport.
+    pub fn fetch_initial_sync(
+        &self,
+        endpoint: &ServerEndpoint,
+        bearer_token: &str,
+    ) -> Result<Value, TransportError> {
+        self.fetch_complete_sync(endpoint, bearer_token, None)
+    }
+
+    fn fetch_complete_sync(
+        &self,
+        endpoint: &ServerEndpoint,
+        bearer_token: &str,
+        expected_account_id: Option<&str>,
+    ) -> Result<Value, TransportError> {
+        validate_token(bearer_token)?;
         let response = self
             .client
             .get(endpoint.sync_url())
@@ -231,17 +251,19 @@ fn validate_account(id: &str) -> Result<(), TransportError> {
 fn validate_body(
     status: u16,
     body: &[u8],
-    expected_account_id: &str,
+    expected_account_id: Option<&str>,
 ) -> Result<Value, TransportError> {
     if status != 200 {
         return Err(status_error(status));
     }
-    validate_account(expected_account_id)?;
+    if let Some(account) = expected_account_id {
+        validate_account(account)?;
+    }
     if body.len() > MAX_BODY_BYTES {
         return Err(TransportError::Oversized);
     }
     let value = envelope::parse_sync_json(body)?;
-    envelope::admit(&value, Some(expected_account_id))?;
+    envelope::admit(&value, expected_account_id)?;
     Ok(value)
 }
 
@@ -299,7 +321,7 @@ mod tests {
     #[test]
     fn accepts_complete_bound_sync_and_preserves_raw_ciphertext() {
         let raw = sample();
-        let value = validate_body(200, &raw, "account-fixture").unwrap();
+        let value = validate_body(200, &raw, Some("account-fixture")).unwrap();
         assert_eq!(
             value["ciphers"][0]["login"]["password"],
             "2.encrypted-password"
@@ -307,24 +329,48 @@ mod tests {
     }
 
     #[test]
+    fn initial_sync_accepts_only_complete_server_issued_account_profiles() {
+        let raw = sample();
+        let complete = validate_body(200, &raw, None).unwrap();
+        assert_eq!(
+            envelope::admit(&complete, None).unwrap().account_id,
+            "account-fixture"
+        );
+        let missing_profile = br#"{"object":"sync","folders":[],"ciphers":[]}"#;
+        assert!(matches!(
+            validate_body(200, missing_profile, None),
+            Err(TransportError::Admission(SyncEnvelopeError::InvalidProfile))
+        ));
+        let duplicate_profile = br#"{"object":"sync","profile":{"id":"one","Id":"two"},"folders":[],"ciphers":[]}"#;
+        assert!(matches!(
+            validate_body(200, duplicate_profile, None),
+            Err(TransportError::Admission(SyncEnvelopeError::AmbiguousFields))
+        ));
+        assert!(matches!(
+            validate_body(200, &raw, Some("wrong-account")),
+            Err(TransportError::Admission(SyncEnvelopeError::AccountMismatch))
+        ));
+    }
+
+    #[test]
     fn rejects_bad_auth_and_server_responses_without_private_error_bodies() {
         let raw = sample();
         assert!(matches!(
-            validate_body(401, &raw, "account-fixture"),
+            validate_body(401, &raw, Some("account-fixture")),
             Err(TransportError::Unauthorized)
         ));
         assert!(matches!(
-            validate_body(302, &raw, "account-fixture"),
+            validate_body(302, &raw, Some("account-fixture")),
             Err(TransportError::UnexpectedStatus(302))
         ));
         assert!(matches!(
-            validate_body(200, &raw, "different-account"),
+            validate_body(200, &raw, Some("different-account")),
             Err(TransportError::Admission(
                 SyncEnvelopeError::AccountMismatch
             ))
         ));
         assert!(matches!(
-            validate_body(200, b"{secret-ish", "account-fixture"),
+            validate_body(200, b"{secret-ish", Some("account-fixture")),
             Err(TransportError::Admission(SyncEnvelopeError::InvalidJson))
         ));
     }
@@ -333,7 +379,7 @@ mod tests {
     fn size_caps_apply_even_without_content_length() {
         let huge = vec![b' '; MAX_BODY_BYTES + 1];
         assert!(matches!(
-            validate_body(200, &huge, "account-fixture"),
+            validate_body(200, &huge, Some("account-fixture")),
             Err(TransportError::Oversized)
         ));
     }
