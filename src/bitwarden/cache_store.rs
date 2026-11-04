@@ -123,7 +123,7 @@ fn encrypt_snapshot(
     nonce_bytes.copy_from_slice(&header[12..HEADER_LEN]);
     let nonce = XNonce::from(nonce_bytes);
     cipher
-        .encrypt_in_place(nonce, &header, &mut *ciphertext)
+        .encrypt_in_place(&nonce, &header, &mut *ciphertext)
         .map_err(|_| CacheError::AuthenticationFailed)?;
     let mut file = Zeroizing::new(Vec::with_capacity(HEADER_LEN + ciphertext.len()));
     file.extend_from_slice(&header);
@@ -151,7 +151,7 @@ fn decrypt_snapshot(raw: &[u8], key: &CacheKey) -> Result<ProjectionSnapshot, Ca
     let nonce = XNonce::from(nonce_bytes);
     let mut plaintext = Zeroizing::new(raw[HEADER_LEN..].to_vec());
     cipher
-        .decrypt_in_place(nonce, &raw[..HEADER_LEN], &mut *plaintext)
+        .decrypt_in_place(&nonce, &raw[..HEADER_LEN], &mut *plaintext)
         .map_err(|_| CacheError::AuthenticationFailed)?;
     ProjectionSnapshot::decode_json(&plaintext).map_err(CacheError::from)
 }
