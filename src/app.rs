@@ -432,10 +432,9 @@ impl eframe::App for PickerApp {
             );
         });
 
-        let enter = ctx.input(|input| input.key_pressed(egui::Key::Enter));
-        if enter {
-            let shift = ctx.input(|input| input.modifiers.shift);
-            self.copy_selected(&ctx, shift);
+        let action = ctx.input(|input| crate::copy_shortcut::enter_copy_username(&input.events));
+        if let Some(username) = action {
+            self.copy_selected(&ctx, username);
         }
     }
 }

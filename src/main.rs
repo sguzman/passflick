@@ -3,6 +3,7 @@ mod backup;
 #[cfg(any(test, feature = "vaultwarden-preview"))]
 mod bitwarden;
 mod clipboard;
+mod copy_shortcut;
 mod desktop_keyring;
 mod discovery;
 mod r#import;

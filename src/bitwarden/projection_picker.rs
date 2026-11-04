@@ -39,22 +39,6 @@ fn now_epoch() -> u64 {
         .map_or(0, |elapsed| elapsed.as_secs())
 }
 
-/// Inspect the modifiers attached to the Enter *press* event, not the final
-/// modifier state of the frame. A fast Shift+Enter may release Shift before
-/// egui renders a frame; checking input.modifiers.shift then copies a password
-/// when the user explicitly requested the username.
-fn enter_copy_action(events: &[egui::Event]) -> Option<bool> {
-    events.iter().find_map(|event| match event {
-        egui::Event::Key {
-            key: egui::Key::Enter,
-            pressed: true,
-            modifiers,
-            ..
-        } => Some(modifiers.shift),
-        _ => None,
-    })
-}
-
 fn copy_value<'a>(
     snapshot: &'a ProjectionSnapshot,
     selected_id: &str,
@@ -391,7 +375,8 @@ impl eframe::App for ProjectionPicker {
             );
         });
         ctx.set_theme(self.theme);
-        if let Some(username) = ctx.input(|input| enter_copy_action(&input.events)) {
+        let action = ctx.input(|input| crate::copy_shortcut::enter_copy_username(&input.events));
+        if let Some(username) = action {
             self.copy_selected(&ctx, username);
         }
     }
@@ -459,25 +444,6 @@ mod tests {
             ],
         )
         .unwrap()
-    }
-
-    #[test]
-    fn enter_uses_modifier_state_at_keypress_even_if_shift_is_released_in_frame() {
-        let key = |pressed: bool, modifiers: egui::Modifiers| egui::Event::Key {
-            key: egui::Key::Enter,
-            physical_key: None,
-            pressed,
-            repeat: false,
-            modifiers,
-        };
-        let events = [
-            key(true, egui::Modifiers::SHIFT),
-            key(false, egui::Modifiers::NONE),
-            egui::Event::ModifiersChanged(egui::Modifiers::NONE),
-        ];
-        assert_eq!(enter_copy_action(&events), Some(true));
-        assert_eq!(enter_copy_action(&[key(true, egui::Modifiers::NONE)]), Some(false));
-        assert_eq!(enter_copy_action(&[key(false, egui::Modifiers::SHIFT)]), None);
     }
 
     #[test]
