@@ -1,6 +1,6 @@
 # 🛡️ ADR-002 — local projection unlock, lock, freshness and revocation
 
-**Decision:** project security policy, accepted 2026-11-04. This is **design only** until each operation is implemented and verified on Linux/Wayland. It does not imply that the new Vaultwarden projection is usable from the production picker. Follows [ADR-001](adr-001-native-vaultwarden-adapter.md).
+**Decision:** project security policy, accepted 2026-11-04. The independent keywrap and opt-in `projection unlock|lock|status` have **partial implementation and Linux CI acceptance**, but target-host/session-end QA and production picker integration remain unverified. It does not imply that the new Vaultwarden projection is usable from the production picker. Follows [ADR-001](adr-001-native-vaultwarden-adapter.md).
 
 ## Security boundaries
 
@@ -39,6 +39,6 @@
 
 ## Implementation acceptance before release
 
-The design is **not** an implementation. The next gates must include: independent keywrap schema and authenticated recovery; masked local passphrase setup/unlock and explicit lock tests; Linux session and optional desktop keyring isolation/permissions; same-account and cross-account behavior; last-good preservation on failed updates; offline startup with no server; stale metadata; encrypted-file corruption/rename/interruption; verified cleanup semantics; no regression to existing Wayland keyboard shortcuts or sensitive clipboard. Target-host QA is mandatory.
+This policy is **partially implemented** behind `vaultwarden-preview`: independent keywrap/schema and local encrypted recovery, masked passphrase unlock, CLI manual lock/status, strict source/account binding, and Linux CI tests across separate processes are verified. A writer-lock guard now serializes manual lock, explicit unlock, and snapshot publication; a synthetic interleaving regression proves the former lock-marker-clearing race is blocked. The remaining gates include target-host Linux session lifetime/logout, optional desktop keyring isolation/permissions, offline picker/clipboard integration, human-readable stale metadata, interrupted-power recovery, verified cleanup semantics, and full Wayland keyboard/focus QA. Target-host QA remains mandatory.
 
 **Scope excluded:** direct upstream editing, indefinite token persistence, automatic sync, global revocation promises, auto-unlock of a manually locked cache, and deletion of legacy files.
