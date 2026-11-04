@@ -192,6 +192,12 @@ env -u DISPLAY wl-copy --sensitive <"$root/expected"
 assert_clipboard before-unlock
 
 launch
+# launch() clicks the generic header for clipboard serials, which can steal
+# focus from the locked screen's auto-focused password editor. The native
+# 740x495 preview is centered within Weston's 960x700 test output: target its
+# masked input, not the title region used by the already-open picker tests.
+xdotool mousemove --window "$weston_window" 430 307 click 1
+sleep 0.2
 xdotool type --clearmodifiers --delay 15 -- 'fictional wrong native passphrase'
 xdotool key --clearmodifiers Return
 # The bogus KDF must finish before we type into the now-cleared masked input.
@@ -201,6 +207,10 @@ projection_cli status >"$root/lock.status"
 grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
 assert_clipboard wrong-unlock
 
+# Re-focus after a rejected KDF, and explicitly replace any still-visible
+# fictional input so no timing-dependent text append can change the attempt.
+xdotool mousemove --window "$weston_window" 430 307 click 1
+xdotool key --clearmodifiers ctrl+a
 xdotool type --clearmodifiers --delay 15 -- "$PASSFLICK_NATIVE_LOCAL_PASSPHRASE"
 xdotool key --clearmodifiers Return
 # Wait for an independent authenticated keyring status, not a blind sleep.
