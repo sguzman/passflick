@@ -51,6 +51,7 @@ docker run -d --name "$vault" --network "$network" \
   -e DOMAIN=https://localhost:18443 \
   -e SIGNUPS_ALLOWED=true \
   -e SIGNUPS_VERIFY=false \
+  -e I_REALLY_WANT_VOLATILE_STORAGE=true \
   -e ROCKET_PORT=80 \
   vaultwarden/server:1.37.5 >/dev/null
 docker run -d --name "$proxy" --network "$network" \
