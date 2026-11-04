@@ -117,8 +117,13 @@ pub(crate) fn publish_candidate(
     private_parent(snapshot_path)?;
     let wrapped = snapshot_path.with_file_name("projection.pfkey");
     if first_install {
-        return update::install_initial_projection(candidate, snapshot_path, &wrapped, local_passphrase)
-            .map_err(|_| PreviewError::Local);
+        return update::install_initial_projection(
+            candidate,
+            snapshot_path,
+            &wrapped,
+            local_passphrase,
+        )
+        .map_err(|_| PreviewError::Local);
     }
     let key = keywrap::unlock(
         &wrapped,
@@ -158,43 +163,40 @@ pub fn run() -> Result<(), PreviewError> {
     .map_err(|_| PreviewError::Transport)?;
 
     let identifier = device_id()?;
-    let (mut session, decoder) = match transport.authenticate(
-        &endpoint, &email, &master, &identifier, None,
-    ) {
-        Ok(result) => result,
-        Err(AuthError::MfaRequired) => {
-            let method = masked("MFA method (totp/email): ")?;
-            let provider = match method.as_str() {
-                "totp" => MfaProvider::Totp,
-                "email" => MfaProvider::EmailCode,
-                _ => return Err(PreviewError::Authentication),
-            };
-            let code = masked("MFA code: ")?;
-            transport
-                .authenticate(
-                    &endpoint,
-                    &email,
-                    &master,
-                    &identifier,
-                    Some(MfaChallenge { provider, code: &code }),
-                )
-                .map_err(|_| PreviewError::Authentication)?
-        }
-        Err(_) => return Err(PreviewError::Authentication),
-    };
+    let (mut session, decoder) =
+        match transport.authenticate(&endpoint, &email, &master, &identifier, None) {
+            Ok(result) => result,
+            Err(AuthError::MfaRequired) => {
+                let method = masked("MFA method (totp/email): ")?;
+                let provider = match method.as_str() {
+                    "totp" => MfaProvider::Totp,
+                    "email" => MfaProvider::EmailCode,
+                    _ => return Err(PreviewError::Authentication),
+                };
+                let code = masked("MFA code: ")?;
+                transport
+                    .authenticate(
+                        &endpoint,
+                        &email,
+                        &master,
+                        &identifier,
+                        Some(MfaChallenge {
+                            provider,
+                            code: &code,
+                        }),
+                    )
+                    .map_err(|_| PreviewError::Authentication)?
+            }
+            Err(_) => return Err(PreviewError::Authentication),
+        };
 
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| PreviewError::RemoteSync)?
         .as_secs();
-    let candidate = update::prepare_initial_sync(
-        &transport,
-        &mut session,
-        &endpoint,
-        timestamp,
-        &decoder,
-    )
-    .map_err(|_| PreviewError::RemoteSync)?;
+    let candidate =
+        update::prepare_initial_sync(&transport, &mut session, &endpoint, timestamp, &decoder)
+            .map_err(|_| PreviewError::RemoteSync)?;
     let path = crate::paths::projection_path().map_err(|_| PreviewError::Storage)?;
     // Do not touch the historical PASSFLICK_VAULT override or original file.
     private_parent(&path)?;
@@ -228,7 +230,8 @@ mod tests {
             let mut random = [0_u8; 8];
             getrandom::fill(&mut random).unwrap();
             let root = std::env::temp_dir().join(format!(
-                "passflick-preview-test-{:016x}", u64::from_le_bytes(random)
+                "passflick-preview-test-{:016x}",
+                u64::from_le_bytes(random)
             ));
             DirBuilder::new().mode(0o700).create(&root).unwrap();
             Self(root)
@@ -275,7 +278,12 @@ mod tests {
         );
         let initial = fs::read(&path).unwrap();
         assert_eq!(
-            publish_candidate(&candidate(101, "different"), &path, b"incorrect passphrase", false),
+            publish_candidate(
+                &candidate(101, "different"),
+                &path,
+                b"incorrect passphrase",
+                false
+            ),
             Err(PreviewError::Local)
         );
         assert_eq!(fs::read(&path).unwrap(), initial);
@@ -297,11 +305,17 @@ mod tests {
         )
         .unwrap();
         let read = cache_store::load(
-            &path, &key, "https://vault.example.test/", "synthetic-account",
+            &path,
+            &key,
+            "https://vault.example.test/",
+            "synthetic-account",
         )
         .unwrap();
         assert_eq!(read.items()[0].password(), "second");
-        assert_eq!(fs::read(legacy).unwrap(), b"original fictional legacy encrypted data");
+        assert_eq!(
+            fs::read(legacy).unwrap(),
+            b"original fictional legacy encrypted data"
+        );
     }
 
     #[test]
@@ -312,6 +326,9 @@ mod tests {
         let pem = additional_ca(&cert).unwrap();
         assert!(ReadOnlySyncTransport::with_additional_root_pem(&pem).is_err());
         fs::set_permissions(&fixture.0, fs::Permissions::from_mode(0o755)).unwrap();
-        assert_eq!(private_parent(&fixture.snapshot()), Err(PreviewError::Storage));
+        assert_eq!(
+            private_parent(&fixture.snapshot()),
+            Err(PreviewError::Storage)
+        );
     }
 }

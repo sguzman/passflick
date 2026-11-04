@@ -428,13 +428,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
         ));
         assert_eq!(fs::read(&path).unwrap(), before);
         assert_eq!(
-            super::command::publish_candidate(
-                &refreshed,
-                &path,
-                LOCAL_PASSPHRASE,
-                false
-            )
-            .unwrap(),
+            super::command::publish_candidate(&refreshed, &path, LOCAL_PASSPHRASE, false).unwrap(),
             2
         );
         let reopened = cache_store::load(
