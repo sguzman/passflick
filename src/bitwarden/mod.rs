@@ -16,9 +16,9 @@ pub mod pipeline;
 pub mod session_cache;
 pub mod strict_json;
 pub mod sync_filter;
-#[cfg(test)]
-mod tls_acceptance;
 #[cfg(all(test, feature = "vaultwarden-preview"))]
 mod terminal_acceptance;
+#[cfg(test)]
+mod tls_acceptance;
 pub mod transport;
 pub mod update;

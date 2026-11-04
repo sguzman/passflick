@@ -81,7 +81,10 @@ pub(super) fn run_cli(
         // SAFETY: pointer to one valid initialized pollfd for the call.
         let poll = unsafe { libc::poll(&mut descriptor, 1, 200) };
         if poll < 0 {
-            assert_eq!(io::Error::last_os_error().kind(), io::ErrorKind::Interrupted);
+            assert_eq!(
+                io::Error::last_os_error().kind(),
+                io::ErrorKind::Interrupted
+            );
             continue;
         }
         if poll == 0 {
@@ -93,7 +96,10 @@ pub(super) fn run_cli(
         match master.read(&mut buf) {
             Ok(0) => break,
             Ok(n) => {
-                assert!(transcript.len() + n <= LIMIT, "unexpected terminal output volume");
+                assert!(
+                    transcript.len() + n <= LIMIT,
+                    "unexpected terminal output volume"
+                );
                 transcript.extend_from_slice(&buf[..n]);
                 if let Some((prompt, reply)) = answers.get(next) {
                     if transcript
@@ -111,8 +117,14 @@ pub(super) fn run_cli(
             Err(_) => panic!("PTY read failed"),
         }
     }
-    let exit = child.wait().expect("preview process could not be collected");
-    assert_eq!(next, answers.len(), "CLI did not reach all expected prompts");
+    let exit = child
+        .wait()
+        .expect("preview process could not be collected");
+    assert_eq!(
+        next,
+        answers.len(),
+        "CLI did not reach all expected prompts"
+    );
     assert_eq!(
         exit.success(),
         should_succeed,
@@ -123,7 +135,9 @@ pub(super) fn run_cli(
     for (_, reply) in answers {
         if !reply.is_empty() && reply.len() >= 8 {
             assert!(
-                !transcript.windows(reply.len()).any(|window| window == reply.as_bytes()),
+                !transcript
+                    .windows(reply.len())
+                    .any(|window| window == reply.as_bytes()),
                 "terminal prompt leaked a supplied value"
             );
         }
