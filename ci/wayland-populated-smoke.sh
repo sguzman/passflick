@@ -95,9 +95,14 @@ launch() {
     sleep 0.1
   done
   timeout 10s xdotool windowfocus --sync "$weston_window"
-  # A real input serial and surface focus are required before wl-copy can
-  # become the Wayland clipboard selection owner.
-  xdotool mousemove --window "$weston_window" 430 125 click 1
+  # The locked view requests keyboard focus for its password TextEdit.
+  # Clicking the generic clipboard-serial target steals that focus. Keep the
+  # separate already-unlocked copy tests' historical pointer interaction.
+  if [[ "${1:-}" != locked ]]; then
+    # A real input serial and surface focus are required before wl-copy can
+    # become the Wayland clipboard selection owner.
+    xdotool mousemove --window "$weston_window" 430 125 click 1
+  fi
   sleep 0.3
 }
 await_close() {
@@ -191,13 +196,9 @@ printf 'fictional pre-unlock clipboard marker' >"$root/expected"
 env -u DISPLAY wl-copy --sensitive <"$root/expected"
 assert_clipboard before-unlock
 
-launch
-# launch() clicks the generic header for clipboard serials, which can steal
-# focus from the locked screen's auto-focused password editor. The native
-# 740x495 preview is centered within Weston's 960x700 test output: target its
-# masked input, not the title region used by the already-open picker tests.
-xdotool mousemove --window "$weston_window" 430 307 click 1
-sleep 0.2
+# This variant intentionally leaves the masked field's own initial focus
+# intact; it does not click a compositor-relative guessed pixel coordinate.
+launch locked
 xdotool type --clearmodifiers --delay 15 -- 'fictional wrong native passphrase'
 xdotool key --clearmodifiers Return
 # The bogus KDF must finish before we type into the now-cleared masked input.
@@ -207,9 +208,8 @@ projection_cli status >"$root/lock.status"
 grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
 assert_clipboard wrong-unlock
 
-# Re-focus after a rejected KDF, and explicitly replace any still-visible
-# fictional input so no timing-dependent text append can change the attempt.
-xdotool mousemove --window "$weston_window" 430 307 click 1
+# Replace any still-visible fictional input without a pointer click.
+# The GUI requests password-field focus after a rejected local unlock.
 xdotool key --clearmodifiers ctrl+a
 xdotool type --clearmodifiers --delay 15 -- "$PASSFLICK_NATIVE_LOCAL_PASSPHRASE"
 xdotool key --clearmodifiers Return
