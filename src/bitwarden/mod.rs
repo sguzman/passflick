@@ -9,6 +9,8 @@ pub mod command;
 pub mod decryptor;
 pub mod envelope;
 pub mod keywrap;
+#[cfg(feature = "vaultwarden-preview")]
+pub mod projection_identity;
 #[cfg(test)]
 mod live_acceptance;
 pub mod pipeline;
