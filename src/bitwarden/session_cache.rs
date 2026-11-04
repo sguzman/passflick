@@ -275,6 +275,13 @@ mod tests {
     }
 
     #[test]
+    fn kernel_backend_compiles_without_touching_ci_host_keyrings() {
+        let _store: &dyn SessionStore = &KernelSessionStore;
+        let _kernel_ring_constructor: fn() -> Result<KeyRing, AccessError> = kernel_ring;
+        // Runtime keyctl semantics remain a separate target-host QA gate.
+    }
+
+    #[test]
     fn session_labels_cannot_overlap_with_legacy_or_other_projection_identities() {
         let path = Path::new("/example.test/private/projection.pfsnapshot");
         let first = ProjectionScope::new(path, SERVER, ACCOUNT).unwrap();
