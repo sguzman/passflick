@@ -9,6 +9,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'ci/vaultwarden-disposable.sh'
+      - 'ci/wayland-populated-smoke.sh'
       - '.github/workflows/vaultwarden-disposable.yml'
   workflow_dispatch:
 
