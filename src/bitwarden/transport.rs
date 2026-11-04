@@ -341,14 +341,19 @@ mod tests {
             validate_body(200, missing_profile, None),
             Err(TransportError::Admission(SyncEnvelopeError::InvalidProfile))
         ));
-        let duplicate_profile = br#"{"object":"sync","profile":{"id":"one","Id":"two"},"folders":[],"ciphers":[]}"#;
+        let duplicate_profile =
+            br#"{"object":"sync","profile":{"id":"one","Id":"two"},"folders":[],"ciphers":[]}"#;
         assert!(matches!(
             validate_body(200, duplicate_profile, None),
-            Err(TransportError::Admission(SyncEnvelopeError::AmbiguousFields))
+            Err(TransportError::Admission(
+                SyncEnvelopeError::AmbiguousFields
+            ))
         ));
         assert!(matches!(
             validate_body(200, &raw, Some("wrong-account")),
-            Err(TransportError::Admission(SyncEnvelopeError::AccountMismatch))
+            Err(TransportError::Admission(
+                SyncEnvelopeError::AccountMismatch
+            ))
         ));
     }
 

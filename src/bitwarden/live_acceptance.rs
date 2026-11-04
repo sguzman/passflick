@@ -312,14 +312,9 @@ fn disposable_server_auth_sync_encrypted_offline() {
         .authenticate(&endpoint, EMAIL, PASSWORD, DEVICE_ID, None)
         .expect("native password-grant against disposable Vaultwarden failed");
 
-    let initial = update::prepare_initial_sync(
-        &transport,
-        &mut session,
-        &endpoint,
-        1_800_000_000,
-        &decoder,
-    )
-    .expect("native authenticated initial account discovery failed");
+    let initial =
+        update::prepare_initial_sync(&transport, &mut session, &endpoint, 1_800_000_000, &decoder)
+            .expect("native authenticated initial account discovery failed");
     assert!(initial.items().is_empty());
     let account = initial.account_id().to_owned();
     assert_eq!(initial.server_identity(), endpoint.server_identity());
