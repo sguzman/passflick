@@ -88,6 +88,14 @@ Synthetic tests cover stable reuse and preservation of the legacy encrypted file
 
 This demonstrates local ID persistence **only**; target-host enrollment, remote device revocation, logout, actual session-keyring policy and production migration still require their own acceptance. No user accounts were used in CI.
 
+## Real preview CLI terminal echo security and end-to-end validation (2026-11-04)
+
+The Linux pseudo-terminal acceptance test discovered that the previous preview's library prompt was written to the terminal **before** it disabled echo. A rapidly supplied secret could appear in captured terminal output. The preview-only implementation now disables `ECHO` and `ECHONL` via termios *before displaying any prompt*, retains a restoration guard for success or failure, and invokes the existing password reader while echo remains disabled. Each prompt in the new PTY driver is checked against actual terminal flags **before** test input is supplied, and any echoed fictional credential causes the test to fail without printing its content.
+
+The same PTY driver runs the real opt-in CLI (not a helper-only simulation) over disposable trusted HTTPS Vaultwarden. The acceptance covers first setup, wrong local-passphrase preservation, successful encrypted repeat update, stable local device ID, synthetic TOTP authentication, and encrypted offline reopening. Only a fixture-only HTTP client may edit the disposable vault; Passflick's native sync remains read-only. No personal credentials or old encrypted data were involved. The original legacy input prompts were not changed in this step.
+
+[Code `056d267`](https://github.com/sguzman/passflick/commit/056d2670d3b7140a4cb43eb564f2962c8ccbc0d6) passes [Rust: 206 baseline and four preview tests, both strict Clippy configurations](https://github.com/sguzman/passflick/actions/runs/41844078843), [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41844078897), and [real disposable Vaultwarden CLI acceptance](https://github.com/sguzman/passflick/actions/runs/41844078786). This does **not** attest that target-host terminal state, kernel keyring, revocation, default-build integration or normal picker migration are safe yet.
+
 ## Native Bitwarden crypto and token lifecycle boundaries (test-only)
 
 The adapter currently uses the pinned MIT `rbw` Rust library for master-password KDF, wrapped user key, type-2 ciphertext decoding and HMAC verification. Since the library's verifier assumes a fixed 32-byte decoded MAC, Passflick rejects malformed decoded lengths, missing MAC, incorrect IV length and non-block-aligned ciphertext **before** dispatching to it. Error types must remain non-secret and failed candidate updates must never mutate the prior encrypted cache.

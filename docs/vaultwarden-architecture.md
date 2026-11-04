@@ -1,6 +1,6 @@
 # 🏗️ Vaultwarden-only projection architecture (design baseline)
 
-**Status:** ADR-001 integration path accepted; native Vaultwarden adapter tested against disposable Vaultwarden 1.37.5, but all new adapter modules remain test-only. Production picker still uses the legacy encrypted vault. See [ROADMAP.md](../ROADMAP.md) for scope, weights, dependencies and acceptance gates.
+**Status:** ADR-001 integration path accepted; the native Vaultwarden adapter and opt-in `vaultwarden-preview` updater pass disposable Vaultwarden 1.37.5 integration, including a real CLI pseudo-terminal security run. The regular build/picker still uses the legacy encrypted vault. See [ROADMAP.md](../ROADMAP.md) for scope, weights, dependencies and acceptance gates.
 
 ## Current implementation checkpoint (2026-11-03)
 
@@ -71,6 +71,12 @@ Future session-keyring and picker-only APIs remain test-only so the preview bina
 The opt-in native updater now owns a stable per-install 32-character hexadecimal device identifier stored in owner-only `projection.pfdevice` alongside the distinct local projection files, **never** in the legacy encrypted vault. All existing-device reads enforce private regular-file ownership, 0600 permissions, one hard link and exact byte-level format; an invalid identity fails closed rather than rotating. Initial directory validation and file persistence occur before the remote login handshake.
 
 [CI-verified on `0a46e07`](https://github.com/sguzman/passflick/commit/0a46e075eaa71a0cf19b160d2a7c19eeb3717228): [Rust and preview tests](https://github.com/sguzman/passflick/actions/runs/41768931554), [GUI](https://github.com/sguzman/passflick/actions/runs/41768931435), [disposable Vaultwarden](https://github.com/sguzman/passflick/actions/runs/41768931335). Device enrollment/revocation under a real host and production local lock/offline picker integration remain outside this milestone.
+
+## Real CLI pseudo-terminal acceptance (2026-11-04)
+
+The disposable-server workflow now builds the opt-in preview executable and drives its **real interactive terminal prompts** under a Linux controlling PTY. This verifies one-time encrypted installation, failed passphrase preservation, repeat update, stable local device identity, TOTP sign-in, offline ciphertext authentication, non-echoed secrets and isolation from the legacy encrypted file. Echo is disabled **before** prompt display; the prior library helper could print first and create a fast-input echo race. The test also verifies actual termios flags before sending each fictional input.
+
+[CI on `056d267`](https://github.com/sguzman/passflick/commit/056d2670d3b7140a4cb43eb564f2962c8ccbc0d6): [Rust](https://github.com/sguzman/passflick/actions/runs/41844078843), [GUI](https://github.com/sguzman/passflick/actions/runs/41844078897), [real disposable Vaultwarden and CLI](https://github.com/sguzman/passflick/actions/runs/41844078786) all passed. This is not production or actual EndeavourOS/Hyprland keyring/clipboard acceptance; the feature flag remains non-default.
 
 ## Responsibilities
 
