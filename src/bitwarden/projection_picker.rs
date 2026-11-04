@@ -258,7 +258,11 @@ impl eframe::App for ProjectionPicker {
                     else { site.request_focus(); }
                 }
                 if site.changed() || user.changed() {
-                    self.update_matches();
+                    // Update disjoint fields while snapshot is immutably
+                    // borrowed for rendering the selected rows below.
+                    self.rows = rank_projection(snapshot, &self.site_query, &self.username_query);
+                    self.selected = 0;
+                    self.labels.clear();
                     self.error = None;
                 }
 
