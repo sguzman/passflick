@@ -324,34 +324,36 @@ fn disposable_server_auth_sync_encrypted_offline() {
     let second_id = provision_cipher(&client, &url, bearer, &account, "second secret");
     assert_ne!(first_id, second_id);
 
+    // Native bootstrap now owns account discovery *and* the first complete
+    // credential projection. The fixture-only writer never supplies the ID.
+    let first_projection =
+        update::prepare_initial_sync(&transport, &mut session, &endpoint, 1_800_000_001, &decoder)
+            .expect("native first populated sync failed");
+    assert_eq!(first_projection.account_id(), account);
+    assert_eq!(first_projection.items().len(), 2);
     let private_dir = PrivateDirectory::new();
     let keywrap_path = private_dir.keywrap();
-    let cache_key = keywrap::initialize(
+    let path = private_dir.cache();
+    let count = update::install_initial_projection(
+        &first_projection,
+        &path,
         &keywrap_path,
         LOCAL_PASSPHRASE,
-        endpoint.server_identity(),
-        &account,
     )
-    .expect("independent local content key initialization failed");
-    let path = private_dir.cache();
-    let count = update::refresh_explicit(
-        &transport,
-        &mut session,
-        UpdateRequest {
-            endpoint: &endpoint,
-            expected_account: &account,
-            timestamp: 1_800_000_001,
-            decoder: &decoder,
-            key: &cache_key,
-            path: &path,
-        },
-    )
-    .expect("full native read-only sync/decrypt/publish failed");
+    .expect("initial native encrypted projection installation failed");
     assert_eq!(count, 2);
+    assert!(matches!(
+        update::install_initial_projection(
+            &first_projection,
+            &path,
+            &keywrap_path,
+            LOCAL_PASSPHRASE,
+        ),
+        Err(update::UpdateError::Cache(cache_store::CacheError::AlreadyExists))
+    ));
 
     // Simulate a new process: recover only from the local passphrase and
     // independent encrypted keywrap. No network session is required.
-    drop(cache_key);
     let cache_key = keywrap::unlock(
         &keywrap_path,
         LOCAL_PASSPHRASE,
