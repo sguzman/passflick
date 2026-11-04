@@ -125,6 +125,14 @@ impl ProjectionScope {
             lock: format!("{LOCK_NAMESPACE}:{identity:016x}"),
         })
     }
+
+    fn validate_binding(&self, path: &Path, server: &str, account: &str) -> Result<(), AccessError> {
+        let expected = Self::new(path, server, account)?;
+        if self.key != expected.key || self.lock != expected.lock {
+            return Err(AccessError::InvalidScope);
+        }
+        Ok(())
+    }
 }
 
 /// Install a deny marker *first*, then invalidate the cached key. A failure
@@ -142,6 +150,7 @@ pub fn cached_read<S: SessionStore>(
     server: &str,
     account: &str,
 ) -> Result<Option<ProjectionSnapshot>, AccessError> {
+    scope.validate_binding(snapshot_path, server, account)?;
     if backend.exists(&scope.lock)? {
         return Err(AccessError::Locked);
     }
@@ -169,6 +178,7 @@ pub fn unlock<S: SessionStore>(
     server: &str,
     account: &str,
 ) -> Result<ProjectionSnapshot, AccessError> {
+    scope.validate_binding(snapshot_path, server, account)?;
     let key = keywrap::unlock(keywrap_path, passphrase, server, account)?;
     let snapshot = cache_store::load(snapshot_path, &key, server, account)?;
     backend.put(&scope.key, key.as_bytes())?;
@@ -343,6 +353,45 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
+    }
+
+    #[test]
+    fn cached_and_explicit_access_reject_mismatched_scope_before_keyring_or_keywrap() {
+        let (dir, scope) = fixture();
+        let backend = Fake::default();
+        assert!(matches!(
+            cached_read(
+                &backend,
+                &scope,
+                &dir.snapshot(),
+                SERVER,
+                "different-account",
+            ),
+            Err(AccessError::InvalidScope)
+        ));
+        assert!(matches!(
+            unlock(
+                &backend,
+                &scope,
+                &dir.wrapped(),
+                &dir.snapshot(),
+                PASSPHRASE,
+                "https://unrelated.example.test/",
+                ACCOUNT,
+            ),
+            Err(AccessError::InvalidScope)
+        ));
+        assert!(matches!(
+            cached_read(
+                &backend,
+                &scope,
+                &dir.0.join("different/projection.pfsnapshot"),
+                SERVER,
+                ACCOUNT,
+            ),
+            Err(AccessError::InvalidScope)
+        ));
+        assert!(backend.entries.borrow().is_empty());
     }
 
     #[test]
