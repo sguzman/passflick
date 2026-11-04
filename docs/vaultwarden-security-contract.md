@@ -112,6 +112,14 @@ Code review also found a manual-lock race: an in-flight unlock might cache a new
 
 **Limits:** this proves one CI-host Linux session keyring lineage, **not** actual EndeavourOS/Hyprland desktop login/logout, all PAM/systemd keyring policy variants, or atomic revocation of already-copied credentials. The production picker is still on the legacy vault; no real user account or historical encrypted data was touched.
 
+## Offline picker sensitive copy gate (2026-11-04)
+
+The feature-gated `passflick projection picker` never reads browser CSVs, the legacy encrypted vault or remote network data. A missing/locked/unusable independent projection opens only a locked notice. Display labels omit URL path, userinfo, query and password content; memory of authenticated records and labels is zeroized on drop and when an explicit lock is detected.
+
+**Copy requires renewed authentication:** the picker holds the same cross-process file guard as explicit local lock/unlock and encrypted snapshot publication, opens the currently authenticated snapshot, resolves the selected upstream item ID and writes only the requested password/username bytes to the reviewed `wl-copy --sensitive` adapter. An already completed manual lock prevents an open picker from copying. Clipboard bytes copied before a lock cannot be retracted, and other same-user processes are outside the isolation boundary.
+
+On [`d78e7f7`](https://github.com/sguzman/passflick/commit/d78e7f7db02159ad55f3352bd1cda4ba67879ec8), the [populated disposable Xvfb GUI](https://github.com/sguzman/passflick/actions/runs/41869547409), [separate GUI/Weston clipboard transport](https://github.com/sguzman/passflick/actions/runs/41869547535) and [Rust](https://github.com/sguzman/passflick/actions/runs/41869547745) checks all pass. Actual populated native Wayland, target-host keyring logout and selected-secret consistency across simultaneous remote refresh are still acceptance gates.
+
 ## Native Bitwarden crypto and token lifecycle boundaries (test-only)
 
 The adapter currently uses the pinned MIT `rbw` Rust library for master-password KDF, wrapped user key, type-2 ciphertext decoding and HMAC verification. Since the library's verifier assumes a fixed 32-byte decoded MAC, Passflick rejects malformed decoded lengths, missing MAC, incorrect IV length and non-block-aligned ciphertext **before** dispatching to it. Error types must remain non-secret and failed candidate updates must never mutate the prior encrypted cache.

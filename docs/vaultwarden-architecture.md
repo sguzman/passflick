@@ -166,6 +166,12 @@ Prefer cohesive modules; never centralize unrelated auth/crypto/sync/GUI functio
 
 CLI naming and login flow require implementation review and are not yet shipped.
 
+## Verified preview offline picker and GUI fixture (2026-11-04)
+
+The opt-in `passflick projection picker` opens a **read-only, offline, authenticated** snapshot independently of `vault.passvault` and all browser imports. It preserves distinct upstream login IDs, filters titles/all URIs and usernames, displays safe token-stripped labels and a last-sync-age warning, and supports System/Light/Dark. Manual locking clears in-memory rows on the next check and blocks all subsequent copying. Every copy obtains the shared cross-process file guard, authenticates the current snapshot and resolves the selected upstream item ID before invoking the sensitive Wayland clipboard helper. Previously copied data is not revoked retroactively.
+
+[Verified code `d78e7f7`](https://github.com/sguzman/passflick/commit/d78e7f7db02159ad55f3352bd1cda4ba67879ec8): [disposable populated Xvfb/real Vaultwarden GUI](https://github.com/sguzman/passflick/actions/runs/41869547409) checks actual fictional Unicode/whitespace copying and manual-lock denial; [separate GUI/Wayland smoke](https://github.com/sguzman/passflick/actions/runs/41869547535) checks locked-state GUI and native sensitive transport; [Rust strict lint and recovery](https://github.com/sguzman/passflick/actions/runs/41869547745) are green. Populated native Wayland/Hyprland rendering, session logout and concurrent selected-credential changes are not yet accepted.
+
 ## Deterministic acceptance fixtures
 
 Use only fictional `example.test` data on a disposable Vaultwarden-compatible server. Test login creation and update; changed password; archive/restore; delete; same domain and username with different upstream item IDs; Unicode/whitespace password fidelity; unsupported item kind and encryption type; invalid CA, expired token, network outage; interrupted and concurrent updates; rollback and local lock; repeat update with no duplicate accumulation; actual Wayland sensitive clipboard and performance.
