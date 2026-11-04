@@ -1,0 +1,44 @@
+# 🛡️ ADR-002 — local projection unlock, lock, freshness and revocation
+
+**Decision:** project security policy, accepted 2026-11-04. This is **design only** until each operation is implemented and verified on Linux/Wayland. It does not imply that the new Vaultwarden projection is usable from the production picker. Follows [ADR-001](adr-001-native-vaultwarden-adapter.md).
+
+## Security boundaries
+
+- **Remote authority:** Vaultwarden owns credentials, deletion, archive and access policy. Passflick may authenticate, obtain a short-lived session and fetch a complete read-only snapshot only during explicit update. No remote token is persisted to disk, passed in shell arguments, or silently acquired during picker launch.
+- **Local authority:** `projection.pfsnapshot` is a *stale-capable*, authenticated encrypted view of the most recent complete remote sync. It is protected by an **independent local 256-bit content key**, **not** the remote password, remote user key, refresh token or historical `vault.passvault` encryption key.
+- **Credentials on disk:** the content key is not stored raw in any file, config or environment variable. The local passphrase **wraps** the content key through Argon2id and authenticated encryption using a separately versioned owner-only metadata file. Use an independently random salt/nonce, bounded KDF parameters, and authenticated binding to the canonical server/account/cache identity. No new snapshot format is installed over legacy data.
+- **Remote account changes vs. offline access:** remote logout, account revocation, master-password changes, rotation, archive, or deletion **cannot immediately revoke a locally decryptable offline copy**. The UX must say this directly. A newer successful explicit refresh replaces items; failed login or network access does **not** silently wipe a valid encrypted projection.
+
+## Default local unlock path
+
+1. Initial setup requires **one successful Vaultwarden authentication** and a separate local projection unlock passphrase with confirmation. A new random 32-byte content key is generated once and bound to the approved Vaultwarden endpoint + account ID; the local passphrase is used to encrypt/wrap that key with versioned Argon2id parameters. **Never derive the content key directly from the remote master password**. Key material and typed passphrases remain in zeroizing memory where feasible.
+2. Subsequent picker use **first checks explicit manual-lock state**. If a session-scoped kernel-keyring key is available, it must authenticate the corresponding encrypted cache before use. A stale/mismatched key is never trusted merely because a keyring entry exists. If locked or unavailable, obtain the local passphrase interactively (masked), unwrap the content key and authenticate the snapshot; no HTTP or remote login is required.
+3. On a successful **explicit local unlock**, optionally cache the key in a **projection-specific Linux session-keyring namespace** with owner-only permissions. Normal picker invocations may reuse that key until user lock, logout or operating-system session end. They must not silently prolong an explicit lock. If kernel-keyring storage fails, a one-invocation passphrase unlock may still work if manual-lock status is deterministically checked; unclear/error status fails closed.
+4. **Persistent Secret Service enrollment is opt-in only**, not a default silent auto-unlock path. Any future enrollment requires a distinct per-projection identity, explicit consent, verified ciphertext authentication before cache promotion, and documented revocation/lock behavior. Existing `vault-key-v1` / `passflick:vault-key:v2` labels may **never** be reused for the new projection.
+5. **`passflick lock`:** invalidate the projection session key, establish an explicit manual-lock marker **before** treating the lock as successful, and never auto-recover via desktop keyring until the user explicitly unlocks. If the marker/key removal fails, show an error; do not falsely claim a successful lock. **`passflick logout`** additionally drops remote session tokens/decryptors and applies the same local lock policy; it leaves encrypted disk ciphertext in place so offline re-unlock remains possible.
+6. **No hidden automatic network refresh.** Ordinary `passflick` search/copy reads local encrypted state and never performs HTTP, even if the projection is old or the remote session expired. A failed `passflick update` preserves the last known-good ciphertext and its timestamp while showing a sanitized failure state; no partial-merge fallback.
+
+## Display, aging and destruction semantics
+
+- Show the **actual last successful sync age** in the picker/status. An explicit 7-day stale warning may be shown by default, but it must not be represented as credential validity. Older snapshots remain usable offline **only after local unlock**, without pretending they are remotely current. Never silently prune credentials when disconnected.
+- A **confirmed explicit cache purge** first invalidates remote in-memory/session keys and local session/persistent keyring entries where enrolled; it then removes only the dedicated new projection keywrap and `projection.pfsnapshot` files. Never touch historical `vault.passvault`, its backup, or the upstream server. If a cleanup action fails, report partial cleanup and do not claim all keys were destroyed. Disk deletion cannot reliably securely erase SSD blocks, snapshots or external backups.
+- Never log raw passwords, TOTP codes, session tokens, local passphrases, protected URLs, usernames, decrypted snapshots or raw key bytes. Failure strings must be sanitized; no secret-bearing command-line arguments, environment variables, filenames or panic output.
+- Original clipboard security rules remain: only an explicit user action may copy, `wl-copy --sensitive` is advisory, and a compromised user desktop or clipboard manager can still capture copied credentials.
+
+## Threats and chosen trade-offs
+
+| Threat | Mitigation or acknowledged limit |
+| --- | --- |
+| Stolen disk while powered off | Passphrase-wrapped independent local content key plus private authenticated ciphertext; offline brute-force resistance depends on local passphrase strength and KDF cost, not Vaultwarden network login policy |
+| Compromised logged-in same-user process | Kernel session-keyring and unlocked process memory cannot defend against all same-user or privileged malware; lock reduces exposure but is not a malware boundary |
+| Lost/compromised remote session or revoked Vaultwarden account | Discard tokens locally, force reauthentication for the **next** remote update; existing offline ciphertext may still decrypt until locally locked/purged; UI must not imply instant server-enforced revocation |
+| Malicious/cross-account sync, partial response, wrong KDF or decryption | Strict source/identity admission, all-record decryption, format/size caps, AEAD authentication and atomic ciphertext publish; preserve previous snapshot on failed update |
+| Symlink/hardlink/shared directory, crash, concurrent update | Private owner-owned directories/files, no-follow reads, one writer lock, fsynced temporary ciphertext and atomic publication; still require interruption/power-loss and TOCTOU target-host acceptance |
+| Shoulder-surfing, shell history, logs, recovery output | Masked local unlock, sanitized non-secret errors and metadata, no secrets in arguments/logs/stdout |
+| Legacy vault coexistence | Separate path, cryptographic key, keyring labels and migration gate; no implicit CSV imports or destructive conversion |
+
+## Implementation acceptance before release
+
+The design is **not** an implementation. The next gates must include: independent keywrap schema and authenticated recovery; masked local passphrase setup/unlock and explicit lock tests; Linux session and optional desktop keyring isolation/permissions; same-account and cross-account behavior; last-good preservation on failed updates; offline startup with no server; stale metadata; encrypted-file corruption/rename/interruption; verified cleanup semantics; no regression to existing Wayland keyboard shortcuts or sensitive clipboard. Target-host QA is mandatory.
+
+**Scope excluded:** direct upstream editing, indefinite token persistence, automatic sync, global revocation promises, auto-unlock of a manually locked cache, and deletion of legacy files.

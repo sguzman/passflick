@@ -70,6 +70,9 @@ A standalone GitHub Actions job launches a real Vaultwarden `1.37.5` server behi
 
 ## Locking and offline trade-off
 
+**Accepted security policy:** [ADR-002](adr-002-local-cache-security.md) defines the independent local content key, versioned Argon2id passphrase wrapping, explicit manual-lock priority, session-scoped key caching, opt-in desktop keyring, remote revocation limits, offline freshness and cleanup semantics. These are implementation requirements; existing legacy unlock behavior does **not** implement them for the new projection.
+
+
 An encrypted cached projection and a remote password-manager account **do not share an automatic global lock state**. Logging out or locking a browser extension cannot instantly destroy a separately cached offline decrypted copy.
 
 Before release, document and test:

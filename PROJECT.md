@@ -13,6 +13,8 @@ Passflick is a low-latency, keyboard-first **read-only password projection for L
 - Present distinct upstream items, including conflicting credentials at the same site/username; no guessing which password is correct. The last update time is visible; a stale offline projection is not represented as current server state.
 - Following a successful update, the active local view reflects current server archive/deletion state. Local access when offline is governed by an explicit, separately tested cache lock policy.
 
+Local offline-unlock and revocation behavior is governed by [ADR-002](docs/adr-002-local-cache-security.md), which is an accepted **policy** rather than a completed implementation.
+
 ## Architectural boundaries
 
 - **Authoritative data:** the remote Bitwarden/Vaultwarden vault. Credential creation, edits, archival, deletion and organization happen there, not in Passflick.

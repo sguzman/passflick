@@ -21,9 +21,9 @@ The **user-controlled update** model is deliberate: search/copy may work offline
 
 New scope replaces the previous multi-browser-source objective, so old and new percentages are **not comparable**. Preserve existing verified picker, clipboard and encrypted-vault capabilities while re-estimating all *new* integration, migration and acceptance work.
 
-**Rebaseline: 13/100 weighted points verified (13%) as of adoption.** Current verified completion: **20/100 weighted points (20%)**, including the explicitly decided native Rust integration approach. Verified points represent only the existing implementation audit, written replacement contract, and independently evidenced pre-existing picker/synthetic test capabilities. These milestones do **not** represent a production-ready Vaultwarden integration. At initial roadmap authoring no new-backend tests had been run; the later disposable live-server acceptance is documented below.
+**Rebaseline: 13/100 weighted points verified (13%) as of adoption.** Current verified completion: **23/100 weighted points (23%)**, including accepted native architecture and local-cache threat-model policies. Verified points represent only the existing implementation audit, written replacement contract, and independently evidenced pre-existing picker/synthetic test capabilities. These milestones do **not** represent a production-ready Vaultwarden integration. At initial roadmap authoring no new-backend tests had been run; the later disposable live-server acceptance is documented below.
 
-`████░░░░░░░░░░░░░░░░` **20%** (previous verified 17% → 20%, **+3 percentage points** this session; adoption baseline 13%).
+`████▋░░░░░░░░░░░░░░░` **23%** (previous verified 20% → 23%, **+3 percentage points**; adoption baseline 13%).
 
 **Status key:** ✅ verified complete | 🟡 active | ⬜ pending | ⛔ blocked. Every item's bracketed **w** is its share of the 100-point overall estimate. An item earns all its weight only after its acceptance check passes; partial activity is documented but not counted. Adjust weights transparently if discoveries materially change the project.
 
@@ -34,7 +34,7 @@ New scope replaces the previous multi-browser-source objective, so old and new p
 | A01 🔍 | Audit existing code, CI, dependencies, historical roadmap and reusable components | 3 | ✅ | Identify real source importer, independent encrypted vault, picker, keyring and security gates from repository evidence; initial audit recorded below |
 | A02 🎯 | Establish new user contract and non-goals | 3 | ✅ | Single upstream authority, explicit refresh, encrypted cache, offline semantics, picker and read-only scope documented in this roadmap and PROJECT.md |
 | A03 ⚖️ | Decide and document supported native Rust integration approach | 3 | ✅ | Prototype/auth feasibility and dependency stability/license findings; select an implementation only after evidence; requires A02 |
-| A04 🛡️ | Threat model and lock/freshness/revocation policy | 3 | 🟡 | Define access after Vaultwarden logout or account revocation, local unlock, stolen-disk/session threat, cache destruction, and update failure behavior; requires A03 |
+| A04 🛡️ | Threat model and lock/freshness/revocation policy | 3 | ✅ | Define access after Vaultwarden logout or account revocation, local unlock, stolen-disk/session threat, cache destruction, and update failure behavior; requires A03 |
 
 **Existing state:** `src/app.rs`, `src/search.rs`, `src/clipboard.rs`, `src/vault.rs`, `src/session.rs` and `src/desktop_keyring.rs` contain candidate reusable behavior. `src/import.rs`, `src/discovery.rs`, `src/source_status.rs` and browser-specific source ranking are legacy. Current `PROJECT.md`, `docs/queue.md`, `docs/sources.md` and existing CI are for the original product and require careful reconciliation. Preserve privacy and historical evidence.
 
@@ -202,6 +202,14 @@ The test-only sync filter was extended to honor the upstream `viewPassword` rest
 - **Green on `7a69b6d`:** [real disposable HTTPS CI](https://github.com/sguzman/passflick/actions/runs/41754548371) 1/1 pass, [Rust CI](https://github.com/sguzman/passflick/actions/runs/41754548505) 188/188 passing with one intentionally ignored live test (run separately), rustfmt, smoke and Clippy green; [synthetic GUI CI](https://github.com/sguzman/passflick/actions/runs/41754548316) green. TOTP test uses only synthetic credentials and test-only HMAC/SHA1/Base32 dependencies already present in the lock graph.
 - **B02, B03, B04, B05, C02, C03, C04 and D04 are not being credited here:** email-code MFA and server policy variants, authenticated production secrets/keyring, local lock/logout, read-only boundary audit, full interrupted/concurrent behavior, actual manual update command and target-host UX remain incomplete.
 - **Verified overall:** **17/100 → 20/100, +3 percentage points**. No production vault, user secret, source importer, or real remote account was modified.
+
+### 2026-11-04 A04 local unlock/lock and offline threat-model decision
+
+- **A04 🛡️ complete, +3 weighted points:** The target behavior for offline access after remote logout/revocation, stolen disks, a compromised user session, local passphrase setup/Argon2id keywrap, independent `projection.pfsnapshot` content key, explicit lock/logout and session-keyring separation, freshness and cache purge is now specified in [ADR-002](docs/adr-002-local-cache-security.md).
+- **Compatibility/reuse review:** Existing `src/session.rs` has session-scoped key caching and manual-lock markers; `src/desktop_keyring.rs` uses optional Secret Service; `src/vault.rs` contains Argon2id key derivation and XChaCha20-Poly1305 helpers. The new projection must use **separate keyring namespaces/identity and a separate keywrap format**; it may reuse patterns, never reinterpret historical `vault.passvault` keys/data.
+- **Threat-model limits:** remote revocation cannot erase an offline snapshot; session memory/keyrings do not defend against malware running as the same user; deletion on SSD/backups is not guaranteed erasure. These must be visible in future UX and cannot be silently claimed away.
+- **Production implementation not credited:** C03 local unlock and lock, C05 offline/picker freshness, D01 manual update, and target-host verification remain pending. This is a **documented security policy**, not a deployed key-management flow.
+- **Progress:** **20/100 → 23/100, +3 percentage points**.
 
 ## 📍 Durable checkpoint
 
