@@ -74,7 +74,9 @@ impl SessionStore for KernelSessionStore {
 
     fn put(&self, label: &str, contents: &[u8]) -> Result<(), AccessError> {
         let ring = kernel_ring()?;
-        let key = ring.add_key(label, contents).map_err(|_| AccessError::Keyring)?;
+        let key = ring
+            .add_key(label, contents)
+            .map_err(|_| AccessError::Keyring)?;
         let permissions = KeyPermissionsBuilder::builder()
             .posessor(Permission::ALL)
             .build();
@@ -193,13 +195,19 @@ mod tests {
 
     impl SessionStore for Fake {
         fn read(&self, label: &str) -> Result<Option<Zeroizing<Vec<u8>>>, AccessError> {
-            Ok(self.entries.borrow().get(label).map(|v| Zeroizing::new(v.to_vec())))
+            Ok(self
+                .entries
+                .borrow()
+                .get(label)
+                .map(|v| Zeroizing::new(v.to_vec())))
         }
         fn exists(&self, label: &str) -> Result<bool, AccessError> {
             Ok(self.entries.borrow().contains_key(label))
         }
         fn put(&self, label: &str, contents: &[u8]) -> Result<(), AccessError> {
-            self.entries.borrow_mut().insert(label.to_owned(), Zeroizing::new(contents.to_vec()));
+            self.entries
+                .borrow_mut()
+                .insert(label.to_owned(), Zeroizing::new(contents.to_vec()));
             Ok(())
         }
         fn remove(&self, label: &str) -> Result<(), AccessError> {
@@ -271,7 +279,8 @@ mod tests {
         let path = Path::new("/example.test/private/projection.pfsnapshot");
         let first = ProjectionScope::new(path, SERVER, ACCOUNT).unwrap();
         let other_account = ProjectionScope::new(path, SERVER, "other-account").unwrap();
-        let other_server = ProjectionScope::new(path, "https://other.example.test/", ACCOUNT).unwrap();
+        let other_server =
+            ProjectionScope::new(path, "https://other.example.test/", ACCOUNT).unwrap();
         assert_ne!(first.key, other_account.key);
         assert_ne!(first.key, other_server.key);
         assert_ne!(first.key, first.lock);
@@ -285,7 +294,11 @@ mod tests {
     fn offline_unlock_cache_manual_lock_and_explicit_reunlock() {
         let (dir, scope) = fixture();
         let backend = Fake::default();
-        assert!(cached_read(&backend, &scope, &dir.snapshot(), SERVER, ACCOUNT).unwrap().is_none());
+        assert!(
+            cached_read(&backend, &scope, &dir.snapshot(), SERVER, ACCOUNT)
+                .unwrap()
+                .is_none()
+        );
         let value = unlock(
             &backend,
             &scope,
@@ -297,7 +310,9 @@ mod tests {
         )
         .unwrap();
         assert_eq!(value.items()[0].password(), "synthetic-secret");
-        let cached = cached_read(&backend, &scope, &dir.snapshot(), SERVER, ACCOUNT).unwrap().unwrap();
+        let cached = cached_read(&backend, &scope, &dir.snapshot(), SERVER, ACCOUNT)
+            .unwrap()
+            .unwrap();
         assert_eq!(cached.items()[0].id(), "separate-server-id");
         lock(&backend, &scope).unwrap();
         assert!(matches!(
@@ -316,7 +331,11 @@ mod tests {
         )
         .unwrap();
         assert_eq!(value.items()[0].username(), "synthetic-user");
-        assert!(cached_read(&backend, &scope, &dir.snapshot(), SERVER, ACCOUNT).unwrap().is_some());
+        assert!(
+            cached_read(&backend, &scope, &dir.snapshot(), SERVER, ACCOUNT)
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[test]
@@ -324,15 +343,18 @@ mod tests {
         let (dir, scope) = fixture();
         let backend = Fake::default();
         lock(&backend, &scope).unwrap();
-        assert!(unlock(
-            &backend,
-            &scope,
-            &dir.wrapped(),
-            &dir.snapshot(),
-            b"incorrect fictional local passphrase",
-            SERVER,
-            ACCOUNT,
-        ).is_err());
+        assert!(
+            unlock(
+                &backend,
+                &scope,
+                &dir.wrapped(),
+                &dir.snapshot(),
+                b"incorrect fictional local passphrase",
+                SERVER,
+                ACCOUNT,
+            )
+            .is_err()
+        );
         assert!(matches!(
             cached_read(&backend, &scope, &dir.snapshot(), SERVER, ACCOUNT),
             Err(AccessError::Locked)
@@ -384,7 +406,8 @@ mod tests {
                 PASSPHRASE,
                 SERVER,
                 ACCOUNT,
-            ).err(),
+            )
+            .err(),
             Some(AccessError::Keyring)
         );
         assert!(matches!(
