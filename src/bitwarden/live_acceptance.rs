@@ -21,7 +21,8 @@ use serde_json::{Value, json};
 
 use super::{
     auth::{AuthError, MfaChallenge, MfaProvider},
-    cache_store::{self, CacheKey},
+    cache_store::{self},
+    keywrap,
     transport::{ReadOnlySyncTransport, ServerEndpoint},
     update::{self, UpdateRequest},
 };
@@ -31,6 +32,7 @@ const PASSWORD: &str = "fictional-passflick-master-2026";
 const DEVICE_ID: &str = "passflick-disposable-acceptance";
 const ACCOUNT_KEY: [u8; 64] = [71; 64];
 const FIXTURE_URL: &str = "https://localhost:18443/";
+const LOCAL_PASSPHRASE: &[u8] = b"fictional offline passphrase independent of remote login";
 
 struct PrivateDirectory(PathBuf);
 
@@ -48,6 +50,10 @@ impl PrivateDirectory {
 
     fn cache(&self) -> PathBuf {
         self.0.join("projection.pfsnapshot")
+    }
+
+    fn keywrap(&self) -> PathBuf {
+        self.0.join("projection.pfkey")
     }
 }
 
@@ -338,7 +344,14 @@ fn disposable_server_auth_sync_encrypted_offline() {
     assert_ne!(first_id, second_id);
 
     let private_dir = PrivateDirectory::new();
-    let cache_key = CacheKey::from_slice(&[83; 32]).unwrap();
+    let keywrap_path = private_dir.keywrap();
+    let cache_key = keywrap::initialize(
+        &keywrap_path,
+        LOCAL_PASSPHRASE,
+        endpoint.server_identity(),
+        &account,
+    )
+    .expect("independent local content key initialization failed");
     let path = private_dir.cache();
     let count = update::refresh_explicit(
         &transport,
@@ -355,9 +368,43 @@ fn disposable_server_auth_sync_encrypted_offline() {
     .expect("full native read-only sync/decrypt/publish failed");
     assert_eq!(count, 2);
 
+    // Simulate a new process: recover only from the local passphrase and
+    // independent encrypted keywrap. No network session is required.
+    drop(cache_key);
+    let cache_key = keywrap::unlock(
+        &keywrap_path,
+        LOCAL_PASSPHRASE,
+        endpoint.server_identity(),
+        &account,
+    )
+    .expect("independent offline keywrap failed to unlock");
     let offline = cache_store::load(&path, &cache_key, endpoint.server_identity(), &account)
         .expect("encrypted offline projection failed to reopen");
     assert_eq!(offline.items().len(), 2);
+    let first_snapshot = fs::read(&path).unwrap();
+    let first_keywrap = fs::read(&keywrap_path).unwrap();
+    assert!(
+        keywrap::unlock(
+            &keywrap_path,
+            b"fictional incorrect offline secret",
+            endpoint.server_identity(),
+            &account,
+        )
+        .is_err(),
+        "wrong local passphrase must not expose cached secrets"
+    );
+    assert!(
+        keywrap::unlock(
+            &keywrap_path,
+            LOCAL_PASSPHRASE,
+            endpoint.server_identity(),
+            "different-fictional-account",
+        )
+        .is_err(),
+        "local keywrap must bind to the authenticated account"
+    );
+    assert_eq!(fs::read(&path).unwrap(), first_snapshot);
+    assert_eq!(fs::read(&keywrap_path).unwrap(), first_keywrap);
     let ids: Vec<_> = offline.items().iter().map(|item| item.id()).collect();
     assert!(ids.contains(&first_id.as_str()));
     assert!(ids.contains(&second_id.as_str()));
@@ -539,4 +586,27 @@ fn disposable_server_auth_sync_encrypted_offline() {
         )
         .expect("native read-only sync after TOTP authentication failed");
     assert!(renewed["ciphers"].as_array().is_some());
+
+    // Closing every remote session cannot make a local passphrase unusable.
+    // This is explicit documented offline behavior, not remote revocation.
+    drop(mfa_session);
+    drop(session);
+    drop(decoder);
+    drop(cache_key);
+    let local_key = keywrap::unlock(
+        &keywrap_path,
+        LOCAL_PASSPHRASE,
+        endpoint.server_identity(),
+        &account,
+    )
+    .expect("offline passphrase unlock failed after remote session drop");
+    let local_snapshot = cache_store::load(
+        &path,
+        &local_key,
+        endpoint.server_identity(),
+        &account,
+    )
+    .expect("offline ciphertext missing after dropping remote sessions");
+    assert_eq!(local_snapshot.items().len(), 1);
+    assert_eq!(local_snapshot.items()[0].password(), "edited 🔐 contraseña 🧪");
 }
