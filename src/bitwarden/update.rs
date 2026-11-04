@@ -12,6 +12,8 @@ use std::path::Path;
 #[cfg(test)]
 use serde_json::Value;
 
+#[cfg(test)]
+use super::cache_store::CacheKey;
 use super::{
     auth::{AuthError, RemoteSession},
     cache_store::{self, CacheError},
@@ -20,8 +22,6 @@ use super::{
     pipeline::{self, LoginDecryptor, ProjectionPipelineError},
     transport::{ReadOnlySyncTransport, ServerEndpoint, TransportError},
 };
-#[cfg(test)]
-use super::cache_store::CacheKey;
 use crate::projection::ProjectionSnapshot;
 
 #[derive(Debug, thiserror::Error)]
