@@ -283,7 +283,7 @@ fn write_atomic(path: &Path, encrypted: &[u8]) -> Result<(), CacheError> {
 mod tests {
     use super::*;
     use crate::projection::LoginItem;
-    use std::os::unix::fs::symlink;
+    use std::os::unix::fs::{DirBuilderExt, symlink};
 
     struct TestDir(std::path::PathBuf);
 
