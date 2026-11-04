@@ -73,6 +73,15 @@ fn selected_item_unchanged(
     current: &ProjectionSnapshot,
     id: &str,
 ) -> bool {
+    // Item IDs are meaningful only within an authenticated upstream source.
+    // A cache replaced with another server/account must never authorize a
+    // copy from a window that was displaying the previous source, even if
+    // an item ID and its visible fields happen to collide.
+    if displayed.server_identity() != current.server_identity()
+        || displayed.account_id() != current.account_id()
+    {
+        return false;
+    }
     let previous = displayed.items().iter().find(|item| item.id() == id);
     let updated = current.items().iter().find(|item| item.id() == id);
     match (previous, updated) {
@@ -510,6 +519,42 @@ mod tests {
         )
         .unwrap();
         assert!(!selected_item_unchanged(&viewed, &removed, "distinct-a"));
+    }
+
+    #[test]
+    fn same_upstream_id_and_secret_cannot_cross_server_or_account_boundaries() {
+        let viewed = fixture();
+        let other_source = |server: &str, account: &str| {
+            ProjectionSnapshot::new(
+                server.to_owned(),
+                account.to_owned(),
+                viewed.last_success_at() + 1,
+                vec![LoginItem::new(
+                    "distinct-a".to_owned(),
+                    "Example".to_owned(),
+                    vec!["https://example.test/login".to_owned()],
+                    "alice".to_owned(),
+                    "fictional-password".to_owned(),
+                    None,
+                )],
+            )
+            .unwrap()
+        };
+
+        let other_account =
+            other_source(viewed.server_identity(), "another-fictional-account");
+        assert!(!selected_item_unchanged(
+            &viewed,
+            &other_account,
+            "distinct-a"
+        ));
+        let other_server =
+            other_source("https://different-vault.example.test/", viewed.account_id());
+        assert!(!selected_item_unchanged(
+            &viewed,
+            &other_server,
+            "distinct-a"
+        ));
     }
 
     #[test]
