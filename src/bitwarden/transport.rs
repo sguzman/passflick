@@ -152,6 +152,7 @@ impl ReadOnlySyncTransport {
 
     /// Fetch one complete user sync without any upstream mutation. TLS
     /// validation is performed by the HTTPS client; there is no insecure mode.
+    #[cfg(test)]
     pub fn fetch_sync(
         &self,
         endpoint: &ServerEndpoint,

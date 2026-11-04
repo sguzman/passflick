@@ -42,6 +42,7 @@ pub enum UpdateError {
 /// Commit a *complete*, previously authenticated sync response. This
 /// boundary is usable in synthetic tests without making any network calls.
 /// A caller must not pass a partial cipher list or pre-filtered response.
+#[cfg(test)]
 pub fn commit_full_sync<D: LoginDecryptor>(
     payload: &Value,
     endpoint: &ServerEndpoint,
@@ -120,6 +121,7 @@ pub fn install_initial_projection(
 
 /// The explicitly supplied account and local cache identity for one update.
 /// Group the details so authentication and publication use the same source.
+#[cfg(test)]
 pub struct UpdateRequest<'a, D: LoginDecryptor> {
     pub endpoint: &'a ServerEndpoint,
     pub expected_account: &'a str,
@@ -134,6 +136,7 @@ pub struct UpdateRequest<'a, D: LoginDecryptor> {
 /// has expired; the resulting encrypted snapshot is entirely local.
 ///
 /// This entrypoint is not called until real-server integration is proven.
+#[cfg(test)]
 pub fn refresh_explicit<D: LoginDecryptor>(
     transport: &ReadOnlySyncTransport,
     session: &mut RemoteSession,

@@ -80,18 +80,22 @@ impl LoginItem {
         &self.id
     }
 
+    #[cfg(test)]
     pub fn title(&self) -> &str {
         &self.title
     }
 
+    #[cfg(test)]
     pub fn uris(&self) -> &[String] {
         &self.uris
     }
 
+    #[cfg(test)]
     pub fn username(&self) -> &str {
         &self.username
     }
 
+    #[cfg(test)]
     pub fn password(&self) -> &str {
         self.password.as_str()
     }

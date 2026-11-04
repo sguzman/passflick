@@ -12,6 +12,7 @@ pub mod keywrap;
 #[cfg(test)]
 mod live_acceptance;
 pub mod pipeline;
+#[cfg(test)]
 pub mod session_cache;
 pub mod strict_json;
 pub mod sync_filter;

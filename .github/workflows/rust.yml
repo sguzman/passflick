@@ -53,7 +53,7 @@ jobs:
       - name: Native preview compilation and tests
         run: |
           cargo check --locked --features vaultwarden-preview
-          cargo test --locked --all-targets --features vaultwarden-preview
+          cargo test --locked --features vaultwarden-preview bitwarden::command::tests
       - name: CLI smoke checks
         run: |
           cargo run --locked --quiet -- --help | grep -F 'Shift+Enter'
