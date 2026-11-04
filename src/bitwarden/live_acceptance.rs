@@ -431,16 +431,16 @@ fn disposable_server_auth_sync_encrypted_offline() {
         // Separate executable invocations must cooperate via the SAME
         // session ring. The remote server is never contacted by these
         // commands: only the encrypted projection and local keywrap exist.
-        let invoke = |action: &str,
-                      input: &[(&str, &str)],
-                      success: bool,
-                      expected: &str| {
+        let invoke = |action: &str, input: &[(&str, &str)], success: bool, expected: &str| {
             super::terminal_acceptance::run_projection_cli(
                 binary, data, &legacy, action, input, success, expected,
             );
         };
         invoke(
-            "status", &[], true, "Offline projection not unlocked in this Linux keyring session.",
+            "status",
+            &[],
+            true,
+            "Offline projection not unlocked in this Linux keyring session.",
         );
         invoke(
             "unlock",
@@ -448,12 +448,20 @@ fn disposable_server_auth_sync_encrypted_offline() {
             true,
             "Offline projection unlocked: 2 login items.",
         );
-        invoke("status", &[], true, "Offline projection unlocked: 2 login items.");
+        invoke(
+            "status",
+            &[],
+            true,
+            "Offline projection unlocked: 2 login items.",
+        );
         invoke("lock", &[], true, "Offline projection manually locked.");
         invoke("status", &[], true, "Offline projection manually locked.");
         invoke(
             "unlock",
-            &[("Independent local projection passphrase: ", "fictional incorrect passphrase")],
+            &[(
+                "Independent local projection passphrase: ",
+                "fictional incorrect passphrase",
+            )],
             false,
             "offline projection keyring or cache authentication failed",
         );
@@ -464,7 +472,12 @@ fn disposable_server_auth_sync_encrypted_offline() {
             true,
             "Offline projection unlocked: 2 login items.",
         );
-        invoke("status", &[], true, "Last successful remote sync (Unix seconds):");
+        invoke(
+            "status",
+            &[],
+            true,
+            "Last successful remote sync (Unix seconds):",
+        );
         assert_eq!(fs::read(&devicepath).unwrap(), device);
         assert_eq!(fs::read(&legacy).unwrap(), original_legacy);
     }

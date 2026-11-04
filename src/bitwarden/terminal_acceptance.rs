@@ -190,7 +190,9 @@ fn run_arguments(
     );
     if let Some(expected) = expected_output {
         assert!(
-            transcript.windows(expected.len()).any(|part| part == expected.as_bytes()),
+            transcript
+                .windows(expected.len())
+                .any(|part| part == expected.as_bytes()),
             "projection CLI did not report expected safe status"
         );
     }
