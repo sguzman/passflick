@@ -476,14 +476,8 @@ mod tests {
             egui::Event::ModifiersChanged(egui::Modifiers::NONE),
         ];
         assert_eq!(enter_copy_action(&events), Some(true));
-        assert_eq!(
-            enter_copy_action(&[key(true, egui::Modifiers::NONE)]),
-            Some(false)
-        );
-        assert_eq!(
-            enter_copy_action(&[key(false, egui::Modifiers::SHIFT)]),
-            None
-        );
+        assert_eq!(enter_copy_action(&[key(true, egui::Modifiers::NONE)]), Some(false));
+        assert_eq!(enter_copy_action(&[key(false, egui::Modifiers::SHIFT)]), None);
     }
 
     #[test]
