@@ -48,13 +48,13 @@ fn scope(path: &Path) -> Result<(projection_identity::Identity, ProjectionScope)
     Ok((identity, scope))
 }
 
-fn unlock_with<S: SessionStore>(
+fn unlock_snapshot_with<S: SessionStore>(
     backend: &S,
     path: &Path,
     local_passphrase: &[u8],
-) -> Result<LocalState, OfflineError> {
+) -> Result<ProjectionSnapshot, OfflineError> {
     let (identity, scope) = scope(path)?;
-    let snapshot = session_cache::unlock(
+    session_cache::unlock(
         backend,
         &scope,
         &path.with_file_name("projection.pfkey"),
@@ -63,8 +63,26 @@ fn unlock_with<S: SessionStore>(
         identity.server(),
         identity.account(),
     )
-    .map_err(|_| OfflineError::Access)?;
+    .map_err(|_| OfflineError::Access)
+}
+
+fn unlock_with<S: SessionStore>(
+    backend: &S,
+    path: &Path,
+    local_passphrase: &[u8],
+) -> Result<LocalState, OfflineError> {
+    let snapshot = unlock_snapshot_with(backend, path, local_passphrase)?;
     Ok(LocalState::from_snapshot(&snapshot))
+}
+
+/// The GUI can unlock an existing authenticated projection with the same
+/// local-only kernel-keyring policy as the terminal command. No network,
+/// Vaultwarden master password or legacy vault is involved.
+pub(super) fn unlock_for_picker(
+    local_passphrase: &[u8],
+) -> Result<ProjectionSnapshot, OfflineError> {
+    let path = crate::paths::projection_path().map_err(|_| OfflineError::Identity)?;
+    unlock_snapshot_with(&KernelSessionStore, &path, local_passphrase)
 }
 
 fn status_with<S: SessionStore>(backend: &S, path: &Path) -> Result<LocalState, OfflineError> {

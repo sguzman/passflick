@@ -99,6 +99,7 @@ struct ProjectionPicker {
     snapshot: Option<ProjectionSnapshot>,
     site_query: Zeroizing<String>,
     username_query: Zeroizing<String>,
+    unlock_passphrase: Zeroizing<String>,
     rows: Vec<usize>,
     labels: HashMap<usize, Zeroizing<String>>,
     selected: usize,
@@ -119,6 +120,7 @@ impl ProjectionPicker {
             snapshot,
             site_query: Zeroizing::new(String::new()),
             username_query: Zeroizing::new(String::new()),
+            unlock_passphrase: Zeroizing::new(String::new()),
             rows,
             labels: HashMap::new(),
             selected: 0,
@@ -136,8 +138,19 @@ impl ProjectionPicker {
         self.labels.clear();
         self.site_query.zeroize();
         self.username_query.zeroize();
+        self.unlock_passphrase.zeroize();
         self.selected = 0;
         self.focused = false;
+    }
+
+    fn install_unlocked(&mut self, snapshot: ProjectionSnapshot) {
+        self.snapshot = Some(snapshot);
+        self.unlock_passphrase.zeroize();
+        self.notice = None;
+        self.error = None;
+        self.focused = false;
+        self.labels.clear();
+        self.update_matches();
     }
 
     fn update_matches(&mut self) {
@@ -164,9 +177,7 @@ impl ProjectionPicker {
             }
             Ok(true) if self.snapshot.is_none() => {
                 if let Ok(Some(snapshot)) = offline_command::read_for_picker() {
-                    self.snapshot = Some(snapshot);
-                    self.notice = None;
-                    self.update_matches();
+                    self.install_unlocked(snapshot);
                 }
             }
             Ok(true) => {}
@@ -252,6 +263,7 @@ impl eframe::App for ProjectionPicker {
         let toggle =
             ctx.input_mut(|input| input.consume_key(egui::Modifiers::CTRL, egui::Key::Space));
 
+        let mut request_unlock = false;
         egui::CentralPanel::default().show(ui, |ui| {
             ui.add_space(10.0);
             ui.horizontal(|ui| {
@@ -349,12 +361,34 @@ impl eframe::App for ProjectionPicker {
                         });
                 }
             } else {
-                ui.add_space(26.0);
-                ui.heading("Projection locked");
-                ui.label("No credentials were loaded into this window.");
+                ui.add_space(20.0);
+                ui.heading("Unlock offline projection");
                 ui.label(
-                    "Use 'passflick update' to create a preview snapshot, then run                      'passflick projection unlock' in this login session.",
+                    "Enter the independent local projection passphrase. No server connection is made.",
                 );
+                ui.label(
+                    egui::RichText::new(
+                        "First use? Run 'passflick update' to create a verified encrypted snapshot.",
+                    )
+                    .weak(),
+                );
+                ui.add_space(12.0);
+                let field = ui.add(
+                    egui::TextEdit::singleline(&mut *self.unlock_passphrase)
+                        .password(true)
+                        .hint_text("Local projection passphrase")
+                        .desired_width(f32::INFINITY),
+                );
+                if !self.focused {
+                    field.request_focus();
+                    self.focused = true;
+                }
+                let enter = ctx.input(|input| {
+                    crate::copy_shortcut::enter_copy_username(&input.events).is_some()
+                });
+                if ui.button("Unlock offline").clicked() || (field.has_focus() && enter) {
+                    request_unlock = true;
+                }
                 if let Some(notice) = self.notice {
                     ui.add_space(8.0);
                     ui.label(egui::RichText::new(notice).weak());
@@ -375,6 +409,21 @@ impl eframe::App for ProjectionPicker {
             );
         });
         ctx.set_theme(self.theme);
+        if request_unlock {
+            let result =
+                offline_command::unlock_for_picker(self.unlock_passphrase.as_bytes());
+            self.unlock_passphrase.zeroize();
+            match result {
+                Ok(snapshot) => self.install_unlocked(snapshot),
+                Err(_) => {
+                    self.error = Some("Offline unlock failed. Check the local passphrase and snapshot.");
+                    self.focused = false;
+                }
+            }
+            ctx.request_repaint();
+            // Enter used to unlock must never also copy the first password.
+            return;
+        }
         let action = ctx.input(|input| crate::copy_shortcut::enter_copy_username(&input.events));
         if let Some(username) = action {
             self.copy_selected(&ctx, username);
@@ -444,6 +493,24 @@ mod tests {
             ],
         )
         .unwrap()
+    }
+
+    #[test]
+    fn installing_unlocked_snapshot_clears_masked_input_and_resets_focus() {
+        let mut picker = ProjectionPicker::new(None, Some("Synthetic locked state"));
+        picker.unlock_passphrase.push_str("fictional local passphrase");
+        picker.error = Some("Synthetic failed unlock");
+        picker.focused = true;
+        picker.install_unlocked(fixture());
+        assert!(picker.snapshot.is_some());
+        assert_eq!(picker.rows.len(), 2);
+        assert!(picker.unlock_passphrase.is_empty());
+        assert!(picker.notice.is_none());
+        assert!(picker.error.is_none());
+        assert!(!picker.focused);
+        picker.clear_sensitive();
+        assert!(picker.snapshot.is_none());
+        assert!(picker.unlock_passphrase.is_empty());
     }
 
     #[test]
