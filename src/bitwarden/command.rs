@@ -6,6 +6,7 @@
 
 use std::fs::{self, DirBuilder, OpenOptions};
 use std::io::{Read, Write};
+use std::os::fd::AsRawFd;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -41,10 +42,53 @@ pub enum PreviewError {
     Local,
 }
 
+/// Prevent an input-echo race: rpassword prints before it disables echo.
+struct HiddenPromptTerminal {
+    tty: fs::File,
+    saved: libc::termios,
+}
+
+impl Drop for HiddenPromptTerminal {
+    fn drop(&mut self) {
+        // SAFETY: saved was initialized by tcgetattr on this live TTY.
+        unsafe {
+            libc::tcsetattr(self.tty.as_raw_fd(), libc::TCSAFLUSH, &self.saved);
+        }
+    }
+}
+
 fn masked(prompt: &str) -> Result<Zeroizing<String>, PreviewError> {
-    rpassword::prompt_password(prompt)
-        .map(Zeroizing::new)
-        .map_err(|_| PreviewError::Input)
+    let tty = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/tty")
+        .map_err(|_| PreviewError::Input)?;
+    let mut original = std::mem::MaybeUninit::<libc::termios>::uninit();
+    // SAFETY: the descriptor is an open terminal; original is writable storage.
+    if unsafe { libc::tcgetattr(tty.as_raw_fd(), original.as_mut_ptr()) } != 0 {
+        return Err(PreviewError::Input);
+    }
+    // SAFETY: tcgetattr successfully initialized the entire structure.
+    let original = unsafe { original.assume_init() };
+    let mut hidden = original;
+    hidden.c_lflag &= !(libc::ECHO | libc::ECHONL);
+    // SAFETY: hide input on this controlling TTY before printing any prompt.
+    if unsafe { libc::tcsetattr(tty.as_raw_fd(), libc::TCSAFLUSH, &hidden) } != 0 {
+        return Err(PreviewError::Input);
+    }
+    let mut protected = HiddenPromptTerminal {
+        tty,
+        saved: original,
+    };
+    protected
+        .tty
+        .write_all(prompt.as_bytes())
+        .and_then(|_| protected.tty.flush())
+        .map_err(|_| PreviewError::Input)?;
+    // rpassword's nested guard restores to the already-hidden mode.
+    // The outer guard restores the original terminal flags on every exit.
+    let password = rpassword::read_password().map_err(|_| PreviewError::Input)?;
+    Ok(Zeroizing::new(password))
 }
 
 /// The non-secret device identifier must survive explicit reauthentication.

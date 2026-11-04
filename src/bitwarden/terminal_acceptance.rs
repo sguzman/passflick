@@ -106,6 +106,23 @@ pub(super) fn run_cli(
                         .windows(prompt.len())
                         .any(|window| window == prompt.as_bytes())
                     {
+                        let mut current = std::mem::MaybeUninit::<libc::termios>::uninit();
+                        // SAFETY: master is the controlling PTY and current is
+                        // valid writable storage for tcgetattr.
+                        assert_eq!(
+                            unsafe {
+                                libc::tcgetattr(master.as_raw_fd(), current.as_mut_ptr())
+                            },
+                            0,
+                            "TTY state was unavailable"
+                        );
+                        // SAFETY: the preceding tcgetattr succeeded.
+                        let current = unsafe { current.assume_init() };
+                        assert_eq!(
+                            current.c_lflag & (libc::ECHO | libc::ECHONL),
+                            0,
+                            "a prompt appeared before terminal echo was disabled"
+                        );
                         master.write_all(reply.as_bytes()).unwrap();
                         master.write_all(b"\n").unwrap();
                         next += 1;
