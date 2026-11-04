@@ -143,6 +143,16 @@ impl ProjectionPicker {
         self.focused = false;
     }
 
+    /// A rejected passphrase must immediately restore focus to the same
+    /// masked editor. Waiting for a later frame to auto-focus can lose the
+    /// next native Wayland text sequence after Enter relinquishes focus.
+    fn deny_unlock(&mut self, ctx: &egui::Context, editor: egui::Id) {
+        self.unlock_passphrase.zeroize();
+        self.error = Some("Offline unlock failed. Check the local passphrase and snapshot.");
+        ctx.memory_mut(|memory| memory.request_focus(editor));
+        self.focused = true;
+    }
+
     fn install_unlocked(&mut self, snapshot: ProjectionSnapshot) {
         self.snapshot = Some(snapshot);
         self.unlock_passphrase.zeroize();
@@ -264,6 +274,7 @@ impl eframe::App for ProjectionPicker {
             ctx.input_mut(|input| input.consume_key(egui::Modifiers::CTRL, egui::Key::Space));
 
         let mut request_unlock = false;
+        let mut unlock_editor_id = None;
         egui::CentralPanel::default().show(ui, |ui| {
             ui.add_space(10.0);
             ui.horizontal(|ui| {
@@ -379,6 +390,7 @@ impl eframe::App for ProjectionPicker {
                         .hint_text("Local projection passphrase")
                         .desired_width(f32::INFINITY),
                 );
+                unlock_editor_id = Some(field.id);
                 if !self.focused {
                     field.request_focus();
                     self.focused = true;
@@ -420,9 +432,12 @@ impl eframe::App for ProjectionPicker {
             match result {
                 Ok(snapshot) => self.install_unlocked(snapshot),
                 Err(_) => {
-                    self.error =
-                        Some("Offline unlock failed. Check the local passphrase and snapshot.");
-                    self.focused = false;
+                    if let Some(editor) = unlock_editor_id {
+                        self.deny_unlock(&ctx, editor);
+                    } else {
+                        self.error = Some("Offline unlock failed. Check the local passphrase and snapshot.");
+                        self.focused = false;
+                    }
                 }
             }
             ctx.request_repaint();
@@ -518,6 +533,19 @@ mod tests {
         picker.clear_sensitive();
         assert!(picker.snapshot.is_none());
         assert!(picker.unlock_passphrase.is_empty());
+    }
+
+    #[test]
+    fn rejected_local_unlock_zeroizes_input_and_restores_masked_editor_focus() {
+        let ctx = egui::Context::default();
+        let editor = egui::Id::new("fictional-masked-editor");
+        let mut picker = ProjectionPicker::new(None, Some("Fictional locked snapshot"));
+        picker.unlock_passphrase.push_str("fictional wrong passphrase");
+        picker.deny_unlock(&ctx, editor);
+        assert!(picker.unlock_passphrase.is_empty());
+        assert!(picker.error.is_some());
+        assert!(picker.focused);
+        assert!(ctx.memory(|memory| memory.has_focus(editor)));
     }
 
     #[test]
