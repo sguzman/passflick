@@ -359,7 +359,8 @@ fn disposable_server_auth_sync_encrypted_offline() {
     assert_eq!(first_projection.account_id(), account);
     assert_eq!(first_projection.items().len(), 2);
     assert!(
-        fixture_server_cipher_state(&client, &url, bearer) == upstream_initial,
+        fixture_server_cipher_state(&client, &url, session.bearer_token().unwrap())
+            == upstream_initial,
         "native initial sync changed disposable upstream cipher state"
     );
 
