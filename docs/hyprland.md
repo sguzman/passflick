@@ -30,7 +30,18 @@ windowrulev2 = float, class:^(passflick)$
 windowrulev2 = center, class:^(passflick)$
 ```
 
-Only use the rule format supported by your compositor. Check the actual app ID through `hyprctl clients` if needed.
+The **Vaultwarden preview is a separate window class**: its Rust viewport declares the Wayland app ID `passflick-projection-preview`, whereas the historical default picker uses `passflick`. A float/center rule matching only `passflick` therefore does **not** cover the preview. On Hyprland versions supporting the Lua rule syntax above, add this opt-in rule *alongside* the historical rule:
+
+```lua
+hl.window_rule({
+  name = "passflick-projection-preview",
+  match = { class = "^(passflick-projection-preview)$" },
+  float = true,
+  center = true,
+})
+```
+
+Only use the syntax supported by your installed compositor. Confirm the **actual** `class` and focus behavior through `hyprctl clients`; do not claim that the preview has passed target-host validation. If your version uses hyprlang, adapt the preview class to the version-specific examples above.
 
 ## Summon shortcut
 
