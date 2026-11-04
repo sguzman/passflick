@@ -63,6 +63,29 @@ fn copy_value<'a>(
     Ok(value)
 }
 
+/// A selected remote ID alone does not guarantee the GUI's rendered row
+/// still represents the data about to be copied. A synchronous refresh can
+/// change an item without changing its upstream ID. Compare the original
+/// in-memory record to the newly authenticated one before touching clipboard.
+/// No password or URL bytes enter logs, labels, or error messages.
+fn selected_item_unchanged(
+    displayed: &ProjectionSnapshot,
+    current: &ProjectionSnapshot,
+    id: &str,
+) -> bool {
+    let previous = displayed.items().iter().find(|item| item.id() == id);
+    let updated = current.items().iter().find(|item| item.id() == id);
+    match (previous, updated) {
+        (Some(before), Some(after)) => {
+            before.title() == after.title()
+                && before.uris() == after.uris()
+                && before.username() == after.username()
+                && before.password() == after.password()
+        }
+        _ => false,
+    }
+}
+
 struct ProjectionPicker {
     snapshot: Option<ProjectionSnapshot>,
     site_query: Zeroizing<String>,
@@ -175,6 +198,10 @@ impl ProjectionPicker {
             let current = offline_command::read_for_picker()
                 .map_err(|_| "Projection locked or authentication failed.")?
                 .ok_or("Projection is locked; unlock it before copying.")?;
+            let displayed = self.snapshot.as_ref().ok_or("Projection window is locked.")?;
+            if !selected_item_unchanged(displayed, &current, &id) {
+                return Err("Offline record changed during this picker session. Close and reopen before copying.");
+            }
             let text = copy_value(&current, &id, username)?;
             crate::clipboard::copy_sensitive(text)
                 .map_err(|_| "Sensitive Wayland clipboard copy failed.")
@@ -435,6 +462,49 @@ mod tests {
         app.clear_sensitive();
         assert!(app.snapshot.is_none());
         assert!(app.site_query.is_empty());
+    }
+
+    #[test]
+    fn changed_selected_record_does_not_copy_unseen_updated_secrets() {
+        let viewed = fixture();
+        assert!(selected_item_unchanged(&viewed, &viewed, "distinct-a"));
+        assert!(!selected_item_unchanged(&viewed, &viewed, "unrelated-id"));
+
+        let changed = ProjectionSnapshot::new(
+            viewed.server_identity().to_owned(),
+            viewed.account_id().to_owned(),
+            viewed.last_success_at() + 1,
+            vec![
+                LoginItem::new(
+                    "distinct-a".to_owned(),
+                    "Example".to_owned(),
+                    vec!["https://example.test/login".to_owned()],
+                    "alice".to_owned(),
+                    "fictional-NEW-password".to_owned(),
+                    None,
+                ),
+                LoginItem::new(
+                    "distinct-z".to_owned(),
+                    "Example".to_owned(),
+                    vec!["https://example.test/login".to_owned()],
+                    "alice".to_owned(),
+                    "fictional-password".to_owned(),
+                    None,
+                ),
+            ],
+        )
+        .unwrap();
+        assert!(!selected_item_unchanged(&viewed, &changed, "distinct-a"));
+        assert!(selected_item_unchanged(&viewed, &changed, "distinct-z"));
+
+        let removed = ProjectionSnapshot::new(
+            viewed.server_identity().to_owned(),
+            viewed.account_id().to_owned(),
+            viewed.last_success_at() + 1,
+            vec![],
+        )
+        .unwrap();
+        assert!(!selected_item_unchanged(&viewed, &removed, "distinct-a"));
     }
 
     #[test]
