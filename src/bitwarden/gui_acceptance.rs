@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 const WINDOW: &str = "Passflick.*Offline Projection";
 const TIMEOUT: Duration = Duration::from_secs(30);
 
-struct PickerChild(Child);
+struct PickerChild(Child, PathBuf);
 
 impl Drop for PickerChild {
     fn drop(&mut self) {
@@ -21,30 +21,26 @@ impl Drop for PickerChild {
     }
 }
 
-fn launch(
-    binary: &Path,
-    data: &Path,
-    legacy: &Path,
-    clipboard: &Path,
-    bin: &Path,
-) -> PickerChild {
+fn launch(binary: &Path, data: &Path, legacy: &Path, clipboard: &Path, bin: &Path) -> PickerChild {
     let mut path = OsString::from(bin.as_os_str());
     path.push(":");
     path.push(std::env::var_os("PATH").unwrap_or_default());
+    let diagnostics = bin.parent().unwrap().join("picker.stderr");
     let child = Command::new(binary)
         .args(["projection", "picker"])
         .env("XDG_DATA_HOME", data)
         .env("PASSFLICK_VAULT", legacy)
         .env("PASSFLICK_TEST_CLIPBOARD", clipboard)
         .env("WINIT_UNIX_BACKEND", "x11")
+        .env("XDG_RUNTIME_DIR", bin.parent().unwrap().join("runtime"))
         .env("LIBGL_ALWAYS_SOFTWARE", "1")
         .env("PATH", path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::from(fs::File::create(&diagnostics).unwrap()))
         .spawn()
         .expect("fictional projection picker could not launch");
-    PickerChild(child)
+    PickerChild(child, diagnostics)
 }
 
 fn xdo(args: &[&str]) {
@@ -73,10 +69,20 @@ fn visible_window(child: &mut PickerChild) {
                 return;
             }
         }
-        assert!(
-            child.0.try_wait().unwrap().is_none(),
-            "fictional projection picker exited before its window opened"
-        );
+        if let Some(status) = child.0.try_wait().unwrap() {
+            // Only output fixed diagnostics, never captured stderr: a future
+            // error could quote the user's path or a fictional credential.
+            let captured = fs::read(&child.1).unwrap_or_default();
+            let lower = String::from_utf8_lossy(&captured).to_lowercase();
+            panic!(
+                "fictional projection picker exited before window: {status}; x11={}, xkb={}, gl={}, runtime={}, panic={}",
+                lower.contains("x11") || lower.contains("display"),
+                lower.contains("xkb"),
+                lower.contains("glx") || lower.contains("egl") || lower.contains("opengl"),
+                lower.contains("xdg_runtime_dir"),
+                lower.contains("panicked")
+            );
+        }
         thread::sleep(Duration::from_millis(100));
     }
     panic!("fictional projection picker never displayed a window");
@@ -86,7 +92,10 @@ fn await_exit(child: &mut PickerChild) {
     let deadline = Instant::now() + TIMEOUT;
     while Instant::now() < deadline {
         if let Some(exit) = child.0.try_wait().unwrap() {
-            assert!(exit.success(), "fictional projection picker exited unsuccessfully");
+            assert!(
+                exit.success(),
+                "fictional projection picker exited unsuccessfully"
+            );
             return;
         }
         thread::sleep(Duration::from_millis(100));
@@ -113,18 +122,19 @@ fn write_stub(dir: &Path) -> PathBuf {
 /// Exercises a populated snapshot through separate GUI processes and the
 /// original sensitive Wayland copy adapter's CLI contract (stubbed on X11).
 /// The private GUI reads local encrypted data, not network data.
-pub(super) fn run(
-    binary: &Path,
-    data: &Path,
-    legacy: &Path,
-    first_id: &str,
-    second_id: &str,
-) {
-    assert!(std::env::var_os("DISPLAY").is_some(), "Xvfb DISPLAY required");
+pub(super) fn run(binary: &Path, data: &Path, legacy: &Path, first_id: &str, second_id: &str) {
+    assert!(
+        std::env::var_os("DISPLAY").is_some(),
+        "Xvfb DISPLAY required"
+    );
     assert!(binary.is_absolute());
     let dir = data.join("gui-acceptance");
     fs::create_dir(&dir).unwrap();
     fs::set_permissions(&dir, Permissions::from_mode(0o700)).unwrap();
+    let runtime = dir.join("runtime");
+    fs::create_dir(&runtime).unwrap();
+    fs::set_permissions(&runtime, Permissions::from_mode(0o700)).unwrap();
+    xdo(&["getdisplaygeometry"]);
     let bin = write_stub(&dir);
     let clipboard = dir.join("fictional-clipboard");
 
@@ -146,7 +156,13 @@ pub(super) fn run(
     {
         let mut child = launch(binary, data, legacy, &clipboard, &bin);
         visible_window(&mut child);
-        xdo(&["type", "--clearmodifiers", "--delay", "20", "Synthetic Vaultwarden"]);
+        xdo(&[
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "20",
+            "Synthetic Vaultwarden",
+        ]);
         xdo(&["key", "--clearmodifiers", "Return"]);
         await_exit(&mut child);
     }
