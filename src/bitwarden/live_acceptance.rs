@@ -682,7 +682,6 @@ fn disposable_server_auth_sync_encrypted_offline() {
             .is_err(),
         "an invalid TOTP must never authenticate"
     );
-    let current_code = synthetic_totp(&totp_key, 0);
     #[cfg(feature = "vaultwarden-preview")]
     {
         // The real CLI must recognize the challenge and request the second
@@ -694,6 +693,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
         let legacy = dir.join("vault.passvault");
         let devicepath = dir.join("projection.pfdevice");
         let original = fs::read(&devicepath).unwrap();
+        let current_code = synthetic_totp(&totp_key, 0);
         super::terminal_acceptance::run_cli(
             Path::new(&binary),
             data,
@@ -727,6 +727,9 @@ fn disposable_server_auth_sync_encrypted_offline() {
         assert_eq!(actual.items().len(), 1);
         assert_eq!(actual.items()[0].password(), "edited 🔐 contraseña 🧪");
     }
+    // Recompute after the PTY command: real authentication and key derivation
+    // may span a TOTP boundary, invalidating a previously captured code.
+    let current_code = synthetic_totp(&totp_key, 0);
     let (mfa_session, _) = transport
         .authenticate(
             &endpoint,

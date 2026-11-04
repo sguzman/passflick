@@ -101,11 +101,11 @@ pub(super) fn run_cli(
                     "unexpected terminal output volume"
                 );
                 transcript.extend_from_slice(&buf[..n]);
-                if let Some((prompt, reply)) = answers.get(next) {
-                    if transcript
+                if let Some((prompt, reply)) = answers.get(next)
+                    && transcript
                         .windows(prompt.len())
                         .any(|window| window == prompt.as_bytes())
-                    {
+                {
                         let mut current = std::mem::MaybeUninit::<libc::termios>::uninit();
                         // SAFETY: master is the controlling PTY and current is
                         // valid writable storage for tcgetattr.
@@ -126,7 +126,6 @@ pub(super) fn run_cli(
                         master.write_all(reply.as_bytes()).unwrap();
                         master.write_all(b"\n").unwrap();
                         next += 1;
-                    }
                 }
             }
             Err(error) if error.raw_os_error() == Some(libc::EIO) => break,
