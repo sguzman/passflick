@@ -541,20 +541,11 @@ mod tests {
             .unwrap()
         };
 
-        let other_account =
-            other_source(viewed.server_identity(), "another-fictional-account");
-        assert!(!selected_item_unchanged(
-            &viewed,
-            &other_account,
-            "distinct-a"
-        ));
+        let other_account = other_source(viewed.server_identity(), "another-fictional-account");
+        assert!(!selected_item_unchanged(&viewed, &other_account, "distinct-a"));
         let other_server =
             other_source("https://different-vault.example.test/", viewed.account_id());
-        assert!(!selected_item_unchanged(
-            &viewed,
-            &other_server,
-            "distinct-a"
-        ));
+        assert!(!selected_item_unchanged(&viewed, &other_server, "distinct-a"));
     }
 
     #[test]
