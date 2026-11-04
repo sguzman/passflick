@@ -480,45 +480,71 @@ fn disposable_server_auth_sync_encrypted_offline() {
         );
         // Read and copy actual fictional remote credentials through a real
         // egui process under Xvfb, then lock that process from another CLI.
-        super::gui_acceptance::run(
-            binary,
-            data,
-            &legacy,
-            &first_id,
-            &second_id,
-            || {
-                // Only the disposable fixture client may edit the upstream
-                // synthetic Vaultwarden account. A separate real Passflick
-                // update process publishes the replacement local snapshot
-                // while the GUI remains open with the *old* selected row.
-                let selected_id = if first_id < second_id {
-                    &first_id
-                } else {
-                    &second_id
-                };
-                fixture_update_password(
-                    &client,
-                    &url,
-                    bearer,
-                    &account,
-                    selected_id,
-                    "fictional-UPDATED-password",
-                );
-                super::terminal_acceptance::run_cli(
-                    binary,
-                    data,
-                    &legacy,
-                    &[
-                        ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
-                        ("Vaultwarden login email: ", EMAIL),
-                        ("Vaultwarden master password: ", PASSWORD),
-                        ("Custom trusted CA PEM path (empty for system trust): ", ca),
-                        ("Local projection passphrase: ", local),
-                    ],
-                    true,
-                );
-            },
-        );
+        super::gui_acceptance::run(binary, data, &legacy, &first_id, &second_id, || {
+            // Only the disposable fixture client may edit the upstream
+            // synthetic Vaultwarden account. A separate real Passflick
+            // update process publishes the replacement local snapshot
+            // while the GUI remains open with the *old* selected row.
+            let selected_id = if first_id < second_id {
+                &first_id
+            } else {
+                &second_id
+            };
+            fixture_update_password(
+                &client,
+                &url,
+                bearer,
+                &account,
+                selected_id,
+                "fictional-UPDATED-password",
+            );
+            super::terminal_acceptance::run_cli(
+                binary,
+                data,
+                &legacy,
+                &[
+                    ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                    ("Vaultwarden login email: ", EMAIL),
+                    ("Vaultwarden master password: ", PASSWORD),
+                    ("Custom trusted CA PEM path (empty for system trust): ", ca),
+                    ("Local projection passphrase: ", local),
+                ],
+                true,
+            );
+            // A failed refresh or lost session would also block copy, so
+            // explicitly verify the new secret really exists in the
+            // authenticated snapshot *and* the keyring remains unlocked.
+            let updated_key = keywrap::unlock(
+                &keypath,
+                LOCAL_PASSPHRASE,
+                endpoint.server_identity(),
+                &account,
+            )
+            .unwrap();
+            let updated = cache_store::load(
+                &path,
+                &updated_key,
+                endpoint.server_identity(),
+                &account,
+            )
+            .unwrap();
+            assert_eq!(updated.items().len(), 2);
+            let selected = updated
+                .items()
+                .iter()
+                .find(|item| item.id() == selected_id.as_str())
+                .expect("selected fictional upstream record disappeared");
+            assert_eq!(selected.password(), "fictional-UPDATED-password");
+            super::terminal_acceptance::run_projection_cli(
+                binary,
+                data,
+                &legacy,
+                "status",
+                &[],
+                true,
+                "Offline projection unlocked: 2 login items.",
+            );
+        });
         assert_eq!(fs::read(&devicepath).unwrap(), device);
         assert_eq!(fs::read(&legacy).unwrap(), original_legacy);
     }
