@@ -3326,8 +3326,10 @@ dependencies = [
  "argon2 0.6.0",
  "chacha20poly1305",
  "csv",
+ "data-encoding",
  "eframe",
  "getrandom 0.4.3",
+ "hmac 0.12.1",
  "libc",
  "linux-keyutils",
  "rbw",
@@ -3336,6 +3338,7 @@ dependencies = [
  "secret-service",
  "serde",
  "serde_json",
+ "sha1",
  "thiserror 2.0.21",
  "zeroize",
 ]

@@ -7,6 +7,11 @@ use std::fs::{self, DirBuilder};
 use std::os::unix::fs::DirBuilderExt;
 use std::path::{Path, PathBuf};
 
+use data_encoding::BASE32;
+use hmac::{Hmac, Mac};
+use sha1::Sha1;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use rbw::api::KdfType;
 use rbw::cipherstring::CipherString;
 use rbw::identity::Identity;
@@ -15,6 +20,7 @@ use reqwest::{Certificate, Url, blocking::Client, redirect::Policy};
 use serde_json::{Value, json};
 
 use super::{
+    auth::{AuthError, MfaChallenge, MfaProvider},
     cache_store::{self, CacheKey},
     transport::{ReadOnlySyncTransport, ServerEndpoint},
     update::{self, UpdateRequest},
@@ -233,6 +239,75 @@ fn fixture_cipher_action(client: &Client, base: &str, bearer: &str, id: &str, ac
     );
 }
 
+/// HOTP/TOTP generator used only for disposable test-account provisioning.
+fn synthetic_totp(secret_base32: &str, step_offset: i64) -> String {
+    let key = BASE32
+        .decode(secret_base32.as_bytes())
+        .expect("server's synthetic TOTP key must be Base32");
+    let seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("test clock predates epoch")
+        .as_secs();
+    let counter = i64::try_from(seconds / 30).unwrap() + step_offset;
+    assert!(counter >= 0);
+    let mut mac = Hmac::<Sha1>::new_from_slice(&key).unwrap();
+    mac.update(&(counter as u64).to_be_bytes());
+    let digest = mac.finalize().into_bytes();
+    let offset = usize::from(digest[19] & 0x0f);
+    let binary = (u32::from(digest[offset] & 0x7f) << 24)
+        | (u32::from(digest[offset + 1]) << 16)
+        | (u32::from(digest[offset + 2]) << 8)
+        | u32::from(digest[offset + 3]);
+    format!("{:06}", binary % 1_000_000)
+}
+
+/// The fixture-only client enables TOTP on its disposable test account.
+/// No Passflick method can modify the server's MFA configuration.
+fn fixture_enable_totp(client: &Client, base: &str, bearer: &str) -> String {
+    let id = identity();
+    let request = client
+        .post(route(base, "api/two-factor/get-authenticator"))
+        .bearer_auth(bearer)
+        .json(&json!({
+            "masterPasswordHash": rbw::base64::encode(id.master_password_hash.hash())
+        }))
+        .send()
+        .expect("synthetic MFA enrollment request failed");
+    assert!(
+        request.status().is_success(),
+        "synthetic MFA enrollment request status {}",
+        request.status()
+    );
+    let reply: Value = request.json().expect("MFA enrollment reply was not JSON");
+    let key = reply["authenticator"]["key"]
+        .as_str()
+        .expect("MFA enrollment did not contain a TOTP key")
+        .to_owned();
+    let verification = reply["userVerificationToken"]
+        .as_str()
+        .expect("MFA enrollment did not contain verification token");
+    // Activate on the previous 30-second step. The server accepts one
+    // step of drift, so the immediately following login can use the
+    // current step, which is strictly greater than the activation step.
+    let activation = synthetic_totp(&key, -1);
+    let response = client
+        .post(route(base, "api/two-factor/authenticator"))
+        .bearer_auth(bearer)
+        .json(&json!({
+            "key": key,
+            "token": activation,
+            "userVerificationToken": verification
+        }))
+        .send()
+        .expect("synthetic TOTP activation failed");
+    assert!(
+        response.status().is_success(),
+        "synthetic TOTP activation status {}",
+        response.status()
+    );
+    key
+}
+
 #[test]
 #[ignore = "requires disposable localhost Vaultwarden over synthetic trusted TLS"]
 fn disposable_server_auth_sync_encrypted_offline() {
@@ -418,5 +493,56 @@ fn disposable_server_auth_sync_encrypted_offline() {
         )
         .is_err()
     );
-    assert_eq!(fs::read(path).unwrap(), last_good_bytes);
+    assert_eq!(fs::read(&path).unwrap(), last_good_bytes);
+
+    // Enable TOTP through *fixture-only* account administration. Native
+    // Passflick must report the MFA challenge instead of silently logging in.
+    let bearer = session.bearer_token().unwrap();
+    let totp_key = fixture_enable_totp(&client, &url, bearer);
+    assert!(matches!(
+        transport.authenticate(
+            &endpoint,
+            EMAIL,
+            PASSWORD,
+            "passflick-second-device",
+            None,
+        ),
+        Err(AuthError::MfaRequired)
+    ));
+    assert!(
+        transport
+            .authenticate(
+                &endpoint,
+                EMAIL,
+                PASSWORD,
+                "passflick-second-device",
+                Some(MfaChallenge {
+                    provider: MfaProvider::Totp,
+                    code: "invalid-otp",
+                })
+            )
+            .is_err(),
+        "an invalid TOTP must never authenticate"
+    );
+    let current_code = synthetic_totp(&totp_key, 0);
+    let (mfa_session, _) = transport
+        .authenticate(
+            &endpoint,
+            EMAIL,
+            PASSWORD,
+            "passflick-second-device",
+            Some(MfaChallenge {
+                provider: MfaProvider::Totp,
+                code: &current_code,
+            }),
+        )
+        .expect("native TOTP authentication failed against disposable server");
+    let renewed = transport
+        .fetch_sync(
+            &endpoint,
+            mfa_session.bearer_token().expect("MFA session is expired"),
+            &account,
+        )
+        .expect("native read-only sync after TOTP authentication failed");
+    assert!(renewed["ciphers"].as_array().is_some());
 }
