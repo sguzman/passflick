@@ -103,6 +103,34 @@ fn await_exit(child: &mut PickerChild) {
     panic!("fictional projection picker did not close after successful copy/Escape");
 }
 
+/// Wait for the GUI's potentially expensive authenticated local key derivation
+/// to finish before delivering another keypress. This checks only a fixed
+/// non-secret status prefix, never prints the local passphrase or clipboard.
+fn await_gui_unlock(binary: &Path, data: &Path, legacy: &Path, child: &mut PickerChild) {
+    let deadline = Instant::now() + TIMEOUT;
+    while Instant::now() < deadline {
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "fictional picker exited while unlocking"
+        );
+        let output = Command::new(binary)
+            .args(["projection", "status"])
+            .env("XDG_DATA_HOME", data)
+            .env("PASSFLICK_VAULT", legacy)
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .output()
+            .expect("local projection status command failed to start");
+        if output.status.success()
+            && output.stdout.starts_with(b"Offline projection unlocked:")
+        {
+            return;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    panic!("masked GUI unlock did not establish an authenticated local session");
+}
+
 fn write_stub(dir: &Path) -> PathBuf {
     let bin = dir.join("bin");
     fs::create_dir(&bin).unwrap();
@@ -250,7 +278,9 @@ pub(super) fn run(
             "fictional wrong offline passphrase",
         ]);
         xdo(&["key", "--clearmodifiers", "Return"]);
-        thread::sleep(Duration::from_millis(350));
+        // A rejected passphrase also performs expensive key derivation.
+        // Allow that interaction to complete before editing the same field.
+        thread::sleep(Duration::from_secs(3));
         assert!(
             child.0.try_wait().unwrap().is_none(),
             "wrong local passphrase unexpectedly closed the picker"
@@ -258,6 +288,15 @@ pub(super) fn run(
         assert!(
             !clipboard.exists(),
             "wrong local passphrase triggered a clipboard copy"
+        );
+        super::terminal_acceptance::run_projection_cli(
+            binary,
+            data,
+            legacy,
+            "status",
+            &[],
+            true,
+            "Offline projection manually locked.",
         );
 
         xdo(&[
@@ -268,17 +307,16 @@ pub(super) fn run(
             local_passphrase,
         ]);
         xdo(&["key", "--clearmodifiers", "Return"]);
-        thread::sleep(Duration::from_millis(400));
-        assert!(
-            child.0.try_wait().unwrap().is_none(),
-            "in-picker unlock also triggered a credential copy"
-        );
+        // No second Enter until the independently authenticated keyring
+        // status confirms that the GUI has completed unlock.
+        await_gui_unlock(binary, data, legacy, &mut child);
         assert!(
             !clipboard.exists(),
             "Enter for GUI unlock unexpectedly wrote to clipboard"
         );
 
-        // A second Enter intentionally copies the selected current secret.
+        // Focus the newly visible credential search field, then copy.
+        visible_window(&mut child);
         xdo(&["key", "--clearmodifiers", "Return"]);
         await_exit(&mut child);
     }
