@@ -126,7 +126,12 @@ impl ProjectionScope {
         })
     }
 
-    fn validate_binding(&self, path: &Path, server: &str, account: &str) -> Result<(), AccessError> {
+    fn validate_binding(
+        &self,
+        path: &Path,
+        server: &str,
+        account: &str,
+    ) -> Result<(), AccessError> {
         let expected = Self::new(path, server, account)?;
         if self.key != expected.key || self.lock != expected.lock {
             return Err(AccessError::InvalidScope);
