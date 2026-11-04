@@ -6,6 +6,7 @@
 //! The commit boundary runs only after *all* admitted logins decrypt and the
 //! complete projection validates. A failed refresh never changes the cache.
 
+use std::ffi::OsStr;
 use std::path::Path;
 
 use serde_json::Value;
@@ -14,6 +15,7 @@ use super::{
     auth::{AuthError, RemoteSession},
     cache_store::{self, CacheError, CacheKey},
     envelope::{self, SyncEnvelopeError},
+    keywrap::{self, KeywrapError},
     pipeline::{self, LoginDecryptor, ProjectionPipelineError},
     transport::{ReadOnlySyncTransport, ServerEndpoint, TransportError},
 };
@@ -31,6 +33,10 @@ pub enum UpdateError {
     Projection(#[from] ProjectionPipelineError),
     #[error("encrypted local projection was not published: {0}")]
     Cache(#[from] CacheError),
+    #[error("local projection keywrap setup failed: {0}")]
+    Keywrap(#[from] KeywrapError),
+    #[error("initial projection paths must be the designated sibling files")]
+    InvalidSetupPaths,
 }
 
 /// Commit a *complete*, previously authenticated sync response. This
@@ -73,6 +79,43 @@ pub fn prepare_initial_sync<D: LoginDecryptor>(
     let admitted = envelope::admit(&payload, None)?;
     pipeline::project_full_sync(admitted, endpoint.server_identity(), timestamp, decoder)
         .map_err(UpdateError::from)
+}
+
+/// Install a previously authenticated, fully decrypted initial snapshot.
+/// A preexisting projection is never overwritten. If an interruption leaves
+/// only an encrypted keywrap, an explicit retry with the SAME local passphrase
+/// can authenticate that envelope and complete the initial install.
+/// This does not contact the server, modify a legacy vault, or enable the
+/// production picker. Caller owns masked/confirmed passphrase entry.
+pub fn install_initial_projection(
+    snapshot: &ProjectionSnapshot,
+    snapshot_path: &Path,
+    keywrap_path: &Path,
+    local_passphrase: &[u8],
+) -> Result<usize, UpdateError> {
+    if snapshot_path.file_name() != Some(OsStr::new("projection.pfsnapshot"))
+        || keywrap_path != snapshot_path.with_file_name("projection.pfkey")
+    {
+        return Err(UpdateError::InvalidSetupPaths);
+    }
+    cache_store::ensure_initial_absent(snapshot_path)?;
+    let key = match keywrap::initialize(
+        keywrap_path,
+        local_passphrase,
+        snapshot.server_identity(),
+        snapshot.account_id(),
+    ) {
+        Ok(key) => key,
+        Err(KeywrapError::AlreadyExists) => keywrap::unlock(
+            keywrap_path,
+            local_passphrase,
+            snapshot.server_identity(),
+            snapshot.account_id(),
+        )?,
+        Err(error) => return Err(error.into()),
+    };
+    cache_store::publish_initial(snapshot_path, &key, snapshot)?;
+    Ok(snapshot.items().len())
 }
 
 /// The explicitly supplied account and local cache identity for one update.
@@ -235,6 +278,105 @@ mod tests {
             "test-account",
         )
         .unwrap()
+    }
+
+    #[test]
+    fn initial_install_is_create_only_and_keeps_legacy_ciphertext_untouched() {
+        let dir = PrivateTestDir::new();
+        let legacy = dir.0.join("vault.passvault");
+        fs::write(&legacy, b"fictional legacy ciphertext unchanged").unwrap();
+        let initial = ProjectionSnapshot::new(
+            endpoint().server_identity().to_owned(),
+            "test-account".to_owned(),
+            100,
+            vec![],
+        )
+        .unwrap();
+        let keywrap_path = dir.0.join("projection.pfkey");
+        assert!(matches!(
+            install_initial_projection(
+                &initial,
+                &dir.cache(),
+                &dir.0.join("foreign.pfkey"),
+                b"fictional independent local passphrase",
+            ),
+            Err(UpdateError::InvalidSetupPaths)
+        ));
+        assert!(!keywrap_path.exists());
+        assert_eq!(
+            install_initial_projection(
+                &initial,
+                &dir.cache(),
+                &keywrap_path,
+                b"fictional independent local passphrase",
+            )
+            .unwrap(),
+            0
+        );
+        let first_snapshot = fs::read(dir.cache()).unwrap();
+        let first_keywrap = fs::read(&keywrap_path).unwrap();
+        assert!(matches!(
+            install_initial_projection(
+                &initial,
+                &dir.cache(),
+                &keywrap_path,
+                b"fictional independent local passphrase",
+            ),
+            Err(UpdateError::Cache(CacheError::AlreadyExists))
+        ));
+        assert_eq!(fs::read(dir.cache()).unwrap(), first_snapshot);
+        assert_eq!(fs::read(&keywrap_path).unwrap(), first_keywrap);
+        assert_eq!(fs::read(legacy).unwrap(), b"fictional legacy ciphertext unchanged");
+    }
+
+    #[test]
+    fn interrupted_initial_setup_recovers_with_original_local_passphrase_only() {
+        let dir = PrivateTestDir::new();
+        let snapshot = ProjectionSnapshot::new(
+            endpoint().server_identity().to_owned(),
+            "test-account".to_owned(),
+            200,
+            vec![],
+        )
+        .unwrap();
+        let wrapped = dir.0.join("projection.pfkey");
+        let passphrase = b"fictional independent local passphrase";
+        let initial_key = keywrap::initialize(
+            &wrapped,
+            passphrase,
+            snapshot.server_identity(),
+            snapshot.account_id(),
+        )
+        .unwrap();
+        drop(initial_key);
+        assert!(!dir.cache().exists());
+        let old_keywrap = fs::read(&wrapped).unwrap();
+        assert!(matches!(
+            install_initial_projection(&snapshot, &dir.cache(), &wrapped, b"incorrect passphrase"),
+            Err(UpdateError::Keywrap(KeywrapError::AuthenticationFailed))
+        ));
+        assert_eq!(fs::read(&wrapped).unwrap(), old_keywrap);
+        assert!(!dir.cache().exists());
+        assert_eq!(
+            install_initial_projection(&snapshot, &dir.cache(), &wrapped, passphrase).unwrap(),
+            0
+        );
+        let recovered = keywrap::unlock(
+            &wrapped,
+            passphrase,
+            snapshot.server_identity(),
+            snapshot.account_id(),
+        )
+        .unwrap();
+        let reopened = cache_store::load(
+            &dir.cache(),
+            &recovered,
+            snapshot.server_identity(),
+            snapshot.account_id(),
+        )
+        .unwrap();
+        assert_eq!(reopened.last_success_at(), 200);
+        assert_eq!(fs::read(&wrapped).unwrap(), old_keywrap);
     }
 
     #[test]

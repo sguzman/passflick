@@ -46,6 +46,8 @@ pub enum CacheError {
     UnsafeFile,
     #[error("snapshot is missing")]
     Missing,
+    #[error("initial projection already exists; refusing to replace it")]
+    AlreadyExists,
     #[error("snapshot is too large")]
     Oversized,
     #[error("snapshot format or encryption header is invalid")]
@@ -222,6 +224,33 @@ pub fn load(
     Ok(snapshot)
 }
 
+/// Preflight for creating a new projection. This must run before a local
+/// keywrap is created, so an existing snapshot cannot produce an orphaned
+/// replacement key. Publication rechecks under the writer lock.
+pub fn ensure_initial_absent(path: &Path) -> Result<(), CacheError> {
+    private_parent(path)?;
+    if read_private(path)?.is_some() {
+        return Err(CacheError::AlreadyExists);
+    }
+    Ok(())
+}
+
+/// Initial publication is create-only even when the caller has the key.
+/// It cannot replace any existing ciphertext, including corrupt ciphertext.
+pub fn publish_initial(
+    path: &Path,
+    key: &CacheKey,
+    snapshot: &ProjectionSnapshot,
+) -> Result<(), CacheError> {
+    private_parent(path)?;
+    let _guard = write_lock::acquire(path).map_err(|_| CacheError::Io)?;
+    if read_private(path)?.is_some() {
+        return Err(CacheError::AlreadyExists);
+    }
+    let encoded = encrypt_snapshot(snapshot, key)?;
+    write_atomic(path, &encoded, false)
+}
+
 /// Atomic full replacement. Both upstream and local snapshot identities
 /// must match; a corrupt or unreadable existing snapshot is NOT overwritten.
 /// A stale timestamp is also rejected. No legacy vault path is accepted.
@@ -244,10 +273,10 @@ pub fn publish(
     }
 
     let encoded = encrypt_snapshot(snapshot, key)?;
-    write_atomic(path, &encoded)
+    write_atomic(path, &encoded, true)
 }
 
-fn write_atomic(path: &Path, encrypted: &[u8]) -> Result<(), CacheError> {
+fn write_atomic(path: &Path, encrypted: &[u8], allow_replace: bool) -> Result<(), CacheError> {
     let parent = path.parent().ok_or(CacheError::InvalidPath)?;
     let mut nonce = [0_u8; 8];
     getrandom::fill(&mut nonce).map_err(|_| CacheError::Io)?;
@@ -278,6 +307,7 @@ fn write_atomic(path: &Path, encrypted: &[u8]) -> Result<(), CacheError> {
             {
                 return Err(CacheError::UnsafeFile);
             }
+            Ok(_) if !allow_replace => return Err(CacheError::AlreadyExists),
             Ok(_) => fs::rename(&temp_path, path)?,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 fs::hard_link(&temp_path, path)?;
@@ -461,6 +491,32 @@ mod tests {
         let current = load(&path, &key(), "https://vault.example.test", "one").unwrap();
         assert_eq!(current.items().len(), 0);
         assert_eq!(current.last_success_at(), 201);
+    }
+
+    #[test]
+    fn initial_publication_refuses_to_replace_even_a_valid_existing_projection() {
+        let dir = TestDir::new();
+        let path = dir.cache();
+        ensure_initial_absent(&path).unwrap();
+        publish_initial(
+            &path,
+            &key(),
+            &snapshot("https://vault.example.test", "account", 100, "initial"),
+        )
+        .unwrap();
+        let first = fs::read(&path).unwrap();
+        assert_eq!(ensure_initial_absent(&path), Err(CacheError::AlreadyExists));
+        assert_eq!(
+            publish_initial(
+                &path,
+                &key(),
+                &snapshot("https://vault.example.test", "account", 101, "replacement")
+            ),
+            Err(CacheError::AlreadyExists)
+        );
+        assert_eq!(fs::read(&path).unwrap(), first);
+        let read = load(&path, &key(), "https://vault.example.test", "account").unwrap();
+        assert_eq!(read.items()[0].password(), "initial");
     }
 
     #[test]
