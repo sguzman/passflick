@@ -726,6 +726,11 @@ fn disposable_server_auth_sync_encrypted_offline() {
 
     // Simulate local token expiry and exercise the *actual* remote refresh
     // grant from the explicit-update entrypoint, with no upstream cipher write.
+    // The GUI acceptance above legitimately changes one fictional password
+    // through the *fixture writer*, so compare with the server state after
+    // that intentional edit rather than with the original two-item baseline.
+    let upstream_before_token_refresh =
+        fixture_server_cipher_state(&client, &url, session.bearer_token().unwrap());
     session.expire_for_test();
     assert!(session.bearer_token().is_none());
     assert_eq!(
@@ -747,7 +752,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
     assert!(session.bearer_token().is_some());
     let bearer = session.bearer_token().unwrap();
     assert!(
-        fixture_server_cipher_state(&client, &url, bearer) == upstream_initial,
+        fixture_server_cipher_state(&client, &url, bearer) == upstream_before_token_refresh,
         "native refresh grant or read-only update mutated upstream ciphers"
     );
 
