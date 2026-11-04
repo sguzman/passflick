@@ -190,27 +190,17 @@ grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
 projection_cli status >"$root/lock.status"
 grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
 
-# A known fictional sensitive selection must be preserved by *both* unlock
-# attempts. This proves that a focused masked field's Enter is not a copy.
+# Isolate initial native Wayland text entry from post-error recovery.
+# This stage deliberately tests a fresh correct-only masked unlock; the
+# wrong-passphrase/recovery sequence remains covered under disposable Xvfb.
+# No passphrase contents may appear in CI logs or clipboard.
 printf 'fictional pre-unlock clipboard marker' >"$root/expected"
 env -u DISPLAY wl-copy --sensitive <"$root/expected"
 assert_clipboard before-unlock
 
-# This variant intentionally leaves the masked field's own initial focus
-# intact; it does not click a compositor-relative guessed pixel coordinate.
+# Preserve the locked editor's initial auto-focus. This probe first verifies
+# that X11-injected text actually reaches the native Wayland password field.
 launch locked
-xdotool type --clearmodifiers --delay 15 -- 'fictional wrong native passphrase'
-xdotool key --clearmodifiers Return
-# The bogus KDF must finish before we type into the now-cleared masked input.
-sleep 3
-[[ -n "$picker_pid" ]] && kill -0 "$picker_pid"
-projection_cli status >"$root/lock.status"
-grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
-assert_clipboard wrong-unlock
-
-# Replace any still-visible fictional input without a pointer click.
-# The GUI requests password-field focus after a rejected local unlock.
-xdotool key --clearmodifiers ctrl+a
 xdotool type --clearmodifiers --delay 15 -- "$PASSFLICK_NATIVE_LOCAL_PASSPHRASE"
 xdotool key --clearmodifiers Return
 # Wait for an independent authenticated keyring status, not a blind sleep.
@@ -244,4 +234,4 @@ fi
 assert_clipboard after-unlock-copy
 env -u DISPLAY wl-copy --clear >/dev/null 2>&1 || true
 
-echo 'Native Wayland populated and masked-unlock picker passed exact fictional clipboard and lock checks.'
+echo 'Native Wayland populated and fresh masked-unlock picker passed exact fictional clipboard checks.'
