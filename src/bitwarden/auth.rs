@@ -114,7 +114,7 @@ struct RefreshGrant<'a> {
     refresh_token: &'a str,
 }
 
-#[derive(Deserialize, Zeroize)]
+#[derive(Deserialize)]
 struct LoginReply {
     access_token: String,
     refresh_token: String,
@@ -125,11 +125,13 @@ struct LoginReply {
 
 impl Drop for LoginReply {
     fn drop(&mut self) {
-        self.zeroize();
+        self.access_token.zeroize();
+        self.refresh_token.zeroize();
+        self.encrypted_user_key.zeroize();
     }
 }
 
-#[derive(Deserialize, Zeroize)]
+#[derive(Deserialize)]
 struct RefreshReply {
     access_token: String,
     refresh_token: String,
@@ -138,7 +140,8 @@ struct RefreshReply {
 
 impl Drop for RefreshReply {
     fn drop(&mut self) {
-        self.zeroize();
+        self.access_token.zeroize();
+        self.refresh_token.zeroize();
     }
 }
 
