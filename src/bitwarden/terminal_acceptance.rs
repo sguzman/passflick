@@ -110,9 +110,7 @@ pub(super) fn run_cli(
                     // SAFETY: master is the controlling PTY and current is
                     // valid writable storage for tcgetattr.
                     assert_eq!(
-                        unsafe {
-                            libc::tcgetattr(master.as_raw_fd(), current.as_mut_ptr())
-                        },
+                        unsafe { libc::tcgetattr(master.as_raw_fd(), current.as_mut_ptr()) },
                         0,
                         "TTY state was unavailable"
                     );
