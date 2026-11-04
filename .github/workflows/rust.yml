@@ -54,6 +54,8 @@ jobs:
         run: |
           cargo check --locked --features vaultwarden-preview
           cargo test --locked --features vaultwarden-preview bitwarden::command::tests
+          cargo test --locked --features vaultwarden-preview bitwarden::projection_identity::tests
+          cargo test --locked --features vaultwarden-preview bitwarden::offline_command::tests
       - name: CLI smoke checks
         run: |
           cargo run --locked --quiet -- --help | grep -F 'Shift+Enter'
