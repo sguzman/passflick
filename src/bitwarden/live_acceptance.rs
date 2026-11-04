@@ -71,7 +71,7 @@ fn identity() -> Identity {
         EMAIL,
         &Password::new(password),
         KdfType::Pbkdf2,
-        1500,
+        100_000,
         None,
         None,
     )
@@ -113,7 +113,7 @@ fn register(client: &Client, base: &str) {
         "masterPasswordHash": rbw::base64::encode(identity.master_password_hash.hash()),
         "key": wrapped,
         "kdf": 0,
-        "kdfIterations": 1500
+        "kdfIterations": 100_000
     });
     let response = client
         .post(route(base, "identity/accounts/register/finish"))
