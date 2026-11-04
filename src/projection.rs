@@ -80,17 +80,17 @@ impl LoginItem {
         &self.id
     }
 
-    #[cfg(any(test, feature = "vaultwarden-preview"))]
+    #[cfg(test)]
     pub fn title(&self) -> &str {
         &self.title
     }
 
-    #[cfg(any(test, feature = "vaultwarden-preview"))]
+    #[cfg(test)]
     pub fn uris(&self) -> &[String] {
         &self.uris
     }
 
-    #[cfg(any(test, feature = "vaultwarden-preview"))]
+    #[cfg(test)]
     pub fn username(&self) -> &str {
         &self.username
     }
