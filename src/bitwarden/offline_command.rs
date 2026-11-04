@@ -78,8 +78,9 @@ fn status_with<S: SessionStore>(backend: &S, path: &Path) -> Result<LocalState, 
 }
 
 fn lock_with<S: SessionStore>(backend: &S, path: &Path) -> Result<(), OfflineError> {
-    let (_, scope) = scope(path)?;
-    session_cache::lock(backend, &scope).map_err(|_| OfflineError::Access)
+    let (identity, scope) = scope(path)?;
+    session_cache::lock(backend, &scope, path, identity.server(), identity.account())
+        .map_err(|_| OfflineError::Access)
 }
 
 /// Returns only non-secret aggregate metadata. Status never decrypts a local
