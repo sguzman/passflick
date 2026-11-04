@@ -18,7 +18,7 @@ use std::path::Path;
 
 use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
-    aead::{AeadInPlace, KeyInit},
+    aead::{AeadInOut, KeyInit},
 };
 use zeroize::Zeroizing;
 
@@ -119,7 +119,9 @@ fn encrypt_snapshot(
     let header = header()?;
     let mut ciphertext = snapshot.encode_json()?;
     let cipher = key.cipher()?;
-    let nonce = XNonce::from_slice(&header[12..HEADER_LEN]);
+    let mut nonce_bytes = [0_u8; 24];
+    nonce_bytes.copy_from_slice(&header[12..HEADER_LEN]);
+    let nonce = XNonce::from(nonce_bytes);
     cipher
         .encrypt_in_place(nonce, &header, &mut *ciphertext)
         .map_err(|_| CacheError::AuthenticationFailed)?;
@@ -144,7 +146,9 @@ fn decrypt_snapshot(raw: &[u8], key: &CacheKey) -> Result<ProjectionSnapshot, Ca
         return Err(CacheError::InvalidFormat);
     }
     let cipher = key.cipher()?;
-    let nonce = XNonce::from_slice(&raw[12..HEADER_LEN]);
+    let mut nonce_bytes = [0_u8; 24];
+    nonce_bytes.copy_from_slice(&raw[12..HEADER_LEN]);
+    let nonce = XNonce::from(nonce_bytes);
     let mut plaintext = Zeroizing::new(raw[HEADER_LEN..].to_vec());
     cipher
         .decrypt_in_place(nonce, &raw[..HEADER_LEN], &mut *plaintext)
@@ -153,7 +157,7 @@ fn decrypt_snapshot(raw: &[u8], key: &CacheKey) -> Result<ProjectionSnapshot, Ca
 }
 
 fn read_private(path: &Path) -> Result<Option<Zeroizing<Vec<u8>>>, CacheError> {
-    let mut handle = match OpenOptions::new()
+    let handle = match OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(path)

@@ -22,8 +22,6 @@ use super::{
 pub enum UpdateError {
     #[error("authentication failed: {0}")]
     Auth(#[from] AuthError),
-    #[error("remote session has expired")]
-    SessionExpired,
     #[error("read-only server sync failed: {0}")]
     Transport(#[from] TransportError),
     #[error("complete vault admission failed: {0}")]
@@ -54,32 +52,47 @@ pub fn commit_full_sync<D: LoginDecryptor>(
     Ok(count)
 }
 
+/// The explicitly supplied account and local cache identity for one update.
+/// Group the details so authentication and publication use the same source.
+pub struct UpdateRequest<'a, D: LoginDecryptor> {
+    pub endpoint: &'a ServerEndpoint,
+    pub expected_account: &'a str,
+    pub timestamp: u64,
+    pub decoder: &'a D,
+    pub key: &'a CacheKey,
+    pub path: &'a Path,
+}
+
 /// The single networked update entrypoint. Ordinary launch/search/copy must
 /// never call it. Refresh tokens are touched only if the in-memory bearer
 /// has expired; the resulting encrypted snapshot is entirely local.
+///
+/// This entrypoint is not called until real-server integration is proven.
+#[expect(dead_code, reason = "isolated until disposable Vaultwarden acceptance")]
 pub fn refresh_explicit<D: LoginDecryptor>(
     transport: &ReadOnlySyncTransport,
-    endpoint: &ServerEndpoint,
     session: &mut RemoteSession,
-    expected_account: &str,
-    timestamp: u64,
-    decoder: &D,
-    key: &CacheKey,
-    path: &Path,
+    request: UpdateRequest<'_, D>,
 ) -> Result<usize, UpdateError> {
     if session.bearer_token().is_none() {
-        transport.refresh_session(endpoint, session)?;
+        transport.refresh_session(request.endpoint, session)?;
     }
-    let bearer = session.bearer_token().ok_or(UpdateError::SessionExpired)?;
-    let payload = transport.fetch_sync(endpoint, bearer, expected_account)?;
+    let bearer = session
+        .bearer_token()
+        .ok_or(AuthError::InvalidResponse)?;
+    let payload = transport.fetch_sync(
+        request.endpoint,
+        bearer,
+        request.expected_account,
+    )?;
     commit_full_sync(
         &payload,
-        endpoint,
-        expected_account,
-        timestamp,
-        decoder,
-        key,
-        path,
+        request.endpoint,
+        request.expected_account,
+        request.timestamp,
+        request.decoder,
+        request.key,
+        request.path,
     )
 }
 
