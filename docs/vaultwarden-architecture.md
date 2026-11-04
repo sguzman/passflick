@@ -66,6 +66,12 @@ Future session-keyring and picker-only APIs remain test-only so the preview bina
 
 **Still pending:** persistent device ID, end-to-end terminal/Wayland acceptance, real kernel lock and logout, offline picker integration and migration safety. See the new D01 checkpoint in ROADMAP.md; it has **no additional weighted completion credit yet**.
 
+## Stable preview device enrollment identifier (2026-11-04)
+
+The opt-in native updater now owns a stable per-install 32-character hexadecimal device identifier stored in owner-only `projection.pfdevice` alongside the distinct local projection files, **never** in the legacy encrypted vault. All existing-device reads enforce private regular-file ownership, 0600 permissions, one hard link and exact byte-level format; an invalid identity fails closed rather than rotating. Initial directory validation and file persistence occur before the remote login handshake.
+
+[CI-verified on `0a46e07`](https://github.com/sguzman/passflick/commit/0a46e075eaa71a0cf19b160d2a7c19eeb3717228): [Rust and preview tests](https://github.com/sguzman/passflick/actions/runs/41768931554), [GUI](https://github.com/sguzman/passflick/actions/runs/41768931435), [disposable Vaultwarden](https://github.com/sguzman/passflick/actions/runs/41768931335). Device enrollment/revocation under a real host and production local lock/offline picker integration remain outside this milestone.
+
 ## Responsibilities
 
 | Component | Owns | Does not own |

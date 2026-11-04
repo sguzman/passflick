@@ -80,6 +80,14 @@ The preview uses a server-issued account ID from a complete authenticated sync a
 
 [Rust CI on `89e93fa`: 206 baseline + 2 preview tests, strict Clippy and smoke](https://github.com/sguzman/passflick/actions/runs/41767285591), [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41767285478) and [disposable HTTPS Vaultwarden](https://github.com/sguzman/passflick/actions/runs/41767285570) are green. D01 remains active and uncredited pending default-build, terminal and lifecycle acceptance.
 
+## Stable private preview device identity (2026-11-04)
+
+The opt-in `passflick update` preview now reuses one random device identifier across explicit login attempts rather than creating a new remote device on every invocation. It stores **only** a 32-character lowercase-hex identifier (not a token, password or key) in owner-only `projection.pfdevice` beside the independently encrypted snapshot and keywrap. The 0600 file is created without replacing existing data and synchronized; opening rejects symlinks, extra hard links, wrong ownership/permissions, invalid lengths and malformed content. An unsafe file causes failure rather than silent ID rotation.
+
+Synthetic tests cover stable reuse and preservation of the legacy encrypted file, plus malformed, symlink, hardlink and permission rejection. [Rust: 206 baseline + 4 preview tests, both strict Clippy configurations](https://github.com/sguzman/passflick/actions/runs/41768931554), [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41768931435), and [disposable Vaultwarden](https://github.com/sguzman/passflick/actions/runs/41768931335) are green on [`0a46e07`](https://github.com/sguzman/passflick/commit/0a46e075eaa71a0cf19b160d2a7c19eeb3717228).
+
+This demonstrates local ID persistence **only**; target-host enrollment, remote device revocation, logout, actual session-keyring policy and production migration still require their own acceptance. No user accounts were used in CI.
+
 ## Native Bitwarden crypto and token lifecycle boundaries (test-only)
 
 The adapter currently uses the pinned MIT `rbw` Rust library for master-password KDF, wrapped user key, type-2 ciphertext decoding and HMAC verification. Since the library's verifier assumes a fixed 32-byte decoded MAC, Passflick rejects malformed decoded lengths, missing MAC, incorrect IV length and non-block-aligned ciphertext **before** dispatching to it. Error types must remain non-secret and failed candidate updates must never mutate the prior encrypted cache.
