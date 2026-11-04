@@ -225,8 +225,9 @@ pub(crate) fn publish_candidate(
     // another account. Older preview snapshots may acquire the sidecar only
     // after their old ciphertext has authenticated successfully.
     match projection_identity::read(&identity_path) {
-        Ok(found) if found.server() == candidate.server_identity()
-            && found.account() == candidate.account_id() => {}
+        Ok(found)
+            if found.server() == candidate.server_identity()
+                && found.account() == candidate.account_id() => {}
         Ok(_) => return Err(PreviewError::Local),
         Err(IdentityError::Missing) => {}
         Err(_) => return Err(PreviewError::Local),
@@ -239,8 +240,7 @@ pub(crate) fn publish_candidate(
             local_passphrase,
         )
         .map_err(|_| PreviewError::Local)?;
-        projection_identity::ensure(&identity_path, candidate)
-            .map_err(|_| PreviewError::Local)?;
+        projection_identity::ensure(&identity_path, candidate).map_err(|_| PreviewError::Local)?;
         return Ok(count);
     }
     let key = keywrap::unlock(
@@ -260,8 +260,7 @@ pub(crate) fn publish_candidate(
     )
     .map_err(|_| PreviewError::Local)?;
     cache_store::publish(snapshot_path, &key, candidate).map_err(|_| PreviewError::Local)?;
-    projection_identity::ensure(&identity_path, candidate)
-        .map_err(|_| PreviewError::Local)?;
+    projection_identity::ensure(&identity_path, candidate).map_err(|_| PreviewError::Local)?;
     Ok(candidate.items().len())
 }
 

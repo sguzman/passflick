@@ -69,13 +69,7 @@ fn unlock_with<S: SessionStore>(
 
 fn status_with<S: SessionStore>(backend: &S, path: &Path) -> Result<LocalState, OfflineError> {
     let (identity, scope) = scope(path)?;
-    match session_cache::cached_read(
-        backend,
-        &scope,
-        path,
-        identity.server(),
-        identity.account(),
-    ) {
+    match session_cache::cached_read(backend, &scope, path, identity.server(), identity.account()) {
         Ok(Some(snapshot)) => Ok(LocalState::from_snapshot(&snapshot)),
         Ok(None) => Ok(LocalState::SessionMissing),
         Err(AccessError::Locked) => Ok(LocalState::Locked),
@@ -214,31 +208,62 @@ mod tests {
         let fixture = Fixture::new();
         fixture.install();
         let store = FakeStore::default();
-        assert_eq!(status_with(&store, &fixture.path()).unwrap(), LocalState::SessionMissing);
+        assert_eq!(
+            status_with(&store, &fixture.path()).unwrap(),
+            LocalState::SessionMissing
+        );
         assert_eq!(
             unlock_with(&store, &fixture.path(), b"incorrect local passphrase"),
             Err(OfflineError::Access)
         );
-        assert_eq!(status_with(&store, &fixture.path()).unwrap(), LocalState::SessionMissing);
         assert_eq!(
-            unlock_with(&store, &fixture.path(), b"fictional separate local passphrase").unwrap(),
-            LocalState::Open { items: 1, timestamp: 1_800_000_000 }
+            status_with(&store, &fixture.path()).unwrap(),
+            LocalState::SessionMissing
+        );
+        assert_eq!(
+            unlock_with(
+                &store,
+                &fixture.path(),
+                b"fictional separate local passphrase"
+            )
+            .unwrap(),
+            LocalState::Open {
+                items: 1,
+                timestamp: 1_800_000_000
+            }
         );
         assert_eq!(
             status_with(&store, &fixture.path()).unwrap(),
-            LocalState::Open { items: 1, timestamp: 1_800_000_000 }
+            LocalState::Open {
+                items: 1,
+                timestamp: 1_800_000_000
+            }
         );
         lock_with(&store, &fixture.path()).unwrap();
-        assert_eq!(status_with(&store, &fixture.path()).unwrap(), LocalState::Locked);
+        assert_eq!(
+            status_with(&store, &fixture.path()).unwrap(),
+            LocalState::Locked
+        );
         assert_eq!(
             unlock_with(&store, &fixture.path(), b"incorrect local passphrase"),
             Err(OfflineError::Access)
         );
-        assert_eq!(status_with(&store, &fixture.path()).unwrap(), LocalState::Locked);
-        unlock_with(&store, &fixture.path(), b"fictional separate local passphrase").unwrap();
         assert_eq!(
             status_with(&store, &fixture.path()).unwrap(),
-            LocalState::Open { items: 1, timestamp: 1_800_000_000 }
+            LocalState::Locked
+        );
+        unlock_with(
+            &store,
+            &fixture.path(),
+            b"fictional separate local passphrase",
+        )
+        .unwrap();
+        assert_eq!(
+            status_with(&store, &fixture.path()).unwrap(),
+            LocalState::Open {
+                items: 1,
+                timestamp: 1_800_000_000
+            }
         );
     }
 
@@ -249,25 +274,36 @@ mod tests {
         let store = FakeStore::default();
         let identity_path = fixture.0.join("projection.pfidentity");
         fs::remove_file(&identity_path).unwrap();
-        assert_eq!(status_with(&store, &fixture.path()), Err(OfflineError::Identity));
         assert_eq!(
-            unlock_with(&store, &fixture.path(), b"fictional separate local passphrase"),
+            status_with(&store, &fixture.path()),
             Err(OfflineError::Identity)
         );
-        let mut wrong = snapshot();
+        assert_eq!(
+            unlock_with(
+                &store,
+                &fixture.path(),
+                b"fictional separate local passphrase"
+            ),
+            Err(OfflineError::Identity)
+        );
+        let current = snapshot();
         // Replacing the missing locator with a second authenticated account
         // must be impossible without a full successful remote update.
         let mismatched = ProjectionSnapshot::new(
-            wrong.server_identity().to_owned(),
+            current.server_identity().to_owned(),
             "different-account".to_owned(),
-            wrong.last_success_at(),
+            current.last_success_at(),
             vec![],
-        ).unwrap();
+        )
+        .unwrap();
         projection_identity::ensure(&identity_path, &mismatched).unwrap();
         assert_eq!(
-            unlock_with(&store, &fixture.path(), b"fictional separate local passphrase"),
+            unlock_with(
+                &store,
+                &fixture.path(),
+                b"fictional separate local passphrase"
+            ),
             Err(OfflineError::Access)
         );
-        wrong.items().len(); // Keep no password-bearing values in test diagnostics.
     }
 }

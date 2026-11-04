@@ -81,7 +81,9 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
         }
         #[cfg(feature = "vaultwarden-preview")]
         Some("projection") => {
-            let operation = args.next().ok_or("projection requires unlock, lock or status")?;
+            let operation = args
+                .next()
+                .ok_or("projection requires unlock, lock or status")?;
             no_extra_args(&mut args)?;
             bitwarden::offline_command::run(&operation)?;
         }

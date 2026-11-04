@@ -9,13 +9,13 @@ pub mod command;
 pub mod decryptor;
 pub mod envelope;
 pub mod keywrap;
-#[cfg(feature = "vaultwarden-preview")]
-pub mod projection_identity;
-#[cfg(feature = "vaultwarden-preview")]
-pub mod offline_command;
 #[cfg(test)]
 mod live_acceptance;
+#[cfg(feature = "vaultwarden-preview")]
+pub mod offline_command;
 pub mod pipeline;
+#[cfg(feature = "vaultwarden-preview")]
+pub mod projection_identity;
 #[cfg(any(test, feature = "vaultwarden-preview"))]
 pub mod session_cache;
 pub mod strict_json;

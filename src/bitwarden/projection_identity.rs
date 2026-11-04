@@ -71,10 +71,7 @@ fn check_path(path: &Path) -> Result<(), IdentityError> {
     }
     let parent = path.parent().ok_or(IdentityError::Unsafe)?;
     let meta = fs::symlink_metadata(parent).map_err(|_| IdentityError::Unsafe)?;
-    if !meta.is_dir()
-        || !owned_by_current_user(&meta)
-        || meta.permissions().mode() & 0o077 != 0
-    {
+    if !meta.is_dir() || !owned_by_current_user(&meta) || meta.permissions().mode() & 0o077 != 0 {
         return Err(IdentityError::Unsafe);
     }
     Ok(())
@@ -258,7 +255,10 @@ mod tests {
             Err(IdentityError::Mismatch)
         );
         assert_eq!(fs::read(&path).unwrap(), before);
-        assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(
+            fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
     }
 
     #[test]
