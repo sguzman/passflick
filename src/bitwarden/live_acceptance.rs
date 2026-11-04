@@ -147,15 +147,8 @@ fn initial_account_id(client: &Client, base: &str, bearer: &str) -> String {
         .to_owned()
 }
 
-fn provision_cipher(
-    client: &Client,
-    base: &str,
-    bearer: &str,
-    account: &str,
-    secret: &str,
-) -> String {
-    // Provisioning writes are confined to the disposable test-only server.
-    let body = json!({
+fn fixture_cipher_payload(account: &str, secret: &str) -> Value {
+    json!({
         "encryptedFor": account,
         "type": 1,
         "name": encrypted("Synthetic Vaultwarden Login"),
@@ -170,7 +163,18 @@ fn provision_cipher(
                 {"uri":encrypted("https://alternative.example.test/two")}
             ]
         }
-    });
+    })
+}
+
+fn provision_cipher(
+    client: &Client,
+    base: &str,
+    bearer: &str,
+    account: &str,
+    secret: &str,
+) -> String {
+    // Only this synthetic fixture client can mutate the disposable server.
+    let body = fixture_cipher_payload(account, secret);
     let response = client
         .post(route(base, "api/ciphers"))
         .bearer_auth(bearer)
@@ -187,6 +191,46 @@ fn provision_cipher(
         .as_str()
         .expect("created cipher missing upstream ID")
         .to_owned()
+}
+
+fn fixture_update_password(
+    client: &Client,
+    base: &str,
+    bearer: &str,
+    account: &str,
+    id: &str,
+    new_secret: &str,
+) {
+    let route = format!("api/ciphers/{id}");
+    let response = client
+        .put(route(base, &route))
+        .bearer_auth(bearer)
+        .json(&fixture_cipher_payload(account, new_secret))
+        .send()
+        .expect("disposable password edit request failed");
+    assert!(
+        response.status().is_success(),
+        "disposable password edit status {}",
+        response.status()
+    );
+}
+
+fn fixture_cipher_action(client: &Client, base: &str, bearer: &str, id: &str, action: &str) {
+    assert!(
+        matches!(action, "archive" | "unarchive" | "delete"),
+        "only fixture lifecycle actions are allowed"
+    );
+    let endpoint = format!("api/ciphers/{id}/{action}");
+    let response = client
+        .put(route(base, &endpoint))
+        .bearer_auth(bearer)
+        .send()
+        .expect("disposable lifecycle request failed");
+    assert!(
+        response.status().is_success(),
+        "disposable lifecycle action status {}",
+        response.status()
+    );
 }
 
 #[test]
@@ -250,6 +294,131 @@ fn disposable_server_auth_sync_encrypted_offline() {
     let secrets: Vec<_> = offline.items().iter().map(|item| item.password()).collect();
     assert!(secrets.contains(&"  🗝️ contraseña  "));
     assert!(secrets.contains(&"second secret"));
-    let ciphertext = fs::read(path).unwrap();
+    let ciphertext = fs::read(&path).unwrap();
     assert!(!ciphertext.windows(6).any(|w| w == b"second"));
+
+    // Simulate local token expiry and exercise the *actual* remote refresh
+    // grant from the explicit-update entrypoint, with no upstream cipher write.
+    session.expire_for_test();
+    assert!(session.bearer_token().is_none());
+    assert_eq!(
+        update::refresh_explicit(
+            &transport,
+            &mut session,
+            UpdateRequest {
+                endpoint: &endpoint,
+                expected_account: &account,
+                timestamp: 1_800_000_002,
+                decoder: &decoder,
+                key: &cache_key,
+                path: &path,
+            },
+        )
+        .expect("real refresh-token grant or refreshed /sync failed"),
+        2
+    );
+    assert!(session.bearer_token().is_some());
+    let bearer = session.bearer_token().unwrap();
+
+    // All mutations below are made exclusively by the *fixture provisioner*.
+    // Passflick only fetches a complete, read-only sync after each mutation.
+    fixture_update_password(
+        &client,
+        &url,
+        bearer,
+        &account,
+        &first_id,
+        "edited 🔐 contraseña 🧪",
+    );
+    fixture_cipher_action(&client, &url, bearer, &second_id, "archive");
+    assert_eq!(
+        update::refresh_explicit(
+            &transport,
+            &mut session,
+            UpdateRequest {
+                endpoint: &endpoint,
+                expected_account: &account,
+                timestamp: 1_800_000_003,
+                decoder: &decoder,
+                key: &cache_key,
+                path: &path,
+            },
+        )
+        .expect("refresh after edit and archive failed"),
+        1
+    );
+    let edited = cache_store::load(&path, &cache_key, endpoint.server_identity(), &account)
+        .expect("changed snapshot could not be reopened offline");
+    assert_eq!(edited.items()[0].id(), first_id);
+    assert_eq!(edited.items()[0].password(), "edited 🔐 contraseña 🧪");
+
+    let bearer = session.bearer_token().unwrap();
+    fixture_cipher_action(&client, &url, bearer, &second_id, "unarchive");
+    assert_eq!(
+        update::refresh_explicit(
+            &transport,
+            &mut session,
+            UpdateRequest {
+                endpoint: &endpoint,
+                expected_account: &account,
+                timestamp: 1_800_000_004,
+                decoder: &decoder,
+                key: &cache_key,
+                path: &path,
+            },
+        )
+        .expect("refresh after restore failed"),
+        2
+    );
+    let restored = cache_store::load(&path, &cache_key, endpoint.server_identity(), &account)
+        .expect("restored snapshot could not be reopened offline");
+    assert!(restored.items().iter().any(|item| item.id() == second_id));
+
+    let bearer = session.bearer_token().unwrap();
+    fixture_cipher_action(&client, &url, bearer, &second_id, "delete");
+    assert_eq!(
+        update::refresh_explicit(
+            &transport,
+            &mut session,
+            UpdateRequest {
+                endpoint: &endpoint,
+                expected_account: &account,
+                timestamp: 1_800_000_005,
+                decoder: &decoder,
+                key: &cache_key,
+                path: &path,
+            },
+        )
+        .expect("refresh after soft deletion failed"),
+        1
+    );
+    let final_snapshot = cache_store::load(
+        &path,
+        &cache_key,
+        endpoint.server_identity(),
+        &account,
+    )
+    .expect("final projection could not be reopened offline");
+    assert_eq!(final_snapshot.items()[0].id(), first_id);
+    assert_eq!(final_snapshot.items()[0].password(), "edited 🔐 contraseña 🧪");
+
+    // A real authenticated response with the wrong account binding must not
+    // overwrite the last successful encrypted snapshot.
+    let last_good_bytes = fs::read(&path).unwrap();
+    assert!(
+        update::refresh_explicit(
+            &transport,
+            &mut session,
+            UpdateRequest {
+                endpoint: &endpoint,
+                expected_account: "another-fictional-account",
+                timestamp: 1_800_000_006,
+                decoder: &decoder,
+                key: &cache_key,
+                path: &path,
+            },
+        )
+        .is_err()
+    );
+    assert_eq!(fs::read(path).unwrap(), last_good_bytes);
 }

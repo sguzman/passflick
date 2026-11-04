@@ -156,6 +156,13 @@ impl RemoteSession {
         (Instant::now() < self.expires_at).then_some(self.access_token.as_str())
     }
 
+    /// Simulate access-token expiry without sleeping in disposable fixture tests.
+    /// No production caller can influence the token's expiration clock.
+    #[cfg(test)]
+    pub(crate) fn expire_for_test(&mut self) {
+        self.expires_at = Instant::now();
+    }
+
     fn new(reply: &mut LoginReply) -> Result<Self, AuthError> {
         let expires_at = token_expiration(reply.expires_in)?;
         Ok(Self {
