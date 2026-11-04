@@ -121,9 +121,7 @@ fn await_gui_unlock(binary: &Path, data: &Path, legacy: &Path, child: &mut Picke
             .stderr(Stdio::null())
             .output()
             .expect("local projection status command failed to start");
-        if output.status.success()
-            && output.stdout.starts_with(b"Offline projection unlocked:")
-        {
+        if output.status.success() && output.stdout.starts_with(b"Offline projection unlocked:") {
             return;
         }
         thread::sleep(Duration::from_millis(100));
