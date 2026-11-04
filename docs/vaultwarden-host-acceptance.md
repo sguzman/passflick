@@ -1,6 +1,6 @@
 # Vaultwarden projection — native Wayland host acceptance
 
-**Status: not passed.** This is an acceptance specification, not an instruction to migrate live credentials. The opt-in `vaultwarden-preview` picker currently has disposable Vaultwarden / X11 coverage; populated native Wayland clipboard acceptance is pending in [GitHub Actions](https://github.com/sguzman/passflick/actions/workflows/vaultwarden-disposable.yml). The historical default picker must remain installed and usable until all gates pass.
+**Target-host acceptance: not yet passed.** This is an acceptance specification, not an instruction to migrate live credentials. The opt-in `vaultwarden-preview` picker has **passed** [disposable Vaultwarden/native Weston clipboard acceptance](https://github.com/sguzman/passflick/actions/runs/41893572619), and a real fictional masked GUI unlock has passed under Xvfb. This is **not** acceptance on the actual EndeavourOS/Hyprland login session. The historical default picker must remain usable until the target-host and migration gates pass.
 
 ## Fixture isolation before every test
 
@@ -21,6 +21,7 @@
 ## Offline, locking and refresh
 
 - With the disposable Vaultwarden server offline, the most recently verified encrypted snapshot remains readable **only** after the appropriate local unlock; the UI labels its sync age and that offline access may be stale. A corrupt or absent snapshot fails closed.
+- In the **locked GUI**, type the independent local passphrase into the masked field and press Enter. A wrong passphrase must not copy, close, or clear a manual-lock denial. A correct local passphrase must restore the authenticated snapshot **without a network request or a copy on that Enter event**; only a new, deliberate Enter should copy the fictional credential. This sequence passed in disposable Xvfb CI; repeat it on the actual Wayland target.
 - From a separate CLI process, run `passflick projection lock` while the populated GUI is open; the GUI must stop copying and clear displayed credentials. A failed unlock must not remove manual-lock denial; an explicit correct local unlock restores access.
 - Edit a fictional password remotely, then explicitly refresh with `passflick update`. A previously open picker must refuse to copy the unseen changed value even if the upstream ID matches. Server/account identity swaps must not authorize a colliding item ID.
 - Test archive/deletion, failed network/TLS/MFA, malformed sync, concurrent update/lock and interrupted write. Failures must preserve the last good encrypted snapshot, with no stale data represented as live server state.
