@@ -354,6 +354,7 @@ mod tests {
     fn offline_unlock_cache_manual_lock_and_explicit_reunlock() {
         let (dir, scope) = fixture();
         let backend = Fake::default();
+        assert!(!session_present(&backend, &scope).unwrap());
         assert!(
             cached_read(&backend, &scope, &dir.snapshot(), SERVER, ACCOUNT)
                 .unwrap()
@@ -370,11 +371,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(value.items()[0].password(), "synthetic-secret");
+        assert!(session_present(&backend, &scope).unwrap());
         let cached = cached_read(&backend, &scope, &dir.snapshot(), SERVER, ACCOUNT)
             .unwrap()
             .unwrap();
         assert_eq!(cached.items()[0].id(), "separate-server-id");
         lock(&backend, &scope, &dir.snapshot(), SERVER, ACCOUNT).unwrap();
+        assert!(!session_present(&backend, &scope).unwrap());
         assert!(matches!(
             cached_read(&backend, &scope, &dir.snapshot(), SERVER, ACCOUNT),
             Err(AccessError::Locked)
