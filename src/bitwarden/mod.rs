@@ -6,6 +6,7 @@ pub mod auth;
 pub mod cache_store;
 pub mod decryptor;
 pub mod envelope;
+mod live_acceptance;
 pub mod pipeline;
 pub mod strict_json;
 pub mod sync_filter;
