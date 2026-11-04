@@ -40,6 +40,14 @@ A standalone GitHub Actions job launches a real Vaultwarden `1.37.5` server behi
 
 **Decision impact:** B01 native feasibility is established on this specific tested server/library pair. `rbw` is a CLI/agent with public but unstable embeddable modules; its high-level sync is not lossless for archive/permission metadata. The raw-sync adapter is the viable candidate; **A03 production selection remains open** pending authentication/MFA variants, upgrade maintenance plan, dependency/license review for the final build, and secure cache-key lifecycle. All new adapter modules remain under `#[cfg(test)]`.
 
+## Independent local keywrap and projection session-cache checkpoint (2026-11-04)
+
+The test-only `keywrap` module encrypts a **new random content key** with bounded Argon2id parameters and XChaCha20-Poly1305 under a separate local passphrase. The fixed-size `projection.pfkey` file is owner-only, create-only and authenticated against the exact projection server and account; it never borrows `vault.passvault` keys. Disposable Vaultwarden acceptance now uses it for the encrypted snapshot and proves locally reopening ciphertext after dropping remote token/decryptor state.
+
+The separate test-only `session_cache` module introduces projection-only Linux session-keyring labels and manual lock markers, with an injected fake backend to prove lock ordering, stale-key authentication, and fail-closed behavior when key removal or unlock-marker removal fails. The Linux keyctl backend **compiles** but has not run on the user's machine or a privileged keyring-enabled CI fixture.
+
+These pass [Rust CI](https://github.com/sguzman/passflick/actions/runs/41758871921), [live disposable server](https://github.com/sguzman/passflick/actions/runs/41758871854) and [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41758871891), all for code commit `e2ffb82`. This is implementation work toward C03, **not** production unlock, actual kernel-keyring QA, or a completed login/logout lifecycle.
+
 ## Responsibilities
 
 | Component | Owns | Does not own |

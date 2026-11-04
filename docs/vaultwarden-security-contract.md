@@ -40,6 +40,14 @@ The isolated adapter was successfully tested against a real, disposable **Vaultw
 
 The acceptance shows native protocol **feasibility only**. It does not establish the security of real session persistence, remote MFA or refresh-token expiry, local lock/logout enforcement, private key storage, organization policies, ongoing credential changes, or end-to-end real desktop behavior. The incomplete production path must not be enabled yet.
 
+## Test-only independent local keywrap and manual-lock boundary (2026-11-04)
+
+A separate `projection.pfkey` file now wraps a random XChaCha20-Poly1305 snapshot content key under Argon2id from an **independent local passphrase**, bound by authenticated associated data to the full normalized Vaultwarden server identity and upstream account. The wrapped key is never a legacy vault key or Vaultwarden token. Private 0600 create-only file storage, metadata/KDF caps, corruption and identity rejection have synthetic tests, and actual disposable server acceptance has reopened the complete encrypted snapshot offline after dropping its remote session.
+
+The session-cache prototype has **separate** key/lock namespaces and a fail-closed manual-lock marker that outranks cached keys. Its fake-keyring tests check non-destructive wrong unlock, authenticated cached reads, failed removal ordering and explicit re-unlock. The **real kernel adapter is compiled but not exercised**, so this does not establish real login-session key lifetime or automatic lock/revocation guarantees. All new code remains behind test-only module inclusion.
+
+[CI evidence: 198 Rust tests and security gates](https://github.com/sguzman/passflick/actions/runs/41758871921), [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41758871891) and [disposable Vaultwarden 1.37.5](https://github.com/sguzman/passflick/actions/runs/41758871854) passed on `e2ffb82`. Remains unverified: real local keyring, Secret Service enrollment, terminal/GUI secret entry and cleanup, logout/purge and target-host Wayland acceptance.
+
 ## Native Bitwarden crypto and token lifecycle boundaries (test-only)
 
 The adapter currently uses the pinned MIT `rbw` Rust library for master-password KDF, wrapped user key, type-2 ciphertext decoding and HMAC verification. Since the library's verifier assumes a fixed 32-byte decoded MAC, Passflick rejects malformed decoded lengths, missing MAC, incorrect IV length and non-block-aligned ciphertext **before** dispatching to it. Error types must remain non-secret and failed candidate updates must never mutate the prior encrypted cache.
