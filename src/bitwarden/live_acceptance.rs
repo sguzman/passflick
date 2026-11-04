@@ -493,7 +493,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
             fixture_update_password(
                 &client,
                 &url,
-                bearer,
+                session.bearer_token().unwrap(),
                 &account,
                 selected_id,
                 "fictional-UPDATED-password",
@@ -521,13 +521,9 @@ fn disposable_server_auth_sync_encrypted_offline() {
                 &account,
             )
             .unwrap();
-            let updated = cache_store::load(
-                &path,
-                &updated_key,
-                endpoint.server_identity(),
-                &account,
-            )
-            .unwrap();
+            let updated =
+                cache_store::load(&path, &updated_key, endpoint.server_identity(), &account)
+                    .unwrap();
             assert_eq!(updated.items().len(), 2);
             let selected = updated
                 .items()
