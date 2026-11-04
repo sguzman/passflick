@@ -9,16 +9,19 @@
 use std::ffi::OsStr;
 use std::path::Path;
 
+#[cfg(test)]
 use serde_json::Value;
 
 use super::{
     auth::{AuthError, RemoteSession},
-    cache_store::{self, CacheError, CacheKey},
+    cache_store::{self, CacheError},
     envelope::{self, SyncEnvelopeError},
     keywrap::{self, KeywrapError},
     pipeline::{self, LoginDecryptor, ProjectionPipelineError},
     transport::{ReadOnlySyncTransport, ServerEndpoint, TransportError},
 };
+#[cfg(test)]
+use super::cache_store::CacheKey;
 use crate::projection::ProjectionSnapshot;
 
 #[derive(Debug, thiserror::Error)]
