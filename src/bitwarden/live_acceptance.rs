@@ -349,7 +349,9 @@ fn disposable_server_auth_sync_encrypted_offline() {
             &keywrap_path,
             LOCAL_PASSPHRASE,
         ),
-        Err(update::UpdateError::Cache(cache_store::CacheError::AlreadyExists))
+        Err(update::UpdateError::Cache(
+            cache_store::CacheError::AlreadyExists
+        ))
     ));
 
     // Simulate a new process: recover only from the local passphrase and

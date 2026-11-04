@@ -326,7 +326,10 @@ mod tests {
         ));
         assert_eq!(fs::read(dir.cache()).unwrap(), first_snapshot);
         assert_eq!(fs::read(&keywrap_path).unwrap(), first_keywrap);
-        assert_eq!(fs::read(legacy).unwrap(), b"fictional legacy ciphertext unchanged");
+        assert_eq!(
+            fs::read(legacy).unwrap(),
+            b"fictional legacy ciphertext unchanged"
+        );
     }
 
     #[test]
