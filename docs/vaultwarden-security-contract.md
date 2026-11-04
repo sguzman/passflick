@@ -62,6 +62,14 @@ Native `RemoteSession` now records the canonical HTTPS server endpoint that issu
 
 [Verified Rust CI: 201 passed, 0 failed](https://github.com/sguzman/passflick/actions/runs/41761539145), [synthetic GUI CI](https://github.com/sguzman/passflick/actions/runs/41761539259), [real disposable Vaultwarden 1.37.5](https://github.com/sguzman/passflick/actions/runs/41761539159), on code commit [`675523b`](https://github.com/sguzman/passflick/commit/675523bf356d391044bc2a6214043f82e659d2ff). Both boundaries remain test-only; target-host kernel-keyring and final local lock/unlock are not yet verified.
 
+## Authenticated first-time account discovery and encrypted create-only installation (2026-11-04)
+
+The test-only native initializer verifies a complete trusted HTTPS `GET /api/sync` response under the authenticated session endpoint, extracts its **server-issued** account ID, decrypts all supported active logins and creates a versioned in-memory projection. It never asks a fixture client or user to invent an account identity. A malformed/ambiguous response fails admission before storage. Only a subsequent explicit local setup creates the independent Argon2id keywrap and encrypted snapshot.
+
+Initial publication is **create-only under a writer lock**, including a second existence check at publication. It cannot replace a prior authenticated or corrupt snapshot. A stranded encrypted keywrap from an interrupted first install can be reopened by the same local passphrase and setup retried safely; incorrect passphrases cannot authenticate it, and legacy `vault.passvault` remains unchanged. This is not yet an interactive production setup/CLI path, nor evidence of full power-cut/target-host acceptance.
+
+[Green Rust CI: 206 passing tests](https://github.com/sguzman/passflick/actions/runs/41763434948), [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41763434980), and [real disposable Vaultwarden 1.37.5](https://github.com/sguzman/passflick/actions/runs/41763434898) on code commit `50e2a18`. Separately, B05 HTTPS/CA trust and C01 versioned projection schema now meet their objective acceptance criteria; all production migration and keyring gates stay open.
+
 ## Native Bitwarden crypto and token lifecycle boundaries (test-only)
 
 The adapter currently uses the pinned MIT `rbw` Rust library for master-password KDF, wrapped user key, type-2 ciphertext decoding and HMAC verification. Since the library's verifier assumes a fixed 32-byte decoded MAC, Passflick rejects malformed decoded lengths, missing MAC, incorrect IV length and non-block-aligned ciphertext **before** dispatching to it. Error types must remain non-secret and failed candidate updates must never mutate the prior encrypted cache.

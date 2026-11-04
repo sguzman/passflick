@@ -50,6 +50,14 @@ These pass [Rust CI](https://github.com/sguzman/passflick/actions/runs/417588719
 
 **Additional accepted test-only boundary (2026-11-04):** Before a local session key is considered, its projection scope is recomputed from the full cache path, server and account. A mismatch never reaches the keyring or passphrase keywrap. [Rust CI: 199 passing tests](https://github.com/sguzman/passflick/actions/runs/41759929489) and the disposable-server/GUI workflows are green on `af45a51`; runtime Linux keyctl and target-host desktop semantics remain unverified.
 
+## Native initial setup and first-cache transaction (2026-11-04)
+
+The **test-only** `prepare_initial_sync` path derives the account ID from the server's complete authenticated sync response after binding the in-memory login session to its HTTPS endpoint; neither a fixture-specific account lookup nor user-supplied account ID is needed. The `ProjectionSnapshot` schema is versioned and strictly validated with upstream item IDs and no browser-source precedence.
+
+The create-only `install_initial_projection` path stores a separately wrapped local content key then publishes a first encrypted snapshot under an exclusive writer lock. It refuses to replace existing ciphertext and supports passphrase-authenticated recovery when an interruption leaves only `projection.pfkey`. The real disposable Vaultwarden CI exercises this exact initial installation and offline reopening; [206 Rust tests](https://github.com/sguzman/passflick/actions/runs/41763434948), [GUI](https://github.com/sguzman/passflick/actions/runs/41763434980) and [Vaultwarden](https://github.com/sguzman/passflick/actions/runs/41763434898) are green on `50e2a18`.
+
+**Acceptance update:** C01 (schema) and B05 (native trusted HTTPS/CA failures) are verified; the full session/lock/setup UI, production updater, real kernel keyring and target-host migration remain incomplete. Earlier dated sections below describe prior historical checkpoints.
+
 ## Responsibilities
 
 | Component | Owns | Does not own |
