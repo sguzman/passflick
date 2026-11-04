@@ -44,7 +44,7 @@ pub fn vault_path() -> Result<PathBuf, PathError> {
 
 /// The native projection must not inherit legacy PASSFLICK_VAULT overrides.
 /// It always uses a different fixed filename under the XDG data directory.
-#[cfg(any(test, feature = "vaultwarden-preview"))]
+#[cfg(feature = "vaultwarden-preview")]
 pub fn projection_path() -> Result<PathBuf, PathError> {
     absolute_file_path(data_home()?.join("passflick/projection.pfsnapshot"))
 }
