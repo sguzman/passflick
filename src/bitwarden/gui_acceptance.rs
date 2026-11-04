@@ -260,7 +260,13 @@ pub(super) fn run(
             "wrong local passphrase triggered a clipboard copy"
         );
 
-        xdo(&["type", "--clearmodifiers", "--delay", "15", local_passphrase]);
+        xdo(&[
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "15",
+            local_passphrase,
+        ]);
         xdo(&["key", "--clearmodifiers", "Return"]);
         thread::sleep(Duration::from_millis(400));
         assert!(
