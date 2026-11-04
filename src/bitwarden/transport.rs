@@ -122,8 +122,8 @@ impl ReadOnlySyncTransport {
         if pem.is_empty() || pem.len() > 1024 * 1024 {
             return Err(TransportError::ClientSetup);
         }
-        let roots = reqwest::Certificate::from_pem_bundle(pem)
-            .map_err(|_| TransportError::ClientSetup)?;
+        let roots =
+            reqwest::Certificate::from_pem_bundle(pem).map_err(|_| TransportError::ClientSetup)?;
         if roots.is_empty() {
             return Err(TransportError::ClientSetup);
         }
