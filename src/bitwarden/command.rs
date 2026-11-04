@@ -5,8 +5,8 @@
 //! The original vault.passvault and its picker are never opened by this path.
 
 use std::fs::{self, DirBuilder, OpenOptions};
-use std::io::Read;
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
+use std::io::{Read, Write};
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -47,12 +47,67 @@ fn masked(prompt: &str) -> Result<Zeroizing<String>, PreviewError> {
         .map_err(|_| PreviewError::Input)
 }
 
-fn device_id() -> Result<String, PreviewError> {
-    // Authentication uses an in-memory device ID for each explicit invocation.
-    // No tokens or device-specific key are written to the legacy vault.
+/// The non-secret device identifier must survive explicit reauthentication.
+/// It is a distinct, owner-only file, never part of legacy vault state.
+fn read_device_id(path: &Path) -> Result<String, PreviewError> {
+    let mut file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)
+        .map_err(|_| PreviewError::Storage)?;
+    let meta = file.metadata().map_err(|_| PreviewError::Storage)?;
+    if !meta.is_file()
+        || !crate::vault::owned_by_current_user(&meta)
+        || meta.permissions().mode() & 0o777 != 0o600
+        || meta.nlink() != 1
+        || meta.len() != 32
+    {
+        return Err(PreviewError::Storage);
+    }
+    let mut bytes = [0_u8; 32];
+    file.read_exact(&mut bytes).map_err(|_| PreviewError::Storage)?;
+    if !bytes.iter().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte)) {
+        return Err(PreviewError::Storage);
+    }
+    String::from_utf8(bytes.to_vec()).map_err(|_| PreviewError::Storage)
+}
+
+/// Create one random, stable device ID per local installation. The keywrap and
+/// encrypted snapshot are separate files. Never rotate a malformed ID silently,
+/// and never overwrite a concurrently created ID.
+fn device_id(snapshot_path: &Path) -> Result<String, PreviewError> {
+    private_parent(snapshot_path)?;
+    let path = snapshot_path.with_file_name("projection.pfdevice");
+    match read_device_id(&path) {
+        Ok(value) => return Ok(value),
+        Err(PreviewError::Storage) if path.symlink_metadata().is_ok() => {
+            return Err(PreviewError::Storage);
+        }
+        Err(_) => {}
+    }
+
     let mut bytes = [0_u8; 16];
-    getrandom::fill(&mut bytes).map_err(|_| PreviewError::Authentication)?;
-    Ok(bytes.iter().map(|value| format!("{value:02x}")).collect())
+    getrandom::fill(&mut bytes).map_err(|_| PreviewError::Storage)?;
+    let identifier: String = bytes.iter().map(|value| format!("{value:02x}")).collect();
+    match OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(&path)
+    {
+        Ok(mut file) => {
+            file.write_all(identifier.as_bytes())
+                .map_err(|_| PreviewError::Storage)?;
+            file.sync_all().map_err(|_| PreviewError::Storage)?;
+            fs::File::open(snapshot_path.parent().ok_or(PreviewError::Storage)?)
+                .and_then(|directory| directory.sync_all())
+                .map_err(|_| PreviewError::Storage)?;
+            Ok(identifier)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => read_device_id(&path),
+        Err(_) => Err(PreviewError::Storage),
+    }
 }
 
 fn additional_ca(path: &Path) -> Result<Zeroizing<Vec<u8>>, PreviewError> {
@@ -162,7 +217,11 @@ pub fn run() -> Result<(), PreviewError> {
     }
     .map_err(|_| PreviewError::Transport)?;
 
-    let identifier = device_id()?;
+    let path = crate::paths::projection_path().map_err(|_| PreviewError::Storage)?;
+    // Keep the device identifier outside the historical encrypted vault.
+    // Validate the local destination before any login request is transmitted.
+    private_parent(&path)?;
+    let identifier = device_id(&path)?;
     let (mut session, decoder) =
         match transport.authenticate(&endpoint, &email, &master, &identifier, None) {
             Ok(result) => result,
@@ -197,9 +256,7 @@ pub fn run() -> Result<(), PreviewError> {
     let candidate =
         update::prepare_initial_sync(&transport, &mut session, &endpoint, timestamp, &decoder)
             .map_err(|_| PreviewError::RemoteSync)?;
-    let path = crate::paths::projection_path().map_err(|_| PreviewError::Storage)?;
     // Do not touch the historical PASSFLICK_VAULT override or original file.
-    private_parent(&path)?;
     let first_install = !snapshot_exists(&path)?;
     let local = masked(if first_install {
         "New independent local projection passphrase: "
@@ -316,6 +373,48 @@ mod tests {
             fs::read(legacy).unwrap(),
             b"original fictional legacy encrypted data"
         );
+    }
+
+    #[test]
+    fn stable_device_id_survives_restarts_without_legacy_vault_changes() {
+        let fixture = Fixture::new();
+        let legacy = fixture.0.join("vault.passvault");
+        fs::write(&legacy, b"original fictional legacy encrypted data").unwrap();
+        let first = device_id(&fixture.snapshot()).unwrap();
+        assert_eq!(first.len(), 32);
+        assert!(first.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
+        assert_eq!(device_id(&fixture.snapshot()).unwrap(), first);
+        let path = fixture.0.join("projection.pfdevice");
+        assert_eq!(fs::read(&path).unwrap(), first.as_bytes());
+        assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(fs::read(legacy).unwrap(), b"original fictional legacy encrypted data");
+    }
+
+    #[test]
+    fn malformed_or_unsafe_device_identity_never_rotates_silently() {
+        let fixture = Fixture::new();
+        let path = fixture.0.join("projection.pfdevice");
+        fs::write(&path, b"tampered-id").unwrap();
+        let tampered = fs::read(&path).unwrap();
+        assert_eq!(device_id(&fixture.snapshot()), Err(PreviewError::Storage));
+        assert_eq!(fs::read(&path).unwrap(), tampered);
+        fs::remove_file(&path).unwrap();
+
+        let external = fixture.0.join("external-id");
+        fs::write(&external, b"00000000000000000000000000000000").unwrap();
+        std::os::unix::fs::symlink(&external, &path).unwrap();
+        assert_eq!(device_id(&fixture.snapshot()), Err(PreviewError::Storage));
+        fs::remove_file(&path).unwrap();
+
+        let original = device_id(&fixture.snapshot()).unwrap();
+        let other_link = fixture.0.join("hardlink-id");
+        fs::hard_link(&path, &other_link).unwrap();
+        assert_eq!(device_id(&fixture.snapshot()), Err(PreviewError::Storage));
+        assert_eq!(fs::read(&path).unwrap(), original.as_bytes());
+        fs::remove_file(&other_link).unwrap();
+
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(device_id(&fixture.snapshot()), Err(PreviewError::Storage));
     }
 
     #[test]
