@@ -10,6 +10,10 @@
 - Verify `wl-copy --help` advertises its long `--sensitive` option before copying; old helpers must fail without copying. Do not use clipboard managers that send fictional test values to a network service.
 - Before testing with a disposable server, prove that the preview opens in its locked state with **no snapshot**, and that Escape closes without creating a legacy vault or changing the existing clipboard.
 
+## Unresolved native post-error interaction (not an accepted gate)
+
+Disposable Weston runs [`41901413863`](https://github.com/sguzman/passflick/actions/runs/41901413863), [`41902226022`](https://github.com/sguzman/passflick/actions/runs/41902226022) and [`41903527352`](https://github.com/sguzman/passflick/actions/runs/41903527352) exposed a failure to process a second unlock or Escape after a wrong fictional passphrase. The tested native input/focus sequences did not establish whether this is a compositor test-input limitation or a production GUI defect. **Do not use this as evidence that wrong-then-correct recovery passes on Wayland.** The last verified native fresh-correct unlock/clipboard assertions remain separate and intact. In target-host QA, check whether the window stays responsive after a wrong attempt and whether keyboard input can be restored without restarting the picker.
+
 ## Verified disposable CI evidence (not target-host acceptance)
 
 - [Disposable run `41900043102`](https://github.com/sguzman/passflick/actions/runs/41900043102) passed the native Wayland locked GUI's **fresh correct local passphrase** unlock, no-copy-on-unlock check, and a later exact fictional password copy with real `wl-copy --sensitive` under Weston. It also retained the earlier native populated username/password/Escape acceptance.
