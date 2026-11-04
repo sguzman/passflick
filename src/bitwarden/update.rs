@@ -126,7 +126,7 @@ mod tests {
 
     fn user_keys() -> Keys {
         let mut storage = rbw::locked::Vec::new();
-        storage.extend([71_u8; 64]);
+        storage.extend([71_u8; 64].into_iter());
         Keys::new(storage)
     }
 
