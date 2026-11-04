@@ -10,6 +10,12 @@
 - Verify `wl-copy --help` advertises its long `--sensitive` option before copying; old helpers must fail without copying. Do not use clipboard managers that send fictional test values to a network service.
 - Before testing with a disposable server, prove that the preview opens in its locked state with **no snapshot**, and that Escape closes without creating a legacy vault or changing the existing clipboard.
 
+## Verified disposable CI evidence (not target-host acceptance)
+
+- [Disposable run `41900043102`](https://github.com/sguzman/passflick/actions/runs/41900043102) passed the native Wayland locked GUI's **fresh correct local passphrase** unlock, no-copy-on-unlock check, and a later exact fictional password copy with real `wl-copy --sensitive` under Weston. It also retained the earlier native populated username/password/Escape acceptance.
+- The separate Xvfb graphical test verifies wrong local passphrase remains locked followed by correct passphrase recovery, and no accidental copy. **Do not claim the wrong-then-correct sequence has passed natively under Weston.**
+- The Weston copy test needs a fresh pointer input serial **after** the locked editor has authenticated. Clicking during masked text entry can steal its keyboard focus. Treat this as a compositor/clipboard QA constraint, not proof that a user's actual clipboard manager ignores sensitive hints.
+
 ## Native Wayland input and clipboard
 
 - A populated feature-enabled preview launches as a floating, centered `passflick-projection-preview` window, without moving tiled windows or focusing another workspace. Record measured first-frame focus/startup latency, not an assumed target.
