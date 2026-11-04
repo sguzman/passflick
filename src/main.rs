@@ -706,7 +706,9 @@ fn print_help() {
     #[cfg(feature = "vaultwarden-preview")]
     println!("  passflick update            EXPERIMENTAL native Vaultwarden refresh");
     #[cfg(feature = "vaultwarden-preview")]
-    println!("  passflick projection <unlock|lock|status|picker>   EXPERIMENTAL offline projection");
+    println!(
+        "  passflick projection <unlock|lock|status|picker>   EXPERIMENTAL offline projection"
+    );
     println!("  passflick sources           Show per-source counts and refresh age");
     println!("  passflick discover          Find local browser profiles, no secret access");
     println!("  passflick demo              Open picker with synthetic test credentials");

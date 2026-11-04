@@ -17,9 +17,9 @@ pub mod pipeline;
 #[cfg(feature = "vaultwarden-preview")]
 pub mod projection_identity;
 #[cfg(feature = "vaultwarden-preview")]
-pub mod projection_search;
-#[cfg(feature = "vaultwarden-preview")]
 pub mod projection_picker;
+#[cfg(feature = "vaultwarden-preview")]
+pub mod projection_search;
 #[cfg(any(test, feature = "vaultwarden-preview"))]
 pub mod session_cache;
 pub mod strict_json;

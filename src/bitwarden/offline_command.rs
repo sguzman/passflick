@@ -103,8 +103,7 @@ pub(super) fn read_for_picker() -> Result<Option<ProjectionSnapshot>, OfflineErr
 pub(super) fn session_present_for_picker() -> Result<bool, OfflineError> {
     let path = crate::paths::projection_path().map_err(|_| OfflineError::Identity)?;
     let (_, scope) = scope(&path)?;
-    session_cache::session_present(&KernelSessionStore, &scope)
-        .map_err(|_| OfflineError::Access)
+    session_cache::session_present(&KernelSessionStore, &scope).map_err(|_| OfflineError::Access)
 }
 
 /// Returns only non-secret aggregate metadata. Status never decrypts a local

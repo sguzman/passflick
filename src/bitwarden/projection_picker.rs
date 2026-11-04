@@ -109,7 +109,8 @@ impl ProjectionPicker {
     }
 
     fn update_matches(&mut self) {
-        self.rows = self.snapshot
+        self.rows = self
+            .snapshot
             .as_ref()
             .map(|snapshot| rank_projection(snapshot, &self.site_query, &self.username_query))
             .unwrap_or_default();
@@ -126,7 +127,8 @@ impl ProjectionPicker {
                 if self.snapshot.is_some() {
                     self.clear_sensitive();
                 }
-                self.notice = Some("Projection locked or unavailable. Unlock in this login session.");
+                self.notice =
+                    Some("Projection locked or unavailable. Unlock in this login session.");
             }
             Ok(true) if self.snapshot.is_none() => {
                 if let Ok(Some(snapshot)) = offline_command::read_for_picker() {
@@ -145,13 +147,22 @@ impl ProjectionPicker {
         } else if amount.is_negative() {
             self.selected = self.selected.saturating_sub(amount.unsigned_abs());
         } else {
-            self.selected = self.selected.saturating_add(amount as usize).min(self.rows.len() - 1);
+            self.selected = self
+                .selected
+                .saturating_add(amount as usize)
+                .min(self.rows.len() - 1);
         }
     }
 
     fn copy_selected(&mut self, ctx: &egui::Context, username: bool) {
-        let id = self.snapshot.as_ref()
-            .and_then(|snapshot| self.rows.get(self.selected).and_then(|i| snapshot.items().get(*i)))
+        let id = self
+            .snapshot
+            .as_ref()
+            .and_then(|snapshot| {
+                self.rows
+                    .get(self.selected)
+                    .and_then(|i| snapshot.items().get(*i))
+            })
             .map(|item| Zeroizing::new(item.id().to_owned()));
         let Some(id) = id else { return };
 
@@ -197,9 +208,8 @@ impl eframe::App for ProjectionPicker {
         if ctx.input(|input| input.key_pressed(egui::Key::ArrowDown)) {
             self.move_selection(1);
         }
-        let toggle = ctx.input_mut(|input| {
-            input.consume_key(egui::Modifiers::CTRL, egui::Key::Space)
-        });
+        let toggle =
+            ctx.input_mut(|input| input.consume_key(egui::Modifiers::CTRL, egui::Key::Space));
 
         egui::CentralPanel::default().show(ui, |ui| {
             ui.add_space(10.0);
@@ -334,8 +344,14 @@ impl eframe::App for ProjectionPicker {
 pub fn run() -> eframe::Result {
     let (snapshot, notice) = match offline_command::read_for_picker() {
         Ok(Some(snapshot)) => (Some(snapshot), None),
-        Ok(None) => (None, Some("No unlocked projection key is available in this session.")),
-        Err(_) => (None, Some("Offline projection is missing, locked or unauthenticated.")),
+        Ok(None) => (
+            None,
+            Some("No unlocked projection key is available in this session."),
+        ),
+        Err(_) => (
+            None,
+            Some("Offline projection is missing, locked or unauthenticated."),
+        ),
     };
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Glow,
@@ -368,14 +384,25 @@ mod tests {
             "fictional-account".to_owned(),
             1_800_000_000,
             vec![
-                LoginItem::new("distinct-a".to_owned(), "Example".to_owned(),
-                    vec!["https://example.test/login".to_owned()], "alice".to_owned(),
-                    "fictional-password".to_owned(), None),
-                LoginItem::new("distinct-z".to_owned(), "Example".to_owned(),
-                    vec!["https://example.test/login".to_owned()], "alice".to_owned(),
-                    "fictional-password".to_owned(), None),
+                LoginItem::new(
+                    "distinct-a".to_owned(),
+                    "Example".to_owned(),
+                    vec!["https://example.test/login".to_owned()],
+                    "alice".to_owned(),
+                    "fictional-password".to_owned(),
+                    None,
+                ),
+                LoginItem::new(
+                    "distinct-z".to_owned(),
+                    "Example".to_owned(),
+                    vec!["https://example.test/login".to_owned()],
+                    "alice".to_owned(),
+                    "fictional-password".to_owned(),
+                    None,
+                ),
             ],
-        ).unwrap()
+        )
+        .unwrap()
     }
 
     #[test]
@@ -383,14 +410,25 @@ mod tests {
         let snapshot = fixture();
         let mut app = ProjectionPicker::new(Some(snapshot), None);
         assert_eq!(app.rows.len(), 2);
-        assert_eq!(app.snapshot.as_ref().unwrap().items()[app.rows[0]].id(), "distinct-a");
+        assert_eq!(
+            app.snapshot.as_ref().unwrap().items()[app.rows[0]].id(),
+            "distinct-a"
+        );
         app.move_selection(1);
         let id = app.snapshot.as_ref().unwrap().items()[app.rows[app.selected]].id();
         assert_eq!(id, "distinct-z");
-        assert_eq!(copy_value(app.snapshot.as_ref().unwrap(), id, false).unwrap(), "fictional-password");
-        assert_eq!(copy_value(app.snapshot.as_ref().unwrap(), id, true).unwrap(), "alice");
-        assert_eq!(copy_value(app.snapshot.as_ref().unwrap(), "unrelated-id", false),
-                   Err("The selected item was removed from the offline projection."));
+        assert_eq!(
+            copy_value(app.snapshot.as_ref().unwrap(), id, false).unwrap(),
+            "fictional-password"
+        );
+        assert_eq!(
+            copy_value(app.snapshot.as_ref().unwrap(), id, true).unwrap(),
+            "alice"
+        );
+        assert_eq!(
+            copy_value(app.snapshot.as_ref().unwrap(), "unrelated-id", false),
+            Err("The selected item was removed from the offline projection.")
+        );
         app.site_query.push_str("different-domain");
         app.update_matches();
         assert!(app.rows.is_empty());
@@ -409,11 +447,19 @@ mod tests {
     #[test]
     fn copy_validation_refuses_empty_and_nul_bytes() {
         let snapshot = ProjectionSnapshot::new(
-            "https://vault.example.test/".to_owned(), "fictional-account".to_owned(),
+            "https://vault.example.test/".to_owned(),
+            "fictional-account".to_owned(),
             1_800_000_000,
-            vec![LoginItem::new("id".to_owned(), "Example".to_owned(),
-                vec![], "".to_owned(), "nul\0credential".to_owned(), None)]
-        ).unwrap();
+            vec![LoginItem::new(
+                "id".to_owned(),
+                "Example".to_owned(),
+                vec![],
+                "".to_owned(),
+                "nul\0credential".to_owned(),
+                None,
+            )],
+        )
+        .unwrap();
         assert!(copy_value(&snapshot, "id", false).is_err());
         assert!(copy_value(&snapshot, "id", true).is_err());
     }
