@@ -184,6 +184,11 @@ pub fn unlock<S: SessionStore>(
     account: &str,
 ) -> Result<ProjectionSnapshot, AccessError> {
     scope.validate_binding(snapshot_path, server, account)?;
+    // A valid server/account alone must not authorize a different local
+    // projection's passphrase envelope. Check the exact sibling path before IO.
+    if keywrap_path != snapshot_path.with_file_name("projection.pfkey") {
+        return Err(AccessError::InvalidScope);
+    }
     let key = keywrap::unlock(keywrap_path, passphrase, server, account)?;
     let snapshot = cache_store::load(snapshot_path, &key, server, account)?;
     backend.put(&scope.key, key.as_bytes())?;
@@ -396,6 +401,30 @@ mod tests {
             ),
             Err(AccessError::InvalidScope)
         ));
+        assert!(backend.entries.borrow().is_empty());
+    }
+
+    #[test]
+    fn explicit_unlock_rejects_foreign_keywrap_path_before_keyring_access() {
+        let (dir, scope) = fixture();
+        let backend = Fake::default();
+        for invalid_path in [
+            dir.0.join("other").join("projection.pfkey"),
+            dir.0.join("renamed.pfkey"),
+        ] {
+            assert!(matches!(
+                unlock(
+                    &backend,
+                    &scope,
+                    &invalid_path,
+                    &dir.snapshot(),
+                    PASSPHRASE,
+                    SERVER,
+                    ACCOUNT,
+                ),
+                Err(AccessError::InvalidScope)
+            ));
+        }
         assert!(backend.entries.borrow().is_empty());
     }
 
