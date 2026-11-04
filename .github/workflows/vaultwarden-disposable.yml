@@ -34,6 +34,6 @@ jobs:
       - name: Install Rust desktop build prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwayland-dev libxkbcommon-dev libx11-dev libx11-xcb-dev libxcursor-dev libxi-dev libxrandr-dev libgl1-mesa-dev openssl curl
+          sudo apt-get install -y libwayland-dev libxkbcommon-dev libx11-dev libx11-xcb-dev libxcursor-dev libxi-dev libxrandr-dev libgl1-mesa-dev openssl curl xvfb xauth xdotool libgl1-mesa-dri
       - name: Test real disposable Vaultwarden over trusted HTTPS
         run: bash ci/vaultwarden-disposable.sh

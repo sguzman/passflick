@@ -478,6 +478,9 @@ fn disposable_server_auth_sync_encrypted_offline() {
             true,
             "Last successful remote sync (Unix seconds):",
         );
+        // Read and copy actual fictional remote credentials through a real
+        // egui process under Xvfb, then lock that process from another CLI.
+        super::gui_acceptance::run(binary, data, &legacy, &first_id, &second_id);
         assert_eq!(fs::read(&devicepath).unwrap(), device);
         assert_eq!(fs::read(&legacy).unwrap(), original_legacy);
     }

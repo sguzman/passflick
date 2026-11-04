@@ -9,6 +9,8 @@ pub mod command;
 pub mod decryptor;
 pub mod envelope;
 pub mod keywrap;
+#[cfg(all(test, feature = "vaultwarden-preview"))]
+mod gui_acceptance;
 #[cfg(test)]
 mod live_acceptance;
 #[cfg(feature = "vaultwarden-preview")]

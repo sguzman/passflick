@@ -91,8 +91,10 @@ if [[ "$ready" != 1 ]]; then
 fi
 
 cargo build --locked --features vaultwarden-preview
+# A real virtual X display is used solely for fictional populated-picker
+# tests. No desktop session or user clipboard is mounted into the runner.
 PASSFLICK_PREVIEW_BINARY="$(pwd)/target/debug/passflick" \
 PASSFLICK_DISPOSABLE_URL=https://localhost:18443/ \
 PASSFLICK_DISPOSABLE_CA="$work/certs/root.pem" \
-  cargo test --locked --features vaultwarden-preview bitwarden::live_acceptance::disposable_server_auth_sync_encrypted_offline \
+  xvfb-run -a cargo test --locked --features vaultwarden-preview bitwarden::live_acceptance::disposable_server_auth_sync_encrypted_offline \
   -- --ignored --nocapture
