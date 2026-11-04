@@ -410,13 +410,13 @@ impl eframe::App for ProjectionPicker {
         });
         ctx.set_theme(self.theme);
         if request_unlock {
-            let result =
-                offline_command::unlock_for_picker(self.unlock_passphrase.as_bytes());
+            let result = offline_command::unlock_for_picker(self.unlock_passphrase.as_bytes());
             self.unlock_passphrase.zeroize();
             match result {
                 Ok(snapshot) => self.install_unlocked(snapshot),
                 Err(_) => {
-                    self.error = Some("Offline unlock failed. Check the local passphrase and snapshot.");
+                    self.error =
+                        Some("Offline unlock failed. Check the local passphrase and snapshot.");
                     self.focused = false;
                 }
             }
@@ -498,7 +498,9 @@ mod tests {
     #[test]
     fn installing_unlocked_snapshot_clears_masked_input_and_resets_focus() {
         let mut picker = ProjectionPicker::new(None, Some("Synthetic locked state"));
-        picker.unlock_passphrase.push_str("fictional local passphrase");
+        picker
+            .unlock_passphrase
+            .push_str("fictional local passphrase");
         picker.error = Some("Synthetic failed unlock");
         picker.focused = true;
         picker.install_unlocked(fixture());
