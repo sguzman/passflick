@@ -19,6 +19,7 @@ use crate::projection::ProjectionSnapshot;
 use super::auth::{AuthError, MfaChallenge, MfaProvider};
 use super::cache_store;
 use super::keywrap;
+use super::projection_identity::{self, IdentityError};
 use super::transport::{ReadOnlySyncTransport, ServerEndpoint};
 use super::update;
 
@@ -57,7 +58,7 @@ impl Drop for HiddenPromptTerminal {
     }
 }
 
-fn masked(prompt: &str) -> Result<Zeroizing<String>, PreviewError> {
+pub(super) fn masked(prompt: &str) -> Result<Zeroizing<String>, PreviewError> {
     let tty = OpenOptions::new()
         .read(true)
         .write(true)
@@ -219,14 +220,28 @@ pub(crate) fn publish_candidate(
 ) -> Result<usize, PreviewError> {
     private_parent(snapshot_path)?;
     let wrapped = snapshot_path.with_file_name("projection.pfkey");
+    let identity_path = snapshot_path.with_file_name("projection.pfidentity");
+    // An existing sidecar cannot redirect a healthy encrypted snapshot to
+    // another account. Older preview snapshots may acquire the sidecar only
+    // after their old ciphertext has authenticated successfully.
+    match projection_identity::read(&identity_path) {
+        Ok(found) if found.server() == candidate.server_identity()
+            && found.account() == candidate.account_id() => {}
+        Ok(_) => return Err(PreviewError::Local),
+        Err(IdentityError::Missing) => {}
+        Err(_) => return Err(PreviewError::Local),
+    }
     if first_install {
-        return update::install_initial_projection(
+        let count = update::install_initial_projection(
             candidate,
             snapshot_path,
             &wrapped,
             local_passphrase,
         )
-        .map_err(|_| PreviewError::Local);
+        .map_err(|_| PreviewError::Local)?;
+        projection_identity::ensure(&identity_path, candidate)
+            .map_err(|_| PreviewError::Local)?;
+        return Ok(count);
     }
     let key = keywrap::unlock(
         &wrapped,
@@ -245,6 +260,8 @@ pub(crate) fn publish_candidate(
     )
     .map_err(|_| PreviewError::Local)?;
     cache_store::publish(snapshot_path, &key, candidate).map_err(|_| PreviewError::Local)?;
+    projection_identity::ensure(&identity_path, candidate)
+        .map_err(|_| PreviewError::Local)?;
     Ok(candidate.items().len())
 }
 

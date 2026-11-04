@@ -79,6 +79,12 @@ fn run(trace: &startup::StartupTrace) -> Result<(), Box<dyn Error>> {
             no_extra_args(&mut args)?;
             bitwarden::command::run()?;
         }
+        #[cfg(feature = "vaultwarden-preview")]
+        Some("projection") => {
+            let operation = args.next().ok_or("projection requires unlock, lock or status")?;
+            no_extra_args(&mut args)?;
+            bitwarden::offline_command::run(&operation)?;
+        }
         Some("list") => {
             no_extra_args(&mut args)?;
             list_credentials()?;
@@ -693,6 +699,8 @@ fn print_help() {
     println!("  passflick status            Display vault/keyring status");
     #[cfg(feature = "vaultwarden-preview")]
     println!("  passflick update            EXPERIMENTAL native Vaultwarden refresh");
+    #[cfg(feature = "vaultwarden-preview")]
+    println!("  passflick projection <unlock|lock|status>   EXPERIMENTAL offline key lifecycle");
     println!("  passflick sources           Show per-source counts and refresh age");
     println!("  passflick discover          Find local browser profiles, no secret access");
     println!("  passflick demo              Open picker with synthetic test credentials");
