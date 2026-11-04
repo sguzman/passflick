@@ -92,7 +92,10 @@ fn encrypted(raw: &str) -> String {
 
 fn register(client: &Client, base: &str) {
     let response = client
-        .post(route(base, "identity/accounts/register/send-verification-email"))
+        .post(route(
+            base,
+            "identity/accounts/register/send-verification-email",
+        ))
         .header(reqwest::header::ACCEPT, "application/json")
         .json(&json!({"email":EMAIL,"name":"Synthetic Passflick Account"}))
         .send()
@@ -132,7 +135,10 @@ fn initial_account_id(client: &Client, base: &str, bearer: &str) -> String {
         .bearer_auth(bearer)
         .send()
         .expect("fixture initial sync failed");
-    assert!(response.status().is_success(), "fixture initial sync rejected");
+    assert!(
+        response.status().is_success(),
+        "fixture initial sync rejected"
+    );
     let body: Value = response.json().unwrap();
     body["profile"]["id"]
         .as_str()
@@ -189,8 +195,8 @@ fn disposable_server_auth_sync_encrypted_offline() {
     let url = std::env::var("PASSFLICK_DISPOSABLE_URL")
         .expect("disposable test URL must be provided by CI");
     assert_eq!(url, FIXTURE_URL, "test must never target a real account");
-    let ca_path = std::env::var("PASSFLICK_DISPOSABLE_CA")
-        .expect("disposable test root CA path missing");
+    let ca_path =
+        std::env::var("PASSFLICK_DISPOSABLE_CA").expect("disposable test root CA path missing");
     let ca_pem = fs::read(Path::new(&ca_path)).unwrap();
     let client = fixture_client(&ca_pem);
     let transport = ReadOnlySyncTransport::with_additional_root_pem(&ca_pem).unwrap();
@@ -208,12 +214,8 @@ fn disposable_server_auth_sync_encrypted_offline() {
         .expect("native initial read-only /sync failed");
     assert!(initial["ciphers"].as_array().is_some());
 
-    let first_id = provision_cipher(
-        &client, &url, bearer, &account, "  🗝️ contraseña  ",
-    );
-    let second_id = provision_cipher(
-        &client, &url, bearer, &account, "second secret",
-    );
+    let first_id = provision_cipher(&client, &url, bearer, &account, "  🗝️ contraseña  ");
+    let second_id = provision_cipher(&client, &url, bearer, &account, "second secret");
     assert_ne!(first_id, second_id);
 
     let private_dir = PrivateDirectory::new();
