@@ -600,13 +600,11 @@ fn disposable_server_auth_sync_encrypted_offline() {
         &account,
     )
     .expect("offline passphrase unlock failed after remote session drop");
-    let local_snapshot = cache_store::load(
-        &path,
-        &local_key,
-        endpoint.server_identity(),
-        &account,
-    )
-    .expect("offline ciphertext missing after dropping remote sessions");
+    let local_snapshot = cache_store::load(&path, &local_key, endpoint.server_identity(), &account)
+        .expect("offline ciphertext missing after dropping remote sessions");
     assert_eq!(local_snapshot.items().len(), 1);
-    assert_eq!(local_snapshot.items()[0].password(), "edited 🔐 contraseña 🧪");
+    assert_eq!(
+        local_snapshot.items()[0].password(),
+        "edited 🔐 contraseña 🧪"
+    );
 }
