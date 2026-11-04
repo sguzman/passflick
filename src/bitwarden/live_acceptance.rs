@@ -158,6 +158,29 @@ fn fixture_cipher_payload(account: &str, secret: &str) -> Value {
     })
 }
 
+/// Independently read the real disposable server's complete cipher records.
+/// Compare server state without printing ciphertext or plaintext into CI logs.
+/// The fixture client is separate from Passflick's network adapter.
+fn fixture_server_cipher_state(client: &Client, base: &str, bearer: &str) -> Vec<Value> {
+    let response = client
+        .get(route(base, "api/sync"))
+        .bearer_auth(bearer)
+        .send()
+        .expect("disposable server-state read failed");
+    assert!(
+        response.status().is_success(),
+        "disposable server-state status {}",
+        response.status()
+    );
+    let body: Value = response.json().expect("disposable sync JSON invalid");
+    let mut ciphers = body["ciphers"]
+        .as_array()
+        .expect("disposable sync omitted cipher array")
+        .clone();
+    ciphers.sort_by(|left, right| left["id"].as_str().cmp(&right["id"].as_str()));
+    ciphers
+}
+
 fn provision_cipher(
     client: &Client,
     base: &str,
@@ -323,6 +346,10 @@ fn disposable_server_auth_sync_encrypted_offline() {
     let first_id = provision_cipher(&client, &url, bearer, &account, "  🗝️ contraseña  ");
     let second_id = provision_cipher(&client, &url, bearer, &account, "second secret");
     assert_ne!(first_id, second_id);
+    // Capture exact upstream encrypted records (including IDs and revision
+    // metadata) before any native Passflick sync or CLI operations.
+    let upstream_initial = fixture_server_cipher_state(&client, &url, bearer);
+    assert_eq!(upstream_initial.len(), 2);
 
     // Native bootstrap now owns account discovery *and* the first complete
     // credential projection. The fixture-only writer never supplies the ID.
@@ -331,6 +358,10 @@ fn disposable_server_auth_sync_encrypted_offline() {
             .expect("native first populated sync failed");
     assert_eq!(first_projection.account_id(), account);
     assert_eq!(first_projection.items().len(), 2);
+    assert!(
+        fixture_server_cipher_state(&client, &url, bearer) == upstream_initial,
+        "native initial sync changed disposable upstream cipher state"
+    );
 
     // This runs the actual preview executable through a controlling pseudo-
     // terminal. Fixture registration is separate from Passflick's read-only
@@ -427,6 +458,11 @@ fn disposable_server_auth_sync_encrypted_offline() {
         assert_ne!(fs::read(&path).unwrap(), first_bytes);
         assert_eq!(fs::read(&devicepath).unwrap(), device);
         assert_eq!(fs::read(&legacy).unwrap(), original_legacy);
+        assert!(
+            fixture_server_cipher_state(&client, &url, session.bearer_token().unwrap())
+                == upstream_initial,
+            "native CLI success or failed local update mutated upstream ciphers"
+        );
 
         // Separate executable invocations must cooperate via the SAME
         // session ring. The remote server is never contacted by these
@@ -709,6 +745,10 @@ fn disposable_server_auth_sync_encrypted_offline() {
     );
     assert!(session.bearer_token().is_some());
     let bearer = session.bearer_token().unwrap();
+    assert!(
+        fixture_server_cipher_state(&client, &url, bearer) == upstream_initial,
+        "native refresh grant or read-only update mutated upstream ciphers"
+    );
 
     // All mutations below are made exclusively by the *fixture provisioner*.
     // Passflick only fetches a complete, read-only sync after each mutation.
@@ -792,6 +832,8 @@ fn disposable_server_auth_sync_encrypted_offline() {
 
     // A real authenticated response with the wrong account binding must not
     // overwrite the last successful encrypted snapshot.
+    let upstream_before_rejected_sync =
+        fixture_server_cipher_state(&client, &url, session.bearer_token().unwrap());
     let last_good_bytes = fs::read(&path).unwrap();
     assert!(
         update::refresh_explicit(
@@ -809,6 +851,11 @@ fn disposable_server_auth_sync_encrypted_offline() {
         .is_err()
     );
     assert_eq!(fs::read(&path).unwrap(), last_good_bytes);
+    assert!(
+        fixture_server_cipher_state(&client, &url, session.bearer_token().unwrap())
+            == upstream_before_rejected_sync,
+        "failed native sync changed disposable upstream ciphers"
+    );
 
     // Enable TOTP through *fixture-only* account administration. Native
     // Passflick must report the MFA challenge instead of silently logging in.
