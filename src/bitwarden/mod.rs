@@ -9,6 +9,7 @@ pub mod envelope;
 pub mod keywrap;
 mod live_acceptance;
 pub mod pipeline;
+pub mod session_cache;
 pub mod strict_json;
 pub mod sync_filter;
 mod tls_acceptance;
