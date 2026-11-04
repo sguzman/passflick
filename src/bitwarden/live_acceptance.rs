@@ -331,6 +331,77 @@ fn disposable_server_auth_sync_encrypted_offline() {
             .expect("native first populated sync failed");
     assert_eq!(first_projection.account_id(), account);
     assert_eq!(first_projection.items().len(), 2);
+
+    // This runs the actual preview executable through a controlling pseudo-
+    // terminal. Fixture registration is separate from Passflick's read-only
+    // code; all supplied credentials are fictional.
+    #[cfg(feature = "vaultwarden-preview")]
+    let cli_directory = PrivateDirectory::new();
+    #[cfg(feature = "vaultwarden-preview")]
+    {
+        let binary = std::env::var("PASSFLICK_PREVIEW_BINARY")
+            .expect("explicit CLI executable path is required in disposable CI");
+        let binary = Path::new(&binary);
+        let data = &cli_directory.0;
+        let passflick_dir = data.join("passflick");
+        DirBuilder::new().mode(0o700).create(&passflick_dir).unwrap();
+        let legacy = passflick_dir.join("vault.passvault");
+        let original_legacy = b"fictional historical ciphertext unchanged";
+        fs::write(&legacy, original_legacy).unwrap();
+        let local = std::str::from_utf8(LOCAL_PASSPHRASE).unwrap();
+        let ca = ca_path.as_str();
+        super::terminal_acceptance::run_cli(
+            binary, data, &legacy,
+            &[
+                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden login email: ", EMAIL),
+                ("Vaultwarden master password: ", PASSWORD),
+                ("Custom trusted CA PEM path (empty for system trust): ", ca),
+                ("New independent local projection passphrase: ", local),
+                ("Confirm local projection passphrase: ", local),
+            ], true,
+        );
+        let path = passflick_dir.join("projection.pfsnapshot");
+        let keypath = passflick_dir.join("projection.pfkey");
+        let devicepath = passflick_dir.join("projection.pfdevice");
+        let device = fs::read(&devicepath).unwrap();
+        let first_bytes = fs::read(&path).unwrap();
+        assert_eq!(device.len(), 32);
+        let first_key = keywrap::unlock(
+            &keypath, LOCAL_PASSPHRASE, endpoint.server_identity(), &account,
+        ).unwrap();
+        let first = cache_store::load(
+            &path, &first_key, endpoint.server_identity(), &account,
+        ).unwrap();
+        assert_eq!(first.items().len(), 2);
+
+        super::terminal_acceptance::run_cli(
+            binary, data, &legacy,
+            &[
+                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden login email: ", EMAIL),
+                ("Vaultwarden master password: ", PASSWORD),
+                ("Custom trusted CA PEM path (empty for system trust): ", ca),
+                ("Local projection passphrase: ", "fictional incorrect passphrase"),
+            ], false,
+        );
+        assert_eq!(fs::read(&path).unwrap(), first_bytes);
+        assert_eq!(fs::read(&devicepath).unwrap(), device);
+
+        super::terminal_acceptance::run_cli(
+            binary, data, &legacy,
+            &[
+                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden login email: ", EMAIL),
+                ("Vaultwarden master password: ", PASSWORD),
+                ("Custom trusted CA PEM path (empty for system trust): ", ca),
+                ("Local projection passphrase: ", local),
+            ], true,
+        );
+        assert_ne!(fs::read(&path).unwrap(), first_bytes);
+        assert_eq!(fs::read(&devicepath).unwrap(), device);
+        assert_eq!(fs::read(&legacy).unwrap(), original_legacy);
+    }
     let private_dir = PrivateDirectory::new();
     let keywrap_path = private_dir.keywrap();
     let path = private_dir.cache();
@@ -594,6 +665,40 @@ fn disposable_server_auth_sync_encrypted_offline() {
         "an invalid TOTP must never authenticate"
     );
     let current_code = synthetic_totp(&totp_key, 0);
+    #[cfg(feature = "vaultwarden-preview")]
+    {
+        // The real CLI must recognize the challenge and request the second
+        // factor without displaying or persisting it.
+        let binary = std::env::var("PASSFLICK_PREVIEW_BINARY").unwrap();
+        let data = &cli_directory.0;
+        let dir = data.join("passflick");
+        let path = dir.join("projection.pfsnapshot");
+        let legacy = dir.join("vault.passvault");
+        let devicepath = dir.join("projection.pfdevice");
+        let original = fs::read(&devicepath).unwrap();
+        super::terminal_acceptance::run_cli(
+            Path::new(&binary), data, &legacy,
+            &[
+                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden login email: ", EMAIL),
+                ("Vaultwarden master password: ", PASSWORD),
+                ("Custom trusted CA PEM path (empty for system trust): ", ca_path.as_str()),
+                ("MFA method (totp/email): ", "totp"),
+                ("MFA code: ", &current_code),
+                ("Local projection passphrase: ", std::str::from_utf8(LOCAL_PASSPHRASE).unwrap()),
+            ], true,
+        );
+        assert_eq!(fs::read(&devicepath).unwrap(), original);
+        let key = keywrap::unlock(
+            &dir.join("projection.pfkey"), LOCAL_PASSPHRASE,
+            endpoint.server_identity(), &account,
+        ).unwrap();
+        let actual = cache_store::load(
+            &path, &key, endpoint.server_identity(), &account,
+        ).unwrap();
+        assert_eq!(actual.items().len(), 1);
+        assert_eq!(actual.items()[0].password(), "edited 🔐 contraseña 🧪");
+    }
     let (mfa_session, _) = transport
         .authenticate(
             &endpoint,
