@@ -528,6 +528,11 @@ mod tests {
         use std::sync::{Arc, Mutex, mpsc};
         use std::time::Duration;
 
+        // Expensive synthetic key derivation runs alongside other CI tests;
+        // scheduler contention can exceed a five-second startup budget.
+        // These are deadlock bounds, not the lock-race assertion interval.
+        const SCHEDULE_WAIT: Duration = Duration::from_secs(30);
+
         struct PausingStore {
             entries: Mutex<HashMap<String, Zeroizing<Vec<u8>>>>,
             entered: Mutex<Option<mpsc::Sender<()>>>,
@@ -554,7 +559,7 @@ mod tests {
                         self.resume
                             .lock()
                             .unwrap()
-                            .recv_timeout(Duration::from_secs(5))
+                            .recv_timeout(SCHEDULE_WAIT)
                             .map_err(|_| AccessError::Keyring)?;
                     }
                 }
@@ -594,7 +599,7 @@ mod tests {
                 ACCOUNT,
             )
         });
-        entered_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        entered_rx.recv_timeout(SCHEDULE_WAIT).unwrap();
 
         let second_store = Arc::clone(&store);
         let second_scope = Arc::clone(&scope);
@@ -612,7 +617,7 @@ mod tests {
             );
             done_tx.send(result).unwrap();
         });
-        started_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        started_rx.recv_timeout(SCHEDULE_WAIT).unwrap();
         let premature = done_rx.recv_timeout(Duration::from_millis(300)).ok();
         resume_tx.send(()).unwrap();
         unlocker.join().unwrap().unwrap();
@@ -622,7 +627,7 @@ mod tests {
             "manual lock raced with in-flight unlock"
         );
         done_rx
-            .recv_timeout(Duration::from_secs(5))
+            .recv_timeout(SCHEDULE_WAIT)
             .unwrap()
             .unwrap();
         assert!(matches!(
