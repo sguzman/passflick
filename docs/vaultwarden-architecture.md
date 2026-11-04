@@ -1,6 +1,6 @@
 # 🏗️ Vaultwarden-only projection architecture (design baseline)
 
-**Status:** target architecture only; no native Vaultwarden integration implemented or tested yet. See [ROADMAP.md](../ROADMAP.md) for scope, weights, dependencies and acceptance gates.
+**Status:** ADR-001 integration path accepted; native Vaultwarden adapter tested against disposable Vaultwarden 1.37.5, but all new adapter modules remain test-only. Production picker still uses the legacy encrypted vault. See [ROADMAP.md](../ROADMAP.md) for scope, weights, dependencies and acceptance gates.
 
 ## Current implementation checkpoint (2026-11-03)
 
@@ -82,7 +82,10 @@ Before release, document and test:
 
 This is a **security decision gate**, not a claim that the existing session design already meets these semantics.
 
-## Rust integration selection (not yet finalized)
+## Rust integration selection (ADR-001 accepted)
+
+**Selection (2026-11-04):** Candidate C is **chosen for development and production implementation**, using `reqwest` Rustls raw HTTPS sync plus narrow MIT `rbw 1.15.0` primitives and a separate encrypted offline projection. Read [ADR-001](adr-001-native-vaultwarden-adapter.md) for the rationale, tested TOTP/token-refresh and lifecycle behavior, deliberate lack of org/Argon2id/SSO claims, dependency stability and upgrade gates. This is a settled **architecture choice**, not authorization to move the test-only adapter into the production picker before the key/unlock/CLI acceptance gates.
+
 
 **Candidate A — `rbw` implementation:** an MIT-licensed Rust Bitwarden CLI/agent, with public Rust modules and self-hosted support. Its crate surface is designed around the tool/daemon rather than a stable embeddable SDK. Audit auth, crypto, archive fields, current encryption formats, maintenance and dependency footprint; try a disposable prototype before deciding whether code/library reuse is sensible.
 
@@ -92,7 +95,7 @@ This is a **security decision gate**, not a claim that the existing session desi
 
 **Official `bw` client:** useful as a synthetic test oracle. Do not assume Node/CLI will be a runtime dependency or that `bw serve` is safe to expose; a fallback production bridge needs an explicit engineering decision.
 
-**Go/no-go decision record (A03/B01):** choose exactly one production integration path after documenting supported login/2FA, KDF and encrypted item formats, archive handling, dependency license, maintenance, TLS trust and failures for the intended Vaultwarden version. Never log actual credential values in tests.
+**A03/B01 decision:** ADR-001 documents the selected raw-sync architecture with native TLS, MIT `rbw` KDF/cipherstring primitives, live TOTP and token-renewal tests, lifecycle behavior and compatibility risks. Do not promote the adapter to production before the remaining security gates. Never log actual credential values in tests.
 
 ## Modules and migration sketch
 

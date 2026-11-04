@@ -1,6 +1,6 @@
 # 🗺️ Passflick — Vaultwarden projection roadmap
 
-**Status:** adoption/rebaseline, not yet a working Vaultwarden adapter.  
+**Status:** native adapter verified in disposable Vaultwarden CI, still test-only; production picker remains on legacy vault.  
 **Target:** Rust + egui on Linux/Wayland (EndeavourOS/Hyprland first).  
 **Mission:** Passflick is a small, fast, keyboard-first, **read-only downstream projection of a Bitwarden-compatible personal vault**, not an independent password manager or a browser CSV aggregator.
 
@@ -21,9 +21,9 @@ The **user-controlled update** model is deliberate: search/copy may work offline
 
 New scope replaces the previous multi-browser-source objective, so old and new percentages are **not comparable**. Preserve existing verified picker, clipboard and encrypted-vault capabilities while re-estimating all *new* integration, migration and acceptance work.
 
-**Rebaseline: 13/100 weighted points verified (13%) as of adoption.** Current verified completion: **17/100 weighted points (17%)**, following isolated live-server protocol acceptance. Verified points represent only the existing implementation audit, written replacement contract, and independently evidenced pre-existing picker/synthetic test capabilities. They do **not** represent a working Vaultwarden integration. No fresh target-host or new-backend tests were performed during roadmap authoring.
+**Rebaseline: 13/100 weighted points verified (13%) as of adoption.** Current verified completion: **20/100 weighted points (20%)**, including the explicitly decided native Rust integration approach. Verified points represent only the existing implementation audit, written replacement contract, and independently evidenced pre-existing picker/synthetic test capabilities. These milestones do **not** represent a production-ready Vaultwarden integration. At initial roadmap authoring no new-backend tests had been run; the later disposable live-server acceptance is documented below.
 
-`███▍░░░░░░░░░░░░░░░░` **17%** (current: 13% → 17%, **+4 percentage points** since the previous verified checkpoint; historical adoption baseline was 13%).
+`████░░░░░░░░░░░░░░░░` **20%** (previous verified 17% → 20%, **+3 percentage points** this session; adoption baseline 13%).
 
 **Status key:** ✅ verified complete | 🟡 active | ⬜ pending | ⛔ blocked. Every item's bracketed **w** is its share of the 100-point overall estimate. An item earns all its weight only after its acceptance check passes; partial activity is documented but not counted. Adjust weights transparently if discoveries materially change the project.
 
@@ -33,7 +33,7 @@ New scope replaces the previous multi-browser-source objective, so old and new p
 | --- | --- | ---: | --- | --- |
 | A01 🔍 | Audit existing code, CI, dependencies, historical roadmap and reusable components | 3 | ✅ | Identify real source importer, independent encrypted vault, picker, keyring and security gates from repository evidence; initial audit recorded below |
 | A02 🎯 | Establish new user contract and non-goals | 3 | ✅ | Single upstream authority, explicit refresh, encrypted cache, offline semantics, picker and read-only scope documented in this roadmap and PROJECT.md |
-| A03 ⚖️ | Decide and document supported native Rust integration approach | 3 | 🟡 | Prototype/auth feasibility and dependency stability/license findings; select an implementation only after evidence; requires A02 |
+| A03 ⚖️ | Decide and document supported native Rust integration approach | 3 | ✅ | Prototype/auth feasibility and dependency stability/license findings; select an implementation only after evidence; requires A02 |
 | A04 🛡️ | Threat model and lock/freshness/revocation policy | 3 | 🟡 | Define access after Vaultwarden logout or account revocation, local unlock, stolen-disk/session threat, cache destruction, and update failure behavior; requires A03 |
 
 **Existing state:** `src/app.rs`, `src/search.rs`, `src/clipboard.rs`, `src/vault.rs`, `src/session.rs` and `src/desktop_keyring.rs` contain candidate reusable behavior. `src/import.rs`, `src/discovery.rs`, `src/source_status.rs` and browser-specific source ranking are legacy. Current `PROJECT.md`, `docs/queue.md`, `docs/sources.md` and existing CI are for the original product and require careful reconciliation. Preserve privacy and historical evidence.
@@ -194,6 +194,14 @@ The test-only sync filter was extended to honor the upstream `viewPassword` rest
 - **Live acceptance CI:** [Disposable Vaultwarden acceptance](https://github.com/sguzman/passflick/actions/runs/41752298727), commit `9ccd71af11195180f99d7a0f0bebc405f5591a9a`: **1 passed, 0 failed**. **Standard regression CI:** [Rust](https://github.com/sguzman/passflick/actions/runs/41752173484), code commit `035a2f92b3c92273b8756aa69c14345ae1d8557b`: **188 passed, 0 failed, 1 intentionally ignored** (the live test is run separately), with formatting, CLI/desktop/encrypted-recovery smoke and Clippy green; [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41752173545) also green. The later commit changes only the disposable CI launcher.
 - **Architecture evidence:** Bitwarden's internal password-manager SDK does not promise a supported external integration; `rbw` is MIT-licensed and provides compatible native cryptographic primitives, but does **not** promise a stable embeddable API. High-level `rbw::api::Client::sync` omits archival/permission information required by the local projection. The version-pinned, raw-sync, native-Rust adapter works on the tested **Vaultwarden 1.37.5 / rbw 1.15.0** combination. This demonstrates feasibility, **not** long-term compatibility or a production backend selection; explicit version upgrade/maintenance audits remain necessary for A03.
 - **Not yet accepted:** live TOTP/email-code MFA and refresh-token rotation/expiry, Argon2id account interoperability, organization/re-prompt policies, live archive/delete/update repetition, private-key provisioning/local lock/logout, secure production update CLI, picker migration, and actual EndeavourOS/Hyprland acceptance. Synthetic security and cache tests remain separate from those real-server cases. No release tags or user-data migrations were performed.
+
+### 2026-11-04 A03 native backend decision and live MFA/refresh lifecycle validation
+
+- **A03 ⚖️ accepted, +3 points:** Choose the narrow **native read-only raw-sync Rust adapter** powered by Rustls `reqwest` transport and pinned MIT `rbw 1.15.0` cryptographic/KDF components, not lossy high-level `rbw` sync, unstable Bitwarden internal SDK or a Node/`bw` runtime. Full rationale, dependencies, maintenance and fail-closed limits in [ADR-001](docs/adr-001-native-vaultwarden-adapter.md). This closes the architecture choice **only**, not production rollout.
+- **Expanded real Vaultwarden 1.37.5 acceptance:** same fictional disposable account now exercises an **expired access token → actual refresh-token grant**, multiple consecutive full updates, changed upstream password, archive/unarchive, soft-delete, same-site duplicate upstream IDs, and a wrong-account update that preserves previous ciphertext. TOTP enrollment by the fixture-only client is followed by a native MFA challenge, invalid-code rejection, valid authenticator login, and another read-only authenticated sync.
+- **Green on `7a69b6d`:** [real disposable HTTPS CI](https://github.com/sguzman/passflick/actions/runs/41754548371) 1/1 pass, [Rust CI](https://github.com/sguzman/passflick/actions/runs/41754548505) 188/188 passing with one intentionally ignored live test (run separately), rustfmt, smoke and Clippy green; [synthetic GUI CI](https://github.com/sguzman/passflick/actions/runs/41754548316) green. TOTP test uses only synthetic credentials and test-only HMAC/SHA1/Base32 dependencies already present in the lock graph.
+- **B02, B03, B04, B05, C02, C03, C04 and D04 are not being credited here:** email-code MFA and server policy variants, authenticated production secrets/keyring, local lock/logout, read-only boundary audit, full interrupted/concurrent behavior, actual manual update command and target-host UX remain incomplete.
+- **Verified overall:** **17/100 → 20/100, +3 percentage points**. No production vault, user secret, source importer, or real remote account was modified.
 
 ## 📍 Durable checkpoint
 
