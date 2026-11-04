@@ -111,15 +111,32 @@ await_close() {
   echo 'Native Wayland picker did not exit after copy action.' >&2
   exit 1
 }
-read_clipboard() {
+# The clipboard owner can become visible after the picker has exited.
+# Poll for an exact match instead of accepting any available (possibly stale)
+# selection. Do not print clipboard content, even on failure.
+assert_clipboard() {
+  local stage="$1"
   for _ in $(seq 1 60); do
     if env -u DISPLAY timeout 3s wl-paste --no-newline \
-        --type 'text/plain;charset=utf-8' > "$root/actual" 2>/dev/null; then
+        --type 'text/plain;charset=utf-8' > "$root/actual" 2>/dev/null &&
+        cmp -s "$root/expected" "$root/actual"; then
       return 0
     fi
     sleep 0.1
   done
-  echo 'Native Wayland clipboard was not available.' >&2
+
+  if [[ "$stage" == username ]]; then
+    if [[ "$PASSFLICK_NATIVE_FIRST_PASSWORD" == first ]]; then
+      printf '  🗝️ contraseña  ' > "$root/wrong-field"
+    else
+      printf 'second secret' > "$root/wrong-field"
+    fi
+    if cmp -s "$root/wrong-field" "$root/actual"; then
+      echo 'Native Wayland Shift+Enter copied a password instead of a username.' >&2
+      exit 1
+    fi
+  fi
+  echo "Native Wayland $stage clipboard did not match the fictional fixture." >&2
   exit 1
 }
 
@@ -127,9 +144,8 @@ read_clipboard() {
 launch
 xdotool key --clearmodifiers shift+Return
 await_close
-read_clipboard
 printf 'mañana用户' > "$root/expected"
-cmp "$root/expected" "$root/actual"
+assert_clipboard username
 env -u DISPLAY wl-copy --clear >/dev/null 2>&1 || true
 
 # Copy the selected password from the authenticated projection, including
@@ -137,13 +153,12 @@ env -u DISPLAY wl-copy --clear >/dev/null 2>&1 || true
 launch
 xdotool key --clearmodifiers Return
 await_close
-read_clipboard
 if [[ "$PASSFLICK_NATIVE_FIRST_PASSWORD" == first ]]; then
   printf '  🗝️ contraseña  ' > "$root/expected"
 else
   printf 'second secret' > "$root/expected"
 fi
-cmp "$root/expected" "$root/actual"
+assert_clipboard password
 
 # Escape must close the populated native Wayland picker WITHOUT copying or
 # clearing the existing clipboard. Reuse the fictional password already copied
@@ -151,8 +166,7 @@ cmp "$root/expected" "$root/actual"
 launch
 xdotool key --clearmodifiers Escape
 await_close
-read_clipboard
-cmp "$root/expected" "$root/actual"
+assert_clipboard Escape
 env -u DISPLAY wl-copy --clear >/dev/null 2>&1 || true
 
 echo 'Native Wayland populated picker copied exact fictional credentials and preserved clipboard on Escape.'

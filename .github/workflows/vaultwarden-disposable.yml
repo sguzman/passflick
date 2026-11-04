@@ -6,6 +6,10 @@ on:
     paths:
       - 'src/bitwarden/**'
       - 'src/projection.rs'
+      - 'src/copy_shortcut.rs'
+      - 'src/app.rs'
+      - 'src/main.rs'
+      - 'src/clipboard.rs'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'ci/vaultwarden-disposable.sh'
