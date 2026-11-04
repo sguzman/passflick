@@ -199,6 +199,21 @@ fn tls_system_trust_custom_ca_and_hostname_mismatch() {
 }
 
 #[test]
+fn unavailable_https_server_fails_closed_without_local_or_plaintext_fallback() {
+    // An unused loopback port cannot accept HTTPS. No real endpoint or
+    // account is contacted and the native client must not fall back to HTTP.
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let endpoint = ServerEndpoint::parse(&format!("https://127.0.0.1:{port}")).unwrap();
+    let client = ReadOnlySyncTransport::new().unwrap();
+    assert!(matches!(
+        client.fetch_sync(&endpoint, "fictional-bearer", "fixture-account"),
+        Err(TransportError::Network)
+    ));
+}
+
+#[test]
 fn invalid_extra_ca_never_enables_an_insecure_fallback() {
     assert!(matches!(
         ReadOnlySyncTransport::with_additional_root_pem(b"not a certificate"),
