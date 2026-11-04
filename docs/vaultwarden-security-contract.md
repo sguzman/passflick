@@ -32,6 +32,14 @@ The new projection **must have a separate file identity, encryption key, session
 
 These are implementation requirements, **not claims that current Passflick behaves this way**. A03/A04 and C03/G04 remain open until the native backend, cache key lifecycle and real Wayland tests substantiate them.
 
+## Real disposable Vaultwarden acceptance (2026-11-04)
+
+The isolated adapter was successfully tested against a real, disposable **Vaultwarden 1.37.5** instance using synthetic credentials, PBKDF2 100,000 iterations and a temporary CA-signed HTTPS hostname. Its identity login and `GET /api/sync` are separated from the fixture-only account/cipher provisioning client. Two independently identified login ciphers decrypted and round-tripped through a distinct encrypted offline projection without requiring HTTP to reopen the snapshot. The launcher explicitly opts into disposable storage **only** for this synthetic CI container, never for a user's server.
+
+[Live server CI](https://github.com/sguzman/passflick/actions/runs/41752298727) passed the ignored integration test in its dedicated job. [Regular Rust](https://github.com/sguzman/passflick/actions/runs/41752173484) passed 188 tests with the live test excluded from standard unit runs, and [synthetic GUI](https://github.com/sguzman/passflick/actions/runs/41752173545) passed. No personal credentials, production hosts, user profiles or historical encrypted vault files were used.
+
+The acceptance shows native protocol **feasibility only**. It does not establish the security of real session persistence, remote MFA or refresh-token expiry, local lock/logout enforcement, private key storage, organization policies, ongoing credential changes, or end-to-end real desktop behavior. The incomplete production path must not be enabled yet.
+
 ## Native Bitwarden crypto and token lifecycle boundaries (test-only)
 
 The adapter currently uses the pinned MIT `rbw` Rust library for master-password KDF, wrapped user key, type-2 ciphertext decoding and HMAC verification. Since the library's verifier assumes a fixed 32-byte decoded MAC, Passflick rejects malformed decoded lengths, missing MAC, incorrect IV length and non-block-aligned ciphertext **before** dispatching to it. Error types must remain non-secret and failed candidate updates must never mutate the prior encrypted cache.

@@ -32,6 +32,14 @@ The disposable OpenSSL HTTPS test proves CA trust and hostname validation with n
 
 **Next:** Validate full authentication, MFA and sync against a disposable real Vaultwarden; then review local key provisioning and explicit update/logout/lock UX before any production cutover.
 
+## Disposable Vaultwarden 1.37.5 protocol evidence (2026-11-04)
+
+A standalone GitHub Actions job launches a real Vaultwarden `1.37.5` server behind a local TLS Caddy proxy, generates a synthetic CA and permits volatile storage only in the throwaway container. A fixture-only provisioning client registers a fictional account, then creates two distinct encrypted login ciphers. The **Passflick** side authenticates with native Rust prelogin/password grant, consumes `GET /api/sync` without upstream writes, decrypts both records through MIT `rbw 1.15.0` primitives, persists an authenticated encrypted projection and reloads it offline. PBKDF2 is set to the server's enforced minimum of 100,000 iterations. All real login names, credentials, URLs and domain values are fictional.
+
+**Verified:** [live server test: 1 passed](https://github.com/sguzman/passflick/actions/runs/41752298727), [Rust: 188 passed, 1 ignored](https://github.com/sguzman/passflick/actions/runs/41752173484), and [synthetic GUI green](https://github.com/sguzman/passflick/actions/runs/41752173545). The live test intentionally remains ignored during regular Rust tests to avoid a Docker requirement; its dedicated job runs it explicitly.
+
+**Decision impact:** B01 native feasibility is established on this specific tested server/library pair. `rbw` is a CLI/agent with public but unstable embeddable modules; its high-level sync is not lossless for archive/permission metadata. The raw-sync adapter is the viable candidate; **A03 production selection remains open** pending authentication/MFA variants, upgrade maintenance plan, dependency/license review for the final build, and secure cache-key lifecycle. All new adapter modules remain under `#[cfg(test)]`.
+
 ## Responsibilities
 
 | Component | Owns | Does not own |
