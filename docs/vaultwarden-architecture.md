@@ -78,6 +78,12 @@ The disposable-server workflow now builds the opt-in preview executable and driv
 
 [CI on `056d267`](https://github.com/sguzman/passflick/commit/056d2670d3b7140a4cb43eb564f2962c8ccbc0d6): [Rust](https://github.com/sguzman/passflick/actions/runs/41844078843), [GUI](https://github.com/sguzman/passflick/actions/runs/41844078897), [real disposable Vaultwarden and CLI](https://github.com/sguzman/passflick/actions/runs/41844078786) all passed. This is not production or actual EndeavourOS/Hyprland keyring/clipboard acceptance; the feature flag remains non-default.
 
+## Opt-in local offline projection lifecycle (2026-11-04)
+
+After a successful authenticated encrypted preview refresh, a create-only owner-only `projection.pfidentity` file can record the server URL identity and upstream account ID as a **non-secret, unencrypted routing hint**. It is not trusted to grant decryption: `projection unlock` must authenticate the dedicated Argon2id keywrap and AEAD snapshot against that same scope before adding the content key to the separately named Linux session-keyring entry. `projection lock` sets a deny marker before key invalidation; `projection status` checks the marker and authenticates any cached key before returning only count/timestamp metadata. All three commands run strictly offline. The historical vault and default picker are never read by this path.
+
+[Code `4e55e9f`](https://github.com/sguzman/passflick/commit/4e55e9f3a83011b2c600874e9f22cd0c2665ce82) and [expanded Rust tests on `1d33832`](https://github.com/sguzman/passflick/actions/runs/41854391053) verify fake-backend manual-lock precedence, passphrase/identity failure boundaries and strict locator storage. The real kernel session lifetime, cross-process behavior, offline picker rendering and actual EndeavourOS/Hyprland QA remain unverified and are required before release.
+
 ## Responsibilities
 
 | Component | Owns | Does not own |
