@@ -268,6 +268,12 @@ sleep 3
 projection_cli status >"$root/lock.status"
 grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
 assert_clipboard after-rejected-unlock
+# A rejected editor Enter may relinquish the native surface's keyboard
+# focus. Re-establish the Weston X11 output and seat input serial *after*
+# entering the wrong passphrase, as in the established Escape baseline.
+timeout 10s xdotool windowfocus --sync "$weston_window"
+xdotool mousemove --window "$weston_window" 430 125 click 1
+sleep 0.3
 xdotool key --clearmodifiers Escape
 await_close rejected-unlock-Escape
 assert_clipboard after-rejected-Escape
