@@ -439,8 +439,16 @@ fn disposable_server_auth_sync_encrypted_offline() {
         // password-only projection schema must not contain its decrypted
         // otpauth URI or the seed itself, even while in-memory plaintext.
         let projection_json = first.encode_json().unwrap();
-        assert!(!projection_json.windows(LOGIN_TOTP.len()).any(|w| w == LOGIN_TOTP.as_bytes()));
-        assert!(!projection_json.windows(b"JBSWY3DPEHPK3PXP".len()).any(|w| w == b"JBSWY3DPEHPK3PXP"));
+        assert!(
+            !projection_json
+                .windows(LOGIN_TOTP.len())
+                .any(|w| w == LOGIN_TOTP.as_bytes())
+        );
+        assert!(
+            !projection_json
+                .windows(b"JBSWY3DPEHPK3PXP".len())
+                .any(|w| w == b"JBSWY3DPEHPK3PXP")
+        );
 
         super::terminal_acceptance::run_cli(
             binary,
