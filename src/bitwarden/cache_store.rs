@@ -606,8 +606,7 @@ mod tests {
             Err(CacheError::Io)
         );
         assert_eq!(fs::read(&path).unwrap(), original_bytes);
-        let still_current =
-            load(&path, &local_key, "https://vault.example.test", "one").unwrap();
+        let still_current = load(&path, &local_key, "https://vault.example.test", "one").unwrap();
         assert_eq!(still_current.last_success_at(), 400);
         assert_eq!(still_current.items()[0].password(), "old secret");
         assert!(
