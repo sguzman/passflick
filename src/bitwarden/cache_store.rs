@@ -277,6 +277,19 @@ pub fn publish(
 }
 
 fn write_atomic(path: &Path, encrypted: &[u8], allow_replace: bool) -> Result<(), CacheError> {
+    write_atomic_with_checkpoint(path, encrypted, allow_replace, || Ok(()))
+}
+
+// The checkpoint runs *after* the fully encrypted temporary file has been
+// synced, but *before* any publication changes the live snapshot pathname.
+// Ordinary calls use a no-op; tests inject a simulated interruption through
+// the exact same production write path, rather than manufacturing an orphan.
+fn write_atomic_with_checkpoint<F: FnOnce() -> Result<(), CacheError>>(
+    path: &Path,
+    encrypted: &[u8],
+    allow_replace: bool,
+    before_commit: F,
+) -> Result<(), CacheError> {
     let parent = path.parent().ok_or(CacheError::InvalidPath)?;
     let mut nonce = [0_u8; 8];
     getrandom::fill(&mut nonce).map_err(|_| CacheError::Io)?;
@@ -295,6 +308,7 @@ fn write_atomic(path: &Path, encrypted: &[u8], allow_replace: bool) -> Result<()
         file.write_all(encrypted)?;
         file.sync_all()?;
         drop(file);
+        before_commit()?;
 
         // Creating a new cache must not replace a surprise preexisting file.
         // An existing authenticated cache can be replaced by an atomic rename.
@@ -568,6 +582,54 @@ mod tests {
             ),
             Err(CacheError::UnsafeDirectory)
         ));
+    }
+
+    #[test]
+    fn interrupted_before_atomic_commit_preserves_old_snapshot_and_cleans_temporary_file() {
+        let dir = TestDir::new();
+        let path = dir.cache();
+        let local_key = key();
+        publish(
+            &path,
+            &local_key,
+            &snapshot("https://vault.example.test", "one", 400, "old secret"),
+        )
+        .unwrap();
+        let original_bytes = fs::read(&path).unwrap();
+        let replacement = snapshot("https://vault.example.test", "one", 401, "new secret");
+        let encrypted = encrypt_snapshot(&replacement, &local_key).unwrap();
+
+        // A failed operation after temporary ciphertext sync must never
+        // replace the authenticated live path or leak an unfinished file.
+        assert_eq!(
+            write_atomic_with_checkpoint(&path, &encrypted, true, || Err(CacheError::Io)),
+            Err(CacheError::Io)
+        );
+        assert_eq!(fs::read(&path).unwrap(), original_bytes);
+        let still_current =
+            load(&path, &local_key, "https://vault.example.test", "one").unwrap();
+        assert_eq!(still_current.last_success_at(), 400);
+        assert_eq!(still_current.items()[0].password(), "old secret");
+        assert!(
+            fs::read_dir(&dir.0).unwrap().all(|entry| {
+                !entry
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".passflick-projection.tmp.")
+            }),
+            "interrupted projection publication left a temporary ciphertext file"
+        );
+
+        // The create-only case also must not leave an apparently initialized
+        // snapshot when publication aborts before the final hard link.
+        let fresh = TestDir::new();
+        let initial = fresh.cache();
+        assert_eq!(
+            write_atomic_with_checkpoint(&initial, &encrypted, false, || Err(CacheError::Io)),
+            Err(CacheError::Io)
+        );
+        assert!(!initial.exists());
     }
 
     #[test]
