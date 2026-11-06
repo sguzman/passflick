@@ -7,6 +7,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'ci/gui-smoke.sh'
+      - 'ci/projection-gui-smoke.sh'
       - 'ci/wayland-smoke.sh'
       - '.github/workflows/gui-smoke.yml'
   pull_request:
@@ -15,6 +16,7 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'ci/gui-smoke.sh'
+      - 'ci/projection-gui-smoke.sh'
       - 'ci/wayland-smoke.sh'
       - '.github/workflows/gui-smoke.yml'
   workflow_dispatch:

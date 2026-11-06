@@ -25,6 +25,12 @@ for _ in $(seq 1 120); do
   if [[ -n "$window" ]]; then break; fi
   if ! kill -0 "$pid" 2>/dev/null; then
     echo 'Offline preview picker terminated early' >&2
+    # Synthetic fixture only: expose the actual windowing/egui error so
+    # failures are diagnosable instead of assuming an application regression.
+    sed -n '1,60p' "$dir/stderr" >&2
+    if ! xdpyinfo >/dev/null 2>&1; then
+      echo 'Virtual X11 display became unavailable during offline preview smoke.' >&2
+    fi
     exit 1
   fi
   sleep 0.1
