@@ -32,6 +32,11 @@ Disposable Weston runs [`41901413863`](https://github.com/sguzman/passflick/acti
 - Enter copies **exact fictional password bytes**, including Unicode, leading/trailing whitespace and any trailing newline, and closes. Shift+Enter copies **exact fictional username bytes**, including Unicode, and closes. Fast Shift release in the same frame must not choose the wrong field. Escape closes without modifying clipboard selection.
 - Use the real sensitive-capable `wl-copy` and `wl-paste` in the Wayland session; no X11-mode fallback for this test. Check the **actual clipboard history policy** independently because `--sensitive` is an advisory hint, not guaranteed suppression.
 
+## Login TOTP record scope
+
+- A login item may carry an **encrypted TOTP seed** upstream. [Disposable Vaultwarden acceptance run `42271287029`](https://github.com/sguzman/passflick/actions/runs/42271287029) verifies that the server retains a fictional encrypted login TOTP field while Passflick's offline projection excludes its decrypted seed and `otpauth://` URI.
+- The preview remains a **password/username picker**, not a TOTP authenticator. Do not describe its ability to sign in with account-level TOTP MFA as support for generating login-item TOTP codes. Continue using a separate authenticator where needed.
+
 ## Offline, locking and refresh
 
 - With the disposable Vaultwarden server offline, the most recently verified encrypted snapshot remains readable **only** after the appropriate local unlock; the UI labels its sync age and that offline access may be stale. A corrupt or absent snapshot fails closed.
