@@ -33,6 +33,10 @@ const DEVICE_ID: &str = "passflick-disposable-acceptance";
 const ACCOUNT_KEY: [u8; 64] = [71; 64];
 const FIXTURE_URL: &str = "https://localhost:18443/";
 const LOCAL_PASSPHRASE: &[u8] = b"fictional offline passphrase independent of remote login";
+// A fictional Bitwarden login TOTP seed, NOT the separate account-level MFA
+// secret. The projection is password-only and must never persist this field.
+const LOGIN_TOTP: &str =
+    "otpauth://totp/Passflick:fictional?secret=JBSWY3DPEHPK3PXP&issuer=Passflick";
 
 struct PrivateDirectory(PathBuf);
 
@@ -150,6 +154,7 @@ fn fixture_cipher_payload(account: &str, secret: &str) -> Value {
         "login": {
             "username": encrypted("mañana用户"),
             "password": encrypted(secret),
+            "totp": encrypted(LOGIN_TOTP),
             "uris": [
                 {"uri":encrypted("https://example.test/one")},
                 {"uri":encrypted("https://alternative.example.test/two")}
@@ -350,6 +355,13 @@ fn disposable_server_auth_sync_encrypted_offline() {
     // metadata) before any native Passflick sync or CLI operations.
     let upstream_initial = fixture_server_cipher_state(&client, &url, bearer);
     assert_eq!(upstream_initial.len(), 2);
+    // Require the real disposable server to retain the encrypted TOTP
+    // field. Otherwise this test would silently pass on a stripped fixture.
+    assert!(upstream_initial.iter().all(|cipher| {
+        cipher["login"]["totp"]
+            .as_str()
+            .is_some_and(|value| value.starts_with("2."))
+    }));
 
     // Native bootstrap now owns account discovery *and* the first complete
     // credential projection. The fixture-only writer never supplies the ID.
@@ -423,6 +435,12 @@ fn disposable_server_auth_sync_encrypted_offline() {
         let first =
             cache_store::load(&path, &first_key, endpoint.server_identity(), &account).unwrap();
         assert_eq!(first.items().len(), 2);
+        // The raw upstream login includes an encrypted TOTP seed, but our
+        // password-only projection schema must not contain its decrypted
+        // otpauth URI or the seed itself, even while in-memory plaintext.
+        let projection_json = first.encode_json().unwrap();
+        assert!(!projection_json.windows(LOGIN_TOTP.len()).any(|w| w == LOGIN_TOTP.as_bytes()));
+        assert!(!projection_json.windows(b"JBSWY3DPEHPK3PXP".len()).any(|w| w == b"JBSWY3DPEHPK3PXP"));
 
         super::terminal_acceptance::run_cli(
             binary,
