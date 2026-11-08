@@ -13,9 +13,11 @@ use zeroize::{Zeroize, Zeroizing};
 
 use super::offline_command;
 use super::projection_search::{display_row, rank_projection};
+use super::system_theme;
 use crate::projection::ProjectionSnapshot;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(800);
+const THEME_POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 /// The opt-in picker is keyboard-first, including its appearance controls.
 /// Consume the shortcut before the focused search editor can receive it.
@@ -122,6 +124,8 @@ struct ProjectionPicker {
     notice: Option<&'static str>,
     error: Option<&'static str>,
     theme: egui::ThemePreference,
+    darkman_theme: Option<egui::Theme>,
+    last_theme_poll: Option<Instant>,
     last_poll: Instant,
 }
 
@@ -143,6 +147,8 @@ impl ProjectionPicker {
             notice,
             error: None,
             theme: egui::ThemePreference::System,
+            darkman_theme: None,
+            last_theme_poll: None,
             last_poll: Instant::now(),
         }
     }
@@ -433,7 +439,22 @@ impl eframe::App for ProjectionPicker {
                 .weak(),
             );
         });
-        ctx.set_theme(self.theme);
+        // Wayland's toolkit theme signal is sometimes absent (or out of
+        // sync with Darkman). Keep System selected in the UI while rendering
+        // Darkman's live mode; manual Light/Dark always wins.
+        if self.theme == egui::ThemePreference::System
+            && self
+                .last_theme_poll
+                .is_none_or(|last| last.elapsed() >= THEME_POLL_INTERVAL)
+        {
+            self.darkman_theme = system_theme::darkman_theme();
+            self.last_theme_poll = Some(Instant::now());
+        }
+        ctx.set_theme(system_theme::effective_preference(
+            self.theme,
+            self.darkman_theme,
+            ctx.system_theme(),
+        ));
         if request_unlock {
             let result = offline_command::unlock_for_picker(self.unlock_passphrase.as_bytes());
             self.unlock_passphrase.zeroize();

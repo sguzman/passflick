@@ -26,6 +26,8 @@ pub mod projection_search;
 pub mod session_cache;
 pub mod strict_json;
 pub mod sync_filter;
+#[cfg(feature = "vaultwarden-preview")]
+mod system_theme;
 #[cfg(all(test, feature = "vaultwarden-preview"))]
 mod terminal_acceptance;
 #[cfg(test)]
