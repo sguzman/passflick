@@ -21,9 +21,9 @@ The **user-controlled update** model is deliberate: search/copy may work offline
 
 New scope replaces the previous multi-browser-source objective, so old and new percentages are **not comparable**. Preserve existing verified picker, clipboard and encrypted-vault capabilities while re-estimating all *new* integration, migration and acceptance work.
 
-**Rebaseline: 13/100 weighted points verified (13%) as of adoption.** Current verified completion: **38/100 weighted points (38%)**, including native architecture, encrypted projection schema/recovery, private-CA trust, and the opt-in projection picker's upstream-ID search and distinct-variant selection (E02/E03). The legacy default picker is still active; target-host and production cutover acceptance remain pending. **This is not a production-ready Vaultwarden picker.** The disposable live-server evidence is documented below.
+**Rebaseline: 13/100 weighted points verified (13%) as of adoption.** Current verified completion: **40/100 weighted points (40%)**, including native architecture, encrypted projection schema/recovery, private-CA trust, upstream-ID search, distinct-variant selection (E02/E03), and keyboard-accessible System/Light/Dark theme acceptance (E04) in the opt-in projection picker. The legacy default picker is still active; target-host and production cutover acceptance remain pending. **This is not a production-ready Vaultwarden picker.** The disposable live-server evidence is documented below.
 
-`███████▋░░░░░░░░░░░░` **38%** (previous verified 33% → 38%, **+5 percentage points** this development round; adoption baseline 13%).
+`████████░░░░░░░░░░░░` **40%** (previous verified 38% → 40%, **+2 percentage points** this development round; adoption baseline 13%).
 
 **Status key:** ✅ verified complete | 🟡 active | ⬜ pending | ⛔ blocked. Every item's bracketed **w** is its share of the 100-point overall estimate. An item earns all its weight only after its acceptance check passes; partial activity is documented but not counted. Adjust weights transparently if discoveries materially change the project.
 
@@ -78,7 +78,7 @@ New scope replaces the previous multi-browser-source objective, so old and new p
 | E01 ⌨️ | Preserve existing keyboard-first picker and sensitive copy | 5 | ✅ | Existing synthetic UI/clipboard tests demonstrate search focus, selection, Enter/Shift+Enter/Escape, and sensitive Wayland copy; **retest after backend replacement** under G03/G04 |
 | E02 🪪 | Replace browser provider identity with vault item identity | 3 | ✅ | Search by title/site/username, show safe distinct variants, avoid misleading Edge/Chrome priority and display, retain source-provenance fields only as optional metadata; C01 |
 | E03 🧹 | Keep genuine duplicate passwords separately selectable | 2 | ✅ | Same-site/username entries with different IDs remain identifiable without revealing secret contents; E02 |
-| E04 🎨 | Support System/Light/Dark selector | 2 | ⬜ | Theme changes apply immediately, System is default, keyboard/contrast QA; preserve existing visual design; E02 |
+| E04 🎨 | Support System/Light/Dark selector | 2 | ✅ | Theme changes apply immediately, System is default, keyboard/contrast QA; preserve existing visual design; E02 |
 
 ## M5 🧽 Retire old import mode safely — 8 points
 
@@ -391,6 +391,13 @@ The isolated local key-cache adapter now checks that its lookup scope matches th
 - **New independent upstream read-only regression:** [`5780691`](https://github.com/sguzman/passflick/commit/5780691667ca295d520665191c5bd37517c18057), corrected in [`c8fc993`](https://github.com/sguzman/passflick/commit/c8fc993aaf5094321a3f149f5978b65736e8df83) and [`275dcfd`](https://github.com/sguzman/passflick/commit/275dcfdaf24b25c5e813efaab6cac875dcb0dc7d), captures the **real disposable server's full encrypted cipher records** through a separate fixture-only GET and compares them without printing cipher contents. It verifies no remote record mutation across native initial sync, failed and successful CLI projection updates, token refresh/read-only refresh, and rejected account-bound sync. Each comparison takes its baseline **after** any intentional fixture-only upstream edit, rather than falsely attributing test-controlled writes to Passflick.
 - **Three green CI gates on unchanged runtime plus test-only additions:** [Rust `41905713756`](https://github.com/sguzman/passflick/actions/runs/41905713756) **success**; [Synthetic GUI `41905713780`](https://github.com/sguzman/passflick/actions/runs/41905713780) **success**; [disposable Vaultwarden `41905713668`](https://github.com/sguzman/passflick/actions/runs/41905713668) **success**. Disposable logs also verified the native Wayland fresh masked GUI unlock and exact fictional clipboard behavior.
 - **Scope/remaining:** B04 has stronger concrete read-only boundary evidence, but its dependency B03 and full client product acceptance remain unfinished; do not award partial weighted points or claim release readiness. The local host keyring/logout, focus/workspace, clipboard-history, upstream compatibility and reversible migration gates remain open. No real vault, default picker, desktop configuration, credentials, logout or reboot touched. **29/100 → 29/100 (Δ +0).**
+
+### 2026-11-08 — E04 native preview appearance and keyboard acceptance (+2 weighted points)
+
+- **Accepted:** The opt-in projection picker already had System/Light/Dark radio buttons and System default. New `Ctrl+1` (System), `Ctrl+2` (Light), and `Ctrl+3` (Dark) shortcuts allow immediate changes while search retains focus. The theme shortcut is consumed before TextEdit receives it. A visible shortcut legend is beside the existing appearance controls.
+- **Tests:** Headless egui acceptance checks actual resolved themes for explicit Light/Dark and System following a synthetic Light OS setting, and verifies baseline panel-text contrast of at least 4.5:1 in both explicit modes. The populated disposable Vaultwarden/Xvfb picker accepts all three shortcuts without spontaneous copy/exit and still searches and copies the exact fictional credential afterward. No theme preference is written to disk or any historical settings.
+- **Green CI on implementation `f52e7da`:** [Rust `42493598190`](https://github.com/sguzman/passflick/actions/runs/42493598190), [Synthetic GUI `42493598257`](https://github.com/sguzman/passflick/actions/runs/42493598257), and [disposable Vaultwarden `42493598191`](https://github.com/sguzman/passflick/actions/runs/42493598191).
+- **Boundaries:** E04 is complete for the **opt-in picker only**. Actual EndeavourOS/Hyprland focus, host OS theme detection, clipboard-history policy, and native runtime UX remain under G04. The default picker, historical encrypted vault, and personal credentials were not touched. **38/100 → 40/100 (Δ +2).**
 
 ### 2026-11-08 — E02/E03 native preview search and distinct variants accepted (+5 weighted points)
 
