@@ -17,6 +17,21 @@ use crate::projection::ProjectionSnapshot;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(800);
 
+/// The opt-in picker is keyboard-first, including its appearance controls.
+/// Consume the shortcut before the focused search editor can receive it.
+fn shortcut_theme(ctx: &egui::Context) -> Option<egui::ThemePreference> {
+    for (key, theme) in [
+        (egui::Key::Num1, egui::ThemePreference::System),
+        (egui::Key::Num2, egui::ThemePreference::Light),
+        (egui::Key::Num3, egui::ThemePreference::Dark),
+    ] {
+        if ctx.input_mut(|input| input.consume_key(egui::Modifiers::CTRL, key)) {
+            return Some(theme);
+        }
+    }
+    None
+}
+
 fn snapshot_age(timestamp: u64, now: u64) -> (String, bool) {
     let age = now.saturating_sub(timestamp);
     let description = if timestamp > now {
@@ -260,6 +275,9 @@ impl eframe::App for ProjectionPicker {
         if ctx.input(|input| input.key_pressed(egui::Key::ArrowDown)) {
             self.move_selection(1);
         }
+        if let Some(theme) = shortcut_theme(&ctx) {
+            self.theme = theme;
+        }
         let toggle =
             ctx.input_mut(|input| input.consume_key(egui::Modifiers::CTRL, egui::Key::Space));
 
@@ -273,6 +291,8 @@ impl eframe::App for ProjectionPicker {
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     self.theme.radio_buttons(ui);
+                    ui.label(egui::RichText::new("Ctrl+1/2/3").size(10.0).weak())
+                        .on_hover_text("Ctrl+1 System · Ctrl+2 Light · Ctrl+3 Dark");
                 });
             });
             ui.add_space(5.0);
@@ -498,6 +518,79 @@ mod tests {
             ],
         )
         .unwrap()
+    }
+
+    #[test]
+    fn theme_shortcuts_change_the_resolved_theme_with_system_as_default() {
+        let ctx = egui::Context::default();
+        let mut picker = ProjectionPicker::new(Some(fixture()), None);
+        assert_eq!(picker.theme, egui::ThemePreference::System);
+
+        for (key, expected, resolved) in [
+            (
+                egui::Key::Num2,
+                egui::ThemePreference::Light,
+                egui::Theme::Light,
+            ),
+            (
+                egui::Key::Num3,
+                egui::ThemePreference::Dark,
+                egui::Theme::Dark,
+            ),
+            (
+                egui::Key::Num1,
+                egui::ThemePreference::System,
+                egui::Theme::Light,
+            ),
+        ] {
+            ctx.run_ui(
+                egui::RawInput {
+                    system_theme: Some(egui::Theme::Light),
+                    events: vec![egui::Event::Key {
+                        key,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::CTRL,
+                    }],
+                    ..Default::default()
+                },
+                |ui| {
+                    picker.theme = shortcut_theme(ui.ctx()).expect("theme shortcut was ignored");
+                    ui.ctx().set_theme(picker.theme);
+                },
+            );
+            assert_eq!(picker.theme, expected);
+            assert_eq!(ctx.theme(), resolved);
+        }
+    }
+
+    #[test]
+    fn light_and_dark_panel_text_have_readable_default_contrast() {
+        fn luminance(color: egui::Color32) -> f32 {
+            let channel = |v: u8| {
+                let s = f32::from(v) / 255.0;
+                if s <= 0.04045 {
+                    s / 12.92
+                } else {
+                    ((s + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * channel(color.r())
+                + 0.7152 * channel(color.g())
+                + 0.0722 * channel(color.b())
+        }
+
+        for theme in [egui::Theme::Light, egui::Theme::Dark] {
+            let ctx = egui::Context::default();
+            ctx.set_theme(theme);
+            let visuals = ctx.style().visuals;
+            let foreground = luminance(visuals.widgets.noninteractive.fg_stroke.color);
+            let background = luminance(visuals.panel_fill);
+            let contrast = (foreground.max(background) + 0.05)
+                / (foreground.min(background) + 0.05);
+            assert!(contrast >= 4.5, "{theme:?} panel text contrast: {contrast}");
+        }
     }
 
     #[test]
