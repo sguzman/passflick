@@ -28,6 +28,7 @@ use super::{
 };
 
 const EMAIL: &str = "passflick-disposable@example.test";
+const ARGON_EMAIL: &str = "passflick-argon-disposable@example.test";
 const PASSWORD: &str = "fictional-passflick-master-2026";
 const DEVICE_ID: &str = "passflick-disposable-acceptance";
 const ACCOUNT_KEY: [u8; 64] = [71; 64];
@@ -140,6 +141,60 @@ fn register(client: &Client, base: &str) {
         response.status().is_success(),
         "disposable registration status {}",
         response.status()
+    );
+}
+
+/// Separate disposable account exercising the *actual* Argon2id prelogin,
+/// password grant, wrapped personal key and read-only sync compatibility.
+/// The primary PBKDF2 fixture remains untouched; only this test client may
+/// provision accounts or their fictional ciphers.
+fn register_argon_account(client: &Client, base: &str) {
+    let response = client
+        .post(route(
+            base,
+            "identity/accounts/register/send-verification-email",
+        ))
+        .header(reqwest::header::ACCEPT, "application/json")
+        .json(&json!({"email":ARGON_EMAIL,"name":"Synthetic Argon2id Account"}))
+        .send()
+        .expect("Argon2id fixture verification request failed");
+    assert!(
+        response.status().is_success(),
+        "Argon2id fixture verification request was rejected"
+    );
+    let ticket: String = response.json().expect("Argon2id verification ticket missing");
+
+    let mut locked = rbw::locked::Vec::new();
+    locked.extend(PASSWORD.as_bytes().iter().copied());
+    let identity = Identity::new(
+        ARGON_EMAIL,
+        &Password::new(locked),
+        KdfType::Argon2id,
+        3,
+        Some(64),
+        Some(2),
+    )
+    .expect("synthetic Argon2id KDF failed");
+    let wrapped = CipherString::encrypt_symmetric(&identity.keys, &ACCOUNT_KEY)
+        .unwrap()
+        .to_string();
+    let response = client
+        .post(route(base, "identity/accounts/register/finish"))
+        .json(&json!({
+            "email": ARGON_EMAIL,
+            "emailVerificationToken": ticket,
+            "masterPasswordHash": rbw::base64::encode(identity.master_password_hash.hash()),
+            "key": wrapped,
+            "kdf": 1,
+            "kdfIterations": 3,
+            "kdfMemory": 64,
+            "kdfParallelism": 2
+        }))
+        .send()
+        .expect("Argon2id fixture registration request failed");
+    assert!(
+        response.status().is_success(),
+        "disposable Argon2id account registration was rejected"
     );
 }
 
@@ -352,6 +407,70 @@ fn disposable_server_auth_sync_encrypted_offline() {
     assert!(initial.items().is_empty());
     let account = initial.account_id().to_owned();
     assert_eq!(initial.server_identity(), endpoint.server_identity());
+
+    // A genuinely Argon2id-configured account exercises *both* the native
+    // prelogin KDF settings and master-password/key-unwrapping path. A
+    // wrong password must be rejected without creating an authenticated
+    // session. Its login IDs remain isolated from the PBKDF2 test account.
+    register_argon_account(&client, &url);
+    assert!(matches!(
+        transport.authenticate(
+            &endpoint,
+            ARGON_EMAIL,
+            "fictional wrong Argon2id master password",
+            "passflick-argon-wrong-device",
+            None,
+        ),
+        Err(AuthError::Rejected)
+    ));
+    let (mut argon_session, argon_decoder) = transport
+        .authenticate(
+            &endpoint,
+            ARGON_EMAIL,
+            PASSWORD,
+            "passflick-argon-correct-device",
+            None,
+        )
+        .expect("real disposable Argon2id password-grant or key-unwrapping failed");
+    let argon_empty = update::prepare_initial_sync(
+        &transport,
+        &mut argon_session,
+        &endpoint,
+        1_800_000_000,
+        &argon_decoder,
+    )
+    .expect("Argon2id account initial native sync failed");
+    assert!(argon_empty.items().is_empty());
+    let argon_account = argon_empty.account_id().to_owned();
+    assert_ne!(argon_account, account, "distinct KDF accounts shared an ID");
+    let argon_id = provision_cipher(
+        &client,
+        &url,
+        argon_session.bearer_token().unwrap(),
+        &argon_account,
+        "fictional Argon2id 🗝️ password",
+    );
+    let argon_populated = update::prepare_initial_sync(
+        &transport,
+        &mut argon_session,
+        &endpoint,
+        1_800_000_001,
+        &argon_decoder,
+    )
+    .expect("native Argon2id login decryption failed after real HTTPS sync");
+    assert_eq!(argon_populated.account_id(), argon_account);
+    assert_eq!(argon_populated.items().len(), 1);
+    assert_eq!(argon_populated.items()[0].id(), argon_id);
+    assert_eq!(
+        argon_populated.items()[0].password(),
+        "fictional Argon2id 🗝️ password"
+    );
+    assert_eq!(argon_populated.items()[0].uris().len(), 2);
+    assert!(argon_session.bearer_token().is_some());
+    drop(argon_populated);
+    drop(argon_session);
+    drop(argon_decoder);
+
     let bearer = session.bearer_token().unwrap();
 
     let first_id = provision_cipher(&client, &url, bearer, &account, "  🗝️ contraseña  ");
