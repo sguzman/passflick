@@ -679,7 +679,7 @@ mod tests {
         );
         assert!(update_command_for(
             Path::new("/opt/passflick"),
-            Path::new("/tmp/no-parent"),
+            Path::new("/"),
         )
         .is_none());
     }
