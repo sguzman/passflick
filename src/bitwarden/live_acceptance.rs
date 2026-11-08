@@ -1179,16 +1179,6 @@ fn disposable_server_auth_sync_encrypted_offline() {
     // wrong password must be rejected without creating an authenticated
     // session. Its login IDs remain isolated from the PBKDF2 test account.
     register_argon_account(&client, &url);
-    assert!(matches!(
-        transport.authenticate(
-            &endpoint,
-            ARGON_EMAIL,
-            "fictional wrong Argon2id master password",
-            "passflick-argon-wrong-device",
-            None,
-        ),
-        Err(AuthError::Rejected)
-    ));
     let (mut argon_session, argon_decoder) = transport
         .authenticate(
             &endpoint,
@@ -1236,4 +1226,18 @@ fn disposable_server_auth_sync_encrypted_offline() {
     drop(argon_populated);
     drop(argon_session);
     drop(argon_decoder);
+
+    // A deliberately wrong password can trigger server-side throttling.
+    // Verify correct login/decryption first, then reject the wrong password
+    // without making any later successful login depend on the rate limit.
+    assert!(matches!(
+        transport.authenticate(
+            &endpoint,
+            ARGON_EMAIL,
+            "fictional wrong Argon2id master password",
+            "passflick-argon-wrong-device",
+            None,
+        ),
+        Err(AuthError::Rejected)
+    ));
 }

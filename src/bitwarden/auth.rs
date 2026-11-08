@@ -246,9 +246,7 @@ fn decode_login(raw: &[u8]) -> Result<LoginReply, AuthError> {
 fn decode_refresh(raw: &[u8]) -> Result<RefreshReply, AuthError> {
     let parsed: RefreshReply =
         serde_json::from_slice(raw).map_err(|_| AuthError::InvalidResponse)?;
-    if !valid_session_token(&parsed.access_token)
-        || !valid_session_token(&parsed.refresh_token)
-    {
+    if !valid_session_token(&parsed.access_token) || !valid_session_token(&parsed.refresh_token) {
         return Err(AuthError::InvalidResponse);
     }
     token_expiration(parsed.expires_in)?;
@@ -483,7 +481,12 @@ mod tests {
         // The server reply is authenticated by TLS, but its fields are still
         // untrusted data. No space, newline, Unicode or header separators may
         // enter an in-memory bearer/refresh session.
-        let invalid = ["token with spaces", "bad\\nHeader: injected", "🗝️", "wrong?token"];
+        let invalid = [
+            "token with spaces",
+            "bad\nHeader: injected",
+            "🗝️",
+            "wrong?token",
+        ];
         for value in invalid {
             let login_access = serde_json::json!({
                 "access_token":value, "refresh_token":"fictional-refresh",
