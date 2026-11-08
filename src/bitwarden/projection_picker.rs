@@ -543,7 +543,7 @@ mod tests {
                 egui::Theme::Light,
             ),
         ] {
-            ctx.run_ui(
+            let mut output = ctx.run_ui(
                 egui::RawInput {
                     system_theme: Some(egui::Theme::Light),
                     events: vec![egui::Event::Key {
@@ -562,6 +562,9 @@ mod tests {
                     }
                 },
             );
+            // No GPU exists in this headless unit test: dispose of egui's
+            // font-atlas upload explicitly instead of dropping live deltas.
+            output.textures_delta.clear();
             assert_eq!(picker.theme, expected);
             assert_eq!(ctx.theme(), resolved);
         }
