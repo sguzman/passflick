@@ -46,6 +46,15 @@ fn exact_update_command() -> Option<String> {
 
 /// Match text sizing, keyboard target size and layout rhythm in both themes.
 /// Do not install dark-only visuals: System must continue following Darkman.
+/// Keep the central panel opaque, in both themes. Frame::new() alone
+/// defaults to a TRANSPARENT fill and can reveal the dark underlying desktop
+/// beneath light-mode text: the host QA screenshot caught that regression.
+fn preview_panel_frame(visuals: &egui::Visuals) -> egui::Frame {
+    egui::Frame::new()
+        .fill(visuals.panel_fill)
+        .inner_margin(egui::Margin::same(18))
+}
+
 fn configure_appearance(ctx: &egui::Context) {
     for theme in [egui::Theme::Light, egui::Theme::Dark] {
         let mut style = (*ctx.style_of(theme)).clone();
@@ -354,7 +363,7 @@ impl eframe::App for ProjectionPicker {
 
         let mut request_unlock = false;
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().inner_margin(egui::Margin::same(18)))
+            .frame(preview_panel_frame(ui.visuals()))
             .show(ui, |ui| {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
@@ -664,6 +673,15 @@ mod tests {
             ],
         )
         .unwrap()
+    }
+
+    #[test]
+    fn central_panel_remains_opaque_and_uses_each_themes_panel_fill() {
+        for visuals in [egui::Visuals::light(), egui::Visuals::dark()] {
+            let frame = preview_panel_frame(&visuals);
+            assert_eq!(frame.fill, visuals.panel_fill);
+            assert_eq!(frame.fill.a(), 255);
+        }
     }
 
     #[test]
