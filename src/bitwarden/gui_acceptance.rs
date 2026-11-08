@@ -208,6 +208,33 @@ pub(super) fn run(
     assert_eq!(fs::read(&clipboard).unwrap(), expected);
     fs::remove_file(&clipboard).unwrap();
 
+    // All three appearance shortcuts must leave the populated picker open,
+    // preserve keyboard search focus and never copy without a deliberate
+    // Enter. The Rust theme test separately checks actual light/dark visuals.
+    {
+        let mut child = launch(binary, data, legacy, &clipboard, &bin);
+        visible_window(&mut child);
+        for shortcut in ["ctrl+2", "ctrl+3", "ctrl+1"] {
+            xdo(&["key", "--clearmodifiers", shortcut]);
+            assert!(
+                child.0.try_wait().unwrap().is_none(),
+                "theme shortcut unexpectedly closed the picker"
+            );
+            assert!(!clipboard.exists(), "theme shortcut copied a credential");
+        }
+        xdo(&[
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "20",
+            "Synthetic Vaultwarden",
+        ]);
+        xdo(&["key", "--clearmodifiers", "Return"]);
+        await_exit(&mut child);
+    }
+    assert_eq!(fs::read(&clipboard).unwrap(), expected);
+    fs::remove_file(&clipboard).unwrap();
+
     // The second row has the *same* displayed site/username and a distinct
     // upstream ID. The real GUI must not collapse the duplicate or accidentally
     // reuse the first row's password when navigating with ArrowDown.
