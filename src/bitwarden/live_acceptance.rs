@@ -162,7 +162,9 @@ fn register_argon_account(client: &Client, base: &str) {
         response.status().is_success(),
         "Argon2id fixture verification request was rejected"
     );
-    let ticket: String = response.json().expect("Argon2id verification ticket missing");
+    let ticket: String = response
+        .json()
+        .expect("Argon2id verification ticket missing");
 
     let mut locked = rbw::locked::Vec::new();
     locked.extend(PASSWORD.as_bytes().iter().copied());
