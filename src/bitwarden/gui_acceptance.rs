@@ -208,6 +208,32 @@ pub(super) fn run(
     assert_eq!(fs::read(&clipboard).unwrap(), expected);
     fs::remove_file(&clipboard).unwrap();
 
+    // The second row has the *same* displayed site/username and a distinct
+    // upstream ID. The real GUI must not collapse the duplicate or accidentally
+    // reuse the first row's password when navigating with ArrowDown.
+    {
+        let mut child = launch(binary, data, legacy, &clipboard, &bin);
+        visible_window(&mut child);
+        xdo(&[
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "20",
+            "Synthetic Vaultwarden",
+        ]);
+        xdo(&["key", "--clearmodifiers", "Down"]);
+        xdo(&["key", "--clearmodifiers", "Return"]);
+        await_exit(&mut child);
+    }
+    let second_expected = if first_id < second_id {
+        "second secret".as_bytes()
+    } else {
+        "  🗝️ contraseña  ".as_bytes()
+    };
+    assert_eq!(fs::read(&clipboard).unwrap(), second_expected);
+    assert_ne!(second_expected, expected);
+    fs::remove_file(&clipboard).unwrap();
+
     // A successful remote update may replace the password under the same
     // upstream ID while this GUI still displays the old record. Such a GUI
     // must NOT copy the new, unseen value: the user must reopen first.
