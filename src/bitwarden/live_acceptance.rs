@@ -410,69 +410,6 @@ fn disposable_server_auth_sync_encrypted_offline() {
     let account = initial.account_id().to_owned();
     assert_eq!(initial.server_identity(), endpoint.server_identity());
 
-    // A genuinely Argon2id-configured account exercises *both* the native
-    // prelogin KDF settings and master-password/key-unwrapping path. A
-    // wrong password must be rejected without creating an authenticated
-    // session. Its login IDs remain isolated from the PBKDF2 test account.
-    register_argon_account(&client, &url);
-    assert!(matches!(
-        transport.authenticate(
-            &endpoint,
-            ARGON_EMAIL,
-            "fictional wrong Argon2id master password",
-            "passflick-argon-wrong-device",
-            None,
-        ),
-        Err(AuthError::Rejected)
-    ));
-    let (mut argon_session, argon_decoder) = transport
-        .authenticate(
-            &endpoint,
-            ARGON_EMAIL,
-            PASSWORD,
-            "passflick-argon-correct-device",
-            None,
-        )
-        .expect("real disposable Argon2id password-grant or key-unwrapping failed");
-    let argon_empty = update::prepare_initial_sync(
-        &transport,
-        &mut argon_session,
-        &endpoint,
-        1_800_000_000,
-        &argon_decoder,
-    )
-    .expect("Argon2id account initial native sync failed");
-    assert!(argon_empty.items().is_empty());
-    let argon_account = argon_empty.account_id().to_owned();
-    assert_ne!(argon_account, account, "distinct KDF accounts shared an ID");
-    let argon_id = provision_cipher(
-        &client,
-        &url,
-        argon_session.bearer_token().unwrap(),
-        &argon_account,
-        "fictional Argon2id 🗝️ password",
-    );
-    let argon_populated = update::prepare_initial_sync(
-        &transport,
-        &mut argon_session,
-        &endpoint,
-        1_800_000_001,
-        &argon_decoder,
-    )
-    .expect("native Argon2id login decryption failed after real HTTPS sync");
-    assert_eq!(argon_populated.account_id(), argon_account);
-    assert_eq!(argon_populated.items().len(), 1);
-    assert_eq!(argon_populated.items()[0].id(), argon_id);
-    assert_eq!(
-        argon_populated.items()[0].password(),
-        "fictional Argon2id 🗝️ password"
-    );
-    assert_eq!(argon_populated.items()[0].uris().len(), 2);
-    assert!(argon_session.bearer_token().is_some());
-    drop(argon_populated);
-    drop(argon_session);
-    drop(argon_decoder);
-
     let bearer = session.bearer_token().unwrap();
 
     let first_id = provision_cipher(&client, &url, bearer, &account, "  🗝️ contraseña  ");
@@ -1236,4 +1173,67 @@ fn disposable_server_auth_sync_encrypted_offline() {
         local_snapshot.items()[0].password(),
         "edited 🔐 contraseña 🧪"
     );
+
+    // A genuinely Argon2id-configured account exercises *both* the native
+    // prelogin KDF settings and master-password/key-unwrapping path. A
+    // wrong password must be rejected without creating an authenticated
+    // session. Its login IDs remain isolated from the PBKDF2 test account.
+    register_argon_account(&client, &url);
+    assert!(matches!(
+        transport.authenticate(
+            &endpoint,
+            ARGON_EMAIL,
+            "fictional wrong Argon2id master password",
+            "passflick-argon-wrong-device",
+            None,
+        ),
+        Err(AuthError::Rejected)
+    ));
+    let (mut argon_session, argon_decoder) = transport
+        .authenticate(
+            &endpoint,
+            ARGON_EMAIL,
+            PASSWORD,
+            "passflick-argon-correct-device",
+            None,
+        )
+        .expect("real disposable Argon2id password-grant or key-unwrapping failed");
+    let argon_empty = update::prepare_initial_sync(
+        &transport,
+        &mut argon_session,
+        &endpoint,
+        1_800_000_000,
+        &argon_decoder,
+    )
+    .expect("Argon2id account initial native sync failed");
+    assert!(argon_empty.items().is_empty());
+    let argon_account = argon_empty.account_id().to_owned();
+    assert_ne!(argon_account, account, "distinct KDF accounts shared an ID");
+    let argon_id = provision_cipher(
+        &client,
+        &url,
+        argon_session.bearer_token().unwrap(),
+        &argon_account,
+        "fictional Argon2id 🗝️ password",
+    );
+    let argon_populated = update::prepare_initial_sync(
+        &transport,
+        &mut argon_session,
+        &endpoint,
+        1_800_000_001,
+        &argon_decoder,
+    )
+    .expect("native Argon2id login decryption failed after real HTTPS sync");
+    assert_eq!(argon_populated.account_id(), argon_account);
+    assert_eq!(argon_populated.items().len(), 1);
+    assert_eq!(argon_populated.items()[0].id(), argon_id);
+    assert_eq!(
+        argon_populated.items()[0].password(),
+        "fictional Argon2id 🗝️ password"
+    );
+    assert_eq!(argon_populated.items()[0].uris().len(), 2);
+    assert!(argon_session.bearer_token().is_some());
+    drop(argon_populated);
+    drop(argon_session);
+    drop(argon_decoder);
 }
