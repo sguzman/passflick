@@ -6,6 +6,7 @@
 //! a previously opened window.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use eframe::egui;
@@ -18,6 +19,30 @@ use crate::projection::ProjectionSnapshot;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(800);
 const THEME_POLL_INTERVAL: Duration = Duration::from_secs(2);
+
+/// Generate a self-contained command for the same executable and projection
+/// directory. A bare 'passflick update' could accidentally invoke an older
+/// binary on PATH or write into a different XDG home than the QA preview.
+fn quote_fish_argument(value: &str) -> String {
+    format!("'{}'", value.replace('\\', "\\\\").replace('\'', "\\'"))
+}
+
+fn update_command_for(binary: &Path, snapshot: &Path) -> Option<String> {
+    let data_home = snapshot.parent()?.parent()?.to_str()?;
+    let binary = binary.to_str()?;
+    Some(format!(
+        "env XDG_DATA_HOME={} {} update",
+        quote_fish_argument(data_home),
+        quote_fish_argument(binary)
+    ))
+}
+
+fn exact_update_command() -> Option<String> {
+    update_command_for(
+        &std::env::current_exe().ok()?,
+        &crate::paths::projection_path().ok()?,
+    )
+}
 
 /// Match text sizing, keyboard target size and layout rhythm in both themes.
 /// Do not install dark-only visuals: System must continue following Darkman.
@@ -151,6 +176,7 @@ struct ProjectionPicker {
 }
 
 impl ProjectionPicker {
+    #[cfg(test)]
     fn new(snapshot: Option<ProjectionSnapshot>, notice: Option<&'static str>) -> Self {
         Self::with_bootstrap(snapshot, notice, PickerBootstrap::Existing)
     }
@@ -446,12 +472,16 @@ impl eframe::App for ProjectionPicker {
                 );
                 ui.horizontal(|ui| {
                     ui.monospace("passflick update");
-                    if ui.button("Copy command").clicked() {
-                        ctx.copy_text("passflick update".to_owned());
+                    if ui.button("Copy exact QA command").clicked() {
+                        if let Some(command) = exact_update_command() {
+                            ctx.copy_text(command);
+                        } else {
+                            self.error = Some("Cannot construct the update command for this session.");
+                        }
                     }
                 });
                 ui.label(
-                    "Run the feature-enabled executable from a terminal using the SAME XDG_DATA_HOME as this window.",
+                    "The copied command uses this release executable and the same isolated XDG_DATA_HOME. Paste it into Kitty.",
                 );
                 ui.label(
                     "The terminal securely asks for your server URL, account credentials, and a separate local passphrase.",
@@ -634,6 +664,24 @@ mod tests {
             ],
         )
         .unwrap()
+    }
+
+    #[test]
+    fn setup_command_targets_exact_binary_and_isolated_data_home() {
+        let command = update_command_for(
+            Path::new("/opt/qa build/passflick"),
+            Path::new("/tmp/qa files/passflick/projection.pfsnapshot"),
+        )
+        .unwrap();
+        assert_eq!(
+            command,
+            "env XDG_DATA_HOME='/tmp/qa files' '/opt/qa build/passflick' update"
+        );
+        assert!(update_command_for(
+            Path::new("/opt/passflick"),
+            Path::new("/tmp/no-parent"),
+        )
+        .is_none());
     }
 
     #[test]
