@@ -456,9 +456,17 @@ mod tests {
             .unwrap();
         assert_eq!(prelogin.method(), reqwest::Method::POST);
         assert_eq!(prelogin.url(), &endpoint.prelogin_url());
-        assert!(prelogin.headers().get(reqwest::header::AUTHORIZATION).is_none());
+        assert!(
+            prelogin
+                .headers()
+                .get(reqwest::header::AUTHORIZATION)
+                .is_none()
+        );
         assert_eq!(
-            prelogin.headers().get(reqwest::header::CONTENT_TYPE).unwrap(),
+            prelogin
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .unwrap(),
             "application/json"
         );
 
@@ -473,7 +481,12 @@ mod tests {
         assert_eq!(token.method(), reqwest::Method::POST);
         assert_eq!(token.url(), &endpoint.token_url());
         assert!(token.headers().get("auth-email").is_none());
-        assert!(token.headers().get(reqwest::header::AUTHORIZATION).is_none());
+        assert!(
+            token
+                .headers()
+                .get(reqwest::header::AUTHORIZATION)
+                .is_none()
+        );
 
         let token_with_email = transport
             .token_grant_request(&endpoint, Some("ZmljdGlvbmFs"), &grant)
@@ -481,7 +494,10 @@ mod tests {
             .unwrap();
         assert_eq!(token_with_email.method(), reqwest::Method::POST);
         assert_eq!(token_with_email.url(), &endpoint.token_url());
-        assert_eq!(token_with_email.headers().get("auth-email").unwrap(), "ZmljdGlvbmFs");
+        assert_eq!(
+            token_with_email.headers().get("auth-email").unwrap(),
+            "ZmljdGlvbmFs"
+        );
 
         let sync = transport
             .sync_request(&endpoint, "fictional-bearer")
