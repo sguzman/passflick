@@ -3,6 +3,8 @@
 //! Untrusted non-secret source hints never authorize a read: the keywrap and
 //! complete encrypted snapshot must authenticate the server and account.
 
+use std::fs;
+use std::io;
 use std::path::Path;
 
 use super::command::{self, PreviewError};
@@ -22,6 +24,43 @@ pub enum OfflineError {
     Input,
     #[error("offline projection keyring or cache authentication failed")]
     Access,
+}
+
+/// Only a UI hint, never an authorization decision. Every actual unlock
+/// still authenticates the private identity, keywrap and ciphertext.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum PickerBootstrap {
+    FirstRun,
+    Existing,
+    Incomplete,
+}
+
+fn picker_bootstrap_at(path: &Path) -> PickerBootstrap {
+    let mut present = 0;
+    for file in [
+        path.to_path_buf(),
+        path.with_file_name("projection.pfkey"),
+        path.with_file_name("projection.pfidentity"),
+    ] {
+        match fs::symlink_metadata(file) {
+            Ok(meta) if meta.file_type().is_file() => present += 1,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            _ => return PickerBootstrap::Incomplete,
+        }
+    }
+    match present {
+        0 => PickerBootstrap::FirstRun,
+        3 => PickerBootstrap::Existing,
+        _ => PickerBootstrap::Incomplete,
+    }
+}
+
+/// This probe never reads credentials, creates files, or accesses the legacy
+/// vault. It must not be used as permission to overwrite an incomplete cache.
+pub(super) fn picker_bootstrap() -> PickerBootstrap {
+    crate::paths::projection_path()
+        .map(|path| picker_bootstrap_at(&path))
+        .unwrap_or(PickerBootstrap::Incomplete)
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -243,6 +282,25 @@ mod tests {
             )],
         )
         .unwrap()
+    }
+
+    #[test]
+    fn first_run_probe_disambiguates_absent_complete_and_partial_projections() {
+        let fixture = Fixture::new();
+        let path = fixture.path();
+        assert_eq!(picker_bootstrap_at(&path), PickerBootstrap::FirstRun);
+        fixture.install();
+        assert_eq!(picker_bootstrap_at(&path), PickerBootstrap::Existing);
+        // An incomplete setup must not be mistaken for a new installation:
+        // a future update may need to diagnose and preserve existing bytes.
+        let identity_path = fixture.0.join("projection.pfidentity");
+        fs::remove_file(&identity_path).unwrap();
+        assert_eq!(picker_bootstrap_at(&path), PickerBootstrap::Incomplete);
+        fs::write(&identity_path, b"synthetic").unwrap();
+        assert_eq!(picker_bootstrap_at(&path), PickerBootstrap::Existing);
+        fs::remove_file(&identity_path).unwrap();
+        std::os::unix::fs::symlink(&path, &identity_path).unwrap();
+        assert_eq!(picker_bootstrap_at(&path), PickerBootstrap::Incomplete);
     }
 
     #[test]
