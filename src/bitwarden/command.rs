@@ -275,7 +275,9 @@ fn prompt_new_projection_passphrase(
         let local = prompt("New independent local projection passphrase (12–1024 characters): ")?;
         // Reject invalid length *before* asking for an exact confirmation.
         if let Err(error) = passphrase::validate_new(local.as_str(), local.as_str()) {
-            eprintln!("Local projection passphrase rejected: {error}. Try again (Ctrl+C to cancel).");
+            eprintln!(
+                "Local projection passphrase rejected: {error}. Try again (Ctrl+C to cancel)."
+            );
             continue;
         }
         let confirmation = prompt("Confirm local projection passphrase: ")?;
