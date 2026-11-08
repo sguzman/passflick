@@ -264,6 +264,32 @@ pub(crate) fn publish_candidate(
     Ok(candidate.items().len())
 }
 
+/// Retry local first-install input without repeating a successful remote
+/// authentication or sync. The old all-or-nothing candidate stays in memory
+/// until validation succeeds; no projection ciphertext is written on error.
+/// Prompt injection lets tests exercise invalid entries without a real TTY.
+fn prompt_new_projection_passphrase(
+    mut prompt: impl FnMut(&str) -> Result<Zeroizing<String>, PreviewError>,
+) -> Result<Zeroizing<String>, PreviewError> {
+    loop {
+        let local = prompt("New independent local projection passphrase (12–1024 characters): ")?;
+        // Reject invalid length *before* asking for an exact confirmation.
+        if let Err(error) = passphrase::validate_new(local.as_str(), local.as_str()) {
+            eprintln!("Local projection passphrase rejected: {error}. Try again (Ctrl+C to cancel).");
+            continue;
+        }
+        let confirmation = prompt("Confirm local projection passphrase: ")?;
+        match passphrase::validate_new(local.as_str(), confirmation.as_str()) {
+            Ok(()) => return Ok(local),
+            Err(error) => {
+                eprintln!(
+                    "Local projection passphrase rejected: {error}. Re-enter both fields (Ctrl+C to cancel)."
+                );
+            }
+        }
+    }
+}
+
 /// Explicit, opt-in preview command. All network activity occurs here, never
 /// during normal picker/search/copy. Login is performed for each update;
 /// remote tokens are never cached or serialized.
@@ -322,16 +348,11 @@ pub fn run() -> Result<(), PreviewError> {
             .map_err(|_| PreviewError::RemoteSync)?;
     // Do not touch the historical PASSFLICK_VAULT override or original file.
     let first_install = !snapshot_exists(&path)?;
-    let local = masked(if first_install {
-        "New independent local projection passphrase: "
+    let local = if first_install {
+        prompt_new_projection_passphrase(masked)?
     } else {
-        "Local projection passphrase: "
-    })?;
-    if first_install {
-        let confirmation = masked("Confirm local projection passphrase: ")?;
-        passphrase::validate_new(local.as_str(), confirmation.as_str())
-            .map_err(|_| PreviewError::Passphrase)?;
-    }
+        masked("Local projection passphrase: ")?
+    };
     let count = publish_candidate(&candidate, &path, local.as_bytes(), first_install)?;
     println!("Encrypted offline projection updated ({count} login items).");
     println!("Normal picker remains on the historical vault in this preview.");
@@ -384,6 +405,55 @@ mod tests {
             )],
         )
         .unwrap()
+    }
+
+    #[test]
+    fn local_passphrase_retry_recovers_without_restarting_remote_sync() {
+        use std::collections::VecDeque;
+
+        // First input is too short (no confirmation prompt), then the
+        // confirmation differs, then both entries match exactly.
+        let mut answers = VecDeque::from([
+            "short",
+            "correct horse battery staple",
+            "correct horse battery staplE",
+            "correct horse battery staple",
+            "correct horse battery staple",
+        ]);
+        let mut prompts = Vec::new();
+        let accepted = prompt_new_projection_passphrase(|label| {
+            prompts.push(label.to_owned());
+            answers
+                .pop_front()
+                .map(|value| Zeroizing::new(value.to_owned()))
+                .ok_or(PreviewError::Input)
+        })
+        .unwrap();
+        assert_eq!(accepted.as_str(), "correct horse battery staple");
+        assert!(answers.is_empty());
+        assert_eq!(prompts.len(), 5);
+        assert_eq!(
+            prompts
+                .iter()
+                .filter(|label| label.contains("Confirm"))
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn local_passphrase_prompt_failure_cancels_without_publishing() {
+        // A closed terminal, Ctrl+C, or unavailable input must return an
+        // error instead of silently proceeding with an invalid passphrase.
+        let mut calls = 0;
+        assert_eq!(
+            prompt_new_projection_passphrase(|_| {
+                calls += 1;
+                Err(PreviewError::Input)
+            }),
+            Err(PreviewError::Input)
+        );
+        assert_eq!(calls, 1);
     }
 
     #[test]
