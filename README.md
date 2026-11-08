@@ -2,11 +2,36 @@
 
 **A password picker, not another password manager.**
 
-Passflick gives Linux users a single, encrypted, searchable view of credentials saved elsewhere: Microsoft Edge, Chrome/Chromium, Firefox, and Apple Passwords. Your original password managers stay in charge. Passflick is an intentionally small, keyboard-driven companion to [OTPick](https://github.com/sguzman/otpick) and Glyphflick.
+Passflick is becoming a small, keyboard-first, **read-only projection of one Vaultwarden/Bitwarden-compatible vault**. Vaultwarden remains the only authority for passwords; Passflick holds an authenticated, encrypted offline copy. The current default build still contains the historical browser-CSV picker until a safe migration is accepted.
 
 `summon → search → copy → gone`
 
-## Planned Vaultwarden-only direction\n\nPassflick is transitioning from manual Edge/Chrome/Firefox/Apple CSV snapshots to a **read-only projection of a Bitwarden-compatible vault**, including self-hosted Vaultwarden. The goal is an explicit `passflick update` operation and a persistent encrypted local projection, so everyday search and copy never require a network request. **That integration is not implemented yet; the instructions below describe the existing pre-release CSV-based application.** See [the weighted roadmap](ROADMAP.md) and [architecture design](docs/vaultwarden-architecture.md) for the adoption plan and verification gates.\n\n## Daily use
+## Vaultwarden preview — implemented, not yet the default
+
+The experimental `vaultwarden-preview` feature contains a **native HTTPS sync client**, a separate encrypted offline projection, local lock/unlock and an egui picker. Disposable-server and synthetic UI checks run in CI. **Real-account use and replacing the default picker remain gated on target-host security and migration QA.** Passflick does not edit, create, or delete upstream credentials.
+
+Build the preview in release mode:
+
+```sh
+cargo build --release --locked --features vaultwarden-preview
+```
+
+Open the separate preview with a fresh, isolated `XDG_DATA_HOME`, not your existing Passflick data. In the first-run window, **Copy exact QA command** copies the absolute release executable and the matching temporary data directory into a command suitable for the fish shell. Paste it into a terminal only when you have a **disposable Vaultwarden account with fictional credentials** ready for testing. The native `update` operation privately prompts for a trusted HTTPS URL, login email, master password, optional certificate path, and a **separate local projection passphrase**. The picker itself never connects to the server.
+
+```text
+passflick update                      # feature-enabled build; explicit network sync
+passflick projection picker           # offline picker
+passflick projection unlock           # offline CLI unlock
+passflick projection lock             # local manual lock
+passflick projection status           # local state/freshness
+```
+
+Always run `update` and `projection picker` with the **same `XDG_DATA_HOME`**, otherwise the picker will report no projection. The first-run GUI distinguishes never-configured state from incomplete/unsafe projection files and does **not** request an impossible local passphrase on a pristine installation. Appearance supports System/Light/Dark; on Darkman-based Wayland desktops, System reads the session's current light/dark mode. No automatic periodic sync or upstream writes are performed.
+
+For further constraints, see the [weighted roadmap](ROADMAP.md), [host QA plan](docs/vaultwarden-host-acceptance.md), and [architecture design](docs/vaultwarden-architecture.md).
+
+## Historical default picker (browser CSV imports)
+## Daily use
 
 Launch `passflick` from your compositor shortcut. Typing immediately searches **sites and URLs**. Press **Ctrl+Space** (or Tab) to switch to **User**, then type a username to search only within the matching sites. Both filters stay active when you switch back; the top match is selected.
 
