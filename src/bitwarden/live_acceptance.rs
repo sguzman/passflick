@@ -213,6 +213,22 @@ fn provision_cipher(
         .to_owned()
 }
 
+/// This write adapter belongs exclusively to disposable fixture setup.
+fn fixture_replace_cipher(client: &Client, base: &str, bearer: &str, id: &str, body: &Value) {
+    let endpoint = format!("api/ciphers/{id}");
+    let response = client
+        .put(route(base, &endpoint))
+        .bearer_auth(bearer)
+        .json(body)
+        .send()
+        .expect("disposable fixture cipher replacement failed");
+    assert!(
+        response.status().is_success(),
+        "disposable fixture cipher replacement status {}",
+        response.status()
+    );
+}
+
 fn fixture_update_password(
     client: &Client,
     base: &str,
@@ -221,18 +237,8 @@ fn fixture_update_password(
     id: &str,
     new_secret: &str,
 ) {
-    let endpoint = format!("api/ciphers/{id}");
-    let response = client
-        .put(route(base, &endpoint))
-        .bearer_auth(bearer)
-        .json(&fixture_cipher_payload(account, new_secret))
-        .send()
-        .expect("disposable password edit request failed");
-    assert!(
-        response.status().is_success(),
-        "disposable password edit status {}",
-        response.status()
-    );
+    let body = fixture_cipher_payload(account, new_secret);
+    fixture_replace_cipher(client, base, bearer, id, &body);
 }
 
 fn fixture_cipher_action(client: &Client, base: &str, bearer: &str, id: &str, action: &str) {
@@ -782,6 +788,101 @@ fn disposable_server_auth_sync_encrypted_offline() {
         "native refresh grant or read-only update mutated upstream ciphers"
     );
 
+    // A malicious or damaged encrypted login on the *real* disposable
+    // server must abort a full refresh even when another login decrypts.
+    // The fixture writer alone installs invalid ciphertext; Passflick never
+    // sends any credential mutation request.
+    let last_good_ciphertext = fs::read(&path).unwrap();
+    let last_good_keywrap = fs::read(&keywrap_path).unwrap();
+    let last_good_sync_time =
+        cache_store::load(&path, &cache_key, endpoint.server_identity(), &account)
+            .unwrap()
+            .last_success_at();
+    let mut malformed = fixture_cipher_payload(&account, "fictional corrupted login");
+    malformed["login"]["password"] = json!("2.bad|ciphertext|mac");
+    fixture_replace_cipher(
+        &client,
+        &url,
+        session.bearer_token().unwrap(),
+        &second_id,
+        &malformed,
+    );
+    let upstream_corrupt =
+        fixture_server_cipher_state(&client, &url, session.bearer_token().unwrap());
+    assert!(
+        upstream_corrupt.iter().any(|cipher| {
+            cipher["id"] == second_id
+                && cipher["login"]["password"] == "2.bad|ciphertext|mac"
+        }),
+        "disposable server did not retain the deliberately corrupt cipher"
+    );
+    assert!(matches!(
+        update::refresh_explicit(
+            &transport,
+            &mut session,
+            UpdateRequest {
+                endpoint: &endpoint,
+                expected_account: &account,
+                timestamp: 1_800_000_003,
+                decoder: &decoder,
+                key: &cache_key,
+                path: &path,
+            },
+        ),
+        Err(update::UpdateError::Projection(_))
+    ));
+    assert_eq!(fs::read(&path).unwrap(), last_good_ciphertext);
+    assert_eq!(fs::read(&keywrap_path).unwrap(), last_good_keywrap);
+    let preserved =
+        cache_store::load(&path, &cache_key, endpoint.server_identity(), &account).unwrap();
+    assert_eq!(preserved.items().len(), 2);
+    assert_eq!(preserved.last_success_at(), last_good_sync_time);
+    assert!(
+        fixture_server_cipher_state(&client, &url, session.bearer_token().unwrap())
+            == upstream_corrupt,
+        "rejected native refresh mutated disposable upstream ciphers"
+    );
+
+    #[cfg(feature = "vaultwarden-preview")]
+    {
+        // Exercise the actual masked CLI's failed remote-sync path as well:
+        // no local-passphrase prompt, cache overwrite, keywrap change or
+        // implicit fallback to a partial single-login snapshot is permitted.
+        let binary = std::env::var("PASSFLICK_PREVIEW_BINARY").unwrap();
+        let data = &cli_directory.0;
+        let legacy = data.join("passflick").join("vault.passvault");
+        let cli_snapshot = data.join("passflick").join("projection.pfsnapshot");
+        let cli_keywrap = data.join("passflick").join("projection.pfkey");
+        let old_cli_snapshot = fs::read(&cli_snapshot).unwrap();
+        let old_cli_keywrap = fs::read(&cli_keywrap).unwrap();
+        super::terminal_acceptance::run_cli(
+            Path::new(&binary),
+            data,
+            &legacy,
+            &[
+                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden login email: ", EMAIL),
+                ("Vaultwarden master password: ", PASSWORD),
+                ("Custom trusted CA PEM path (empty for system trust): ", ca_path.as_str()),
+            ],
+            false,
+        );
+        assert_eq!(fs::read(&cli_snapshot).unwrap(), old_cli_snapshot);
+        assert_eq!(fs::read(&cli_keywrap).unwrap(), old_cli_keywrap);
+    }
+
+    // Repair the disposable account through its separate fixture writer.
+    // The immediately following successful native refresh must accept the
+    // now-valid full response and retain the repaired item after unarchive.
+    fixture_update_password(
+        &client,
+        &url,
+        session.bearer_token().unwrap(),
+        &account,
+        &second_id,
+        "fictional-restored-after-malformed",
+    );
+
     // All mutations below are made exclusively by the *fixture provisioner*.
     // Passflick only fetches a complete, read-only sync after each mutation.
     fixture_update_password(
@@ -834,7 +935,12 @@ fn disposable_server_auth_sync_encrypted_offline() {
     );
     let restored = cache_store::load(&path, &cache_key, endpoint.server_identity(), &account)
         .expect("restored snapshot could not be reopened offline");
-    assert!(restored.items().iter().any(|item| item.id() == second_id));
+    let recovered = restored
+        .items()
+        .iter()
+        .find(|item| item.id() == second_id)
+        .expect("repaired login did not return after unarchive");
+    assert_eq!(recovered.password(), "fictional-restored-after-malformed");
 
     let bearer = session.bearer_token().unwrap();
     fixture_cipher_action(&client, &url, bearer, &second_id, "delete");
