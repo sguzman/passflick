@@ -241,7 +241,13 @@ pub(super) fn run(
         let mut child = launch(binary, data, legacy, &clipboard, &bin);
         visible_window(&mut child);
         xdo(&["key", "--clearmodifiers", "ctrl+space"]);
-        xdo(&["type", "--clearmodifiers", "--delay", "20", "unmatched-user"]);
+        xdo(&[
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "20",
+            "unmatched-user",
+        ]);
         xdo(&["key", "--clearmodifiers", "Return"]);
         thread::sleep(Duration::from_millis(350));
         assert!(
