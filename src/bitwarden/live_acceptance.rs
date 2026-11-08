@@ -782,9 +782,9 @@ fn disposable_server_auth_sync_encrypted_offline() {
         2
     );
     assert!(session.bearer_token().is_some());
-    let bearer = session.bearer_token().unwrap();
     assert!(
-        fixture_server_cipher_state(&client, &url, bearer) == upstream_before_token_refresh,
+        fixture_server_cipher_state(&client, &url, session.bearer_token().unwrap())
+            == upstream_before_token_refresh,
         "native refresh grant or read-only update mutated upstream ciphers"
     );
 
@@ -887,6 +887,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
 
     // All mutations below are made exclusively by the *fixture provisioner*.
     // Passflick only fetches a complete, read-only sync after each mutation.
+    let bearer = session.bearer_token().unwrap();
     fixture_update_password(
         &client,
         &url,
