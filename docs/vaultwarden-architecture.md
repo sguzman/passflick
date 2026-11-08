@@ -84,6 +84,10 @@ After a successful authenticated encrypted preview refresh, a create-only owner-
 
 [Code `4e55e9f`](https://github.com/sguzman/passflick/commit/4e55e9f3a83011b2c600874e9f22cd0c2665ce82) and [expanded Rust tests on `1d33832`](https://github.com/sguzman/passflick/actions/runs/41854391053) verify fake-backend manual-lock precedence, passphrase/identity failure boundaries and strict locator storage. The real kernel session lifetime, cross-process behavior, offline picker rendering and actual EndeavourOS/Hyprland QA remain unverified and are required before release.
 
+## Additional verified native KDF compatibility (2026-11-08)
+
+The second independent fictional account in disposable Vaultwarden 1.37.5 uses **Argon2id** (3 iterations, 64 MiB, parallelism 2). The real native adapter rejects an incorrect master password, accepts the correct password grant, unwraps that account's encrypted personal vault key and synchronizes/decrypts an upstream-ID-bound Unicode login with two URIs. This runs after (and independently of) the existing PBKDF2/TOTP fixture, on [code `0791634`](https://github.com/sguzman/passflick/commit/07916346f2cde42560ea3ae7aa49016881fbc8fc) with [Rust](https://github.com/sguzman/passflick/actions/runs/42496779350), [GUI](https://github.com/sguzman/passflick/actions/runs/42496779478) and [real disposable Vaultwarden](https://github.com/sguzman/passflick/actions/runs/42496779372) all green. Compatibility is not asserted for other server versions, organizational vaults, SSO or email-code MFA, and no default-picker migration is authorized.
+
 ## Responsibilities
 
 | Component | Owns | Does not own |
@@ -131,7 +135,7 @@ This is a **security decision gate**, not a claim that the existing session desi
 
 ## Rust integration selection (ADR-001 accepted)
 
-**Selection (2026-11-04):** Candidate C is **chosen for development and production implementation**, using `reqwest` Rustls raw HTTPS sync plus narrow MIT `rbw 1.15.0` primitives and a separate encrypted offline projection. Read [ADR-001](adr-001-native-vaultwarden-adapter.md) for the rationale, tested TOTP/token-refresh and lifecycle behavior, deliberate lack of org/Argon2id/SSO claims, dependency stability and upgrade gates. This is a settled **architecture choice**, not authorization to move the test-only adapter into the production picker before the key/unlock/CLI acceptance gates.
+**Selection (2026-11-04):** Candidate C is **chosen for development and production implementation**, using `reqwest` Rustls raw HTTPS sync plus narrow MIT `rbw 1.15.0` primitives and a separate encrypted offline projection. Read [ADR-001](adr-001-native-vaultwarden-adapter.md) for the rationale, tested TOTP/token-refresh and lifecycle behavior, explicitly scoped organization/email-MFA/SSO limitations, plus the separately verified Argon2id personal-account KDF path, dependency stability and upgrade gates. This is a settled **architecture choice**, not authorization to move the test-only adapter into the production picker before the key/unlock/CLI acceptance gates.
 
 
 **Candidate A — `rbw` implementation:** an MIT-licensed Rust Bitwarden CLI/agent, with public Rust modules and self-hosted support. Its crate surface is designed around the tool/daemon rather than a stable embeddable SDK. Audit auth, crypto, archive fields, current encryption formats, maintenance and dependency footprint; try a disposable prototype before deciding whether code/library reuse is sensible.
