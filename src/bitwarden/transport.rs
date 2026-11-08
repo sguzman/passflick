@@ -154,10 +154,17 @@ impl ReadOnlySyncTransport {
         endpoint: &ServerEndpoint,
         email: &str,
     ) -> Result<reqwest::blocking::Response, reqwest::Error> {
+        self.prelogin_request(endpoint, email).send()
+    }
+
+    fn prelogin_request(
+        &self,
+        endpoint: &ServerEndpoint,
+        email: &str,
+    ) -> reqwest::blocking::RequestBuilder {
         self.client
             .post(endpoint.prelogin_url())
             .json(&serde_json::json!({"email": email}))
-            .send()
     }
 
     /// Only the identity-service token endpoint is permitted to receive a
@@ -169,13 +176,34 @@ impl ReadOnlySyncTransport {
         encoded_auth_email: Option<&str>,
         grant: &T,
     ) -> Result<reqwest::blocking::Response, reqwest::Error> {
+        self.token_grant_request(endpoint, encoded_auth_email, grant)
+            .send()
+    }
+
+    fn token_grant_request<T: Serialize>(
+        &self,
+        endpoint: &ServerEndpoint,
+        encoded_auth_email: Option<&str>,
+        grant: &T,
+    ) -> reqwest::blocking::RequestBuilder {
         let request = self.client.post(endpoint.token_url());
         let request = if let Some(email) = encoded_auth_email {
             request.header("auth-email", email)
         } else {
             request
         };
-        request.form(grant).send()
+        request.form(grant)
+    }
+
+    fn sync_request(
+        &self,
+        endpoint: &ServerEndpoint,
+        bearer_token: &str,
+    ) -> reqwest::blocking::RequestBuilder {
+        self.client
+            .get(endpoint.sync_url())
+            .header(reqwest::header::ACCEPT, "application/json")
+            .bearer_auth(bearer_token)
     }
 
     /// Fetch one complete user sync without any upstream mutation. TLS
@@ -210,10 +238,7 @@ impl ReadOnlySyncTransport {
     ) -> Result<Value, TransportError> {
         validate_token(bearer_token)?;
         let response = self
-            .client
-            .get(endpoint.sync_url())
-            .header(reqwest::header::ACCEPT, "application/json")
-            .bearer_auth(bearer_token)
+            .sync_request(endpoint, bearer_token)
             .send()
             .map_err(|_| TransportError::Network)?;
 
@@ -416,6 +441,61 @@ mod tests {
             validate_body(200, &huge, Some("account-fixture")),
             Err(TransportError::Oversized)
         ));
+    }
+
+    #[test]
+    fn native_requests_are_allowlisted_to_identity_and_read_only_sync() {
+        // Build real reqwest requests without sending a network request.
+        // This guards against accidentally swapping a fixed identity URL
+        // for an upstream credential-write endpoint in future refactors.
+        let transport = ReadOnlySyncTransport::new().unwrap();
+        let endpoint = ServerEndpoint::parse("https://vault.example.test/proxy").unwrap();
+        let prelogin = transport
+            .prelogin_request(&endpoint, "fictional@example.test")
+            .build()
+            .unwrap();
+        assert_eq!(prelogin.method(), reqwest::Method::POST);
+        assert_eq!(prelogin.url(), &endpoint.prelogin_url());
+        assert!(prelogin.headers().get(reqwest::header::AUTHORIZATION).is_none());
+        assert_eq!(
+            prelogin.headers().get(reqwest::header::CONTENT_TYPE).unwrap(),
+            "application/json"
+        );
+
+        let grant = std::collections::BTreeMap::from([
+            ("grant_type", "refresh_token"),
+            ("refresh_token", "fictional-token"),
+        ]);
+        let token = transport
+            .token_grant_request(&endpoint, None, &grant)
+            .build()
+            .unwrap();
+        assert_eq!(token.method(), reqwest::Method::POST);
+        assert_eq!(token.url(), &endpoint.token_url());
+        assert!(token.headers().get("auth-email").is_none());
+        assert!(token.headers().get(reqwest::header::AUTHORIZATION).is_none());
+
+        let token_with_email = transport
+            .token_grant_request(&endpoint, Some("ZmljdGlvbmFs"), &grant)
+            .build()
+            .unwrap();
+        assert_eq!(token_with_email.method(), reqwest::Method::POST);
+        assert_eq!(token_with_email.url(), &endpoint.token_url());
+        assert_eq!(token_with_email.headers().get("auth-email").unwrap(), "ZmljdGlvbmFs");
+
+        let sync = transport
+            .sync_request(&endpoint, "fictional-bearer")
+            .build()
+            .unwrap();
+        assert_eq!(sync.method(), reqwest::Method::GET);
+        assert_eq!(sync.url(), &endpoint.sync_url());
+        assert!(sync.body().is_none());
+        assert_eq!(
+            sync.headers().get(reqwest::header::AUTHORIZATION).unwrap(),
+            "Bearer fictional-bearer"
+        );
+        assert!(sync.headers().get("auth-email").is_none());
+        assert!(sync.headers().get(reqwest::header::CONTENT_TYPE).is_none());
     }
 
     #[test]
