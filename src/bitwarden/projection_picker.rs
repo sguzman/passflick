@@ -677,11 +677,7 @@ mod tests {
             command,
             "env XDG_DATA_HOME='/tmp/qa files' '/opt/qa build/passflick' update"
         );
-        assert!(update_command_for(
-            Path::new("/opt/passflick"),
-            Path::new("/"),
-        )
-        .is_none());
+        assert!(update_command_for(Path::new("/opt/passflick"), Path::new("/")).is_none());
     }
 
     #[test]
