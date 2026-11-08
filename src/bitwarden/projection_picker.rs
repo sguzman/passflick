@@ -578,9 +578,7 @@ mod tests {
                     ((s + 0.055) / 1.055).powf(2.4)
                 }
             };
-            0.2126 * channel(color.r())
-                + 0.7152 * channel(color.g())
-                + 0.0722 * channel(color.b())
+            0.2126 * channel(color.r()) + 0.7152 * channel(color.g()) + 0.0722 * channel(color.b())
         }
 
         for theme in [egui::Theme::Light, egui::Theme::Dark] {
@@ -590,8 +588,8 @@ mod tests {
             let visuals = &style.visuals;
             let foreground = luminance(visuals.widgets.noninteractive.fg_stroke.color);
             let background = luminance(visuals.panel_fill);
-            let contrast = (foreground.max(background) + 0.05)
-                / (foreground.min(background) + 0.05);
+            let contrast =
+                (foreground.max(background) + 0.05) / (foreground.min(background) + 0.05);
             assert!(contrast >= 4.5, "{theme:?} panel text contrast: {contrast}");
         }
     }
