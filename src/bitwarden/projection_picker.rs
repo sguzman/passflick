@@ -584,7 +584,8 @@ mod tests {
         for theme in [egui::Theme::Light, egui::Theme::Dark] {
             let ctx = egui::Context::default();
             ctx.set_theme(theme);
-            let visuals = ctx.style().visuals;
+            let style = ctx.style();
+            let visuals = &style.visuals;
             let foreground = luminance(visuals.widgets.noninteractive.fg_stroke.color);
             let background = luminance(visuals.panel_fill);
             let contrast = (foreground.max(background) + 0.05)
