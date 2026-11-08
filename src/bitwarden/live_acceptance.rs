@@ -478,7 +478,10 @@ fn disposable_server_auth_sync_encrypted_offline() {
                 ("Vaultwarden login email: ", EMAIL),
                 ("Vaultwarden master password: ", PASSWORD),
                 ("Custom trusted CA PEM path (empty for system trust): ", ca),
-                ("New independent local projection passphrase (12–1024 characters): ", local),
+                (
+                    "New independent local projection passphrase (12–1024 characters): ",
+                    local,
+                ),
                 ("Confirm local projection passphrase: ", local),
             ],
             true,
