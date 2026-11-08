@@ -556,8 +556,10 @@ mod tests {
                     ..Default::default()
                 },
                 |ui| {
-                    picker.theme = shortcut_theme(ui.ctx()).expect("theme shortcut was ignored");
-                    ui.ctx().set_theme(picker.theme);
+                    if let Some(theme) = shortcut_theme(ui.ctx()) {
+                        picker.theme = theme;
+                        ui.ctx().set_theme(theme);
+                    }
                 },
             );
             assert_eq!(picker.theme, expected);
