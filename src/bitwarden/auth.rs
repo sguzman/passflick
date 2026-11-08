@@ -16,7 +16,7 @@ use rbw::api::KdfType;
 use rbw::identity::Identity;
 use rbw::locked::{Password, Vec as LockedVec};
 use serde::{Deserialize, Serialize};
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroizing;
 
 use super::decryptor::PersonalLoginDecryptor;
 use super::transport::{ReadOnlySyncTransport, ServerEndpoint};
@@ -116,35 +116,23 @@ struct RefreshGrant<'a> {
     refresh_token: &'a str,
 }
 
+// Protect each field as it is deserialized. A Drop impl on the complete
+// reply cannot erase strings that were already allocated if serde rejects
+// a later field: the partially built struct never reaches its own Drop.
 #[derive(Deserialize)]
 struct LoginReply {
-    access_token: String,
-    refresh_token: String,
+    access_token: Zeroizing<String>,
+    refresh_token: Zeroizing<String>,
     #[serde(rename = "Key", alias = "key")]
-    encrypted_user_key: String,
+    encrypted_user_key: Zeroizing<String>,
     expires_in: u64,
-}
-
-impl Drop for LoginReply {
-    fn drop(&mut self) {
-        self.access_token.zeroize();
-        self.refresh_token.zeroize();
-        self.encrypted_user_key.zeroize();
-    }
 }
 
 #[derive(Deserialize)]
 struct RefreshReply {
-    access_token: String,
-    refresh_token: String,
+    access_token: Zeroizing<String>,
+    refresh_token: Zeroizing<String>,
     expires_in: u64,
-}
-
-impl Drop for RefreshReply {
-    fn drop(&mut self) {
-        self.access_token.zeroize();
-        self.refresh_token.zeroize();
-    }
 }
 
 pub struct RemoteSession {
@@ -179,18 +167,26 @@ impl RemoteSession {
         let expires_at = token_expiration(reply.expires_in)?;
         Ok(Self {
             endpoint_identity: endpoint.server_identity().to_owned(),
-            access_token: Zeroizing::new(std::mem::take(&mut reply.access_token)),
-            refresh_token: Zeroizing::new(std::mem::take(&mut reply.refresh_token)),
+            access_token: std::mem::replace(
+                &mut reply.access_token,
+                Zeroizing::new(String::new()),
+            ),
+            refresh_token: std::mem::replace(
+                &mut reply.refresh_token,
+                Zeroizing::new(String::new()),
+            ),
             expires_at,
         })
     }
 
     fn apply_refresh(&mut self, reply: &mut RefreshReply) -> Result<(), AuthError> {
         let expires_at = token_expiration(reply.expires_in)?;
-        let access_token = std::mem::take(&mut reply.access_token);
-        let refresh_token = std::mem::take(&mut reply.refresh_token);
-        self.access_token = Zeroizing::new(access_token);
-        self.refresh_token = Zeroizing::new(refresh_token);
+        let access_token =
+            std::mem::replace(&mut reply.access_token, Zeroizing::new(String::new()));
+        let refresh_token =
+            std::mem::replace(&mut reply.refresh_token, Zeroizing::new(String::new()));
+        self.access_token = access_token;
+        self.refresh_token = refresh_token;
         self.expires_at = expires_at;
         Ok(())
     }
@@ -471,6 +467,25 @@ mod tests {
     }
 
     #[test]
+    fn partially_deserialized_auth_replies_fail_without_exposing_response_text() {
+        // The access and refresh fields are allocated before a late parse
+        // failure. Their Zeroizing wrappers now own them *during* serde
+        // deserialization, including the error path.
+        for raw in [
+            br#"{"access_token":"fictional-access-secret","refresh_token":"fictional-refresh-secret","Key":"2.fixture","expires_in":"not-a-number"}"#.as_slice(),
+            br#"{"access_token":"fictional-access-secret","refresh_token":"fictional-refresh-secret","Key":"2.fixture"}"#.as_slice(),
+        ] {
+            assert!(matches!(decode_login(raw), Err(AuthError::InvalidResponse)));
+        }
+        for raw in [
+            br#"{"access_token":"fictional-access-secret","refresh_token":"fictional-refresh-secret","expires_in":"wrong"}"#.as_slice(),
+            br#"{"access_token":"fictional-access-secret","refresh_token":"fictional-refresh-secret"}"#.as_slice(),
+        ] {
+            assert!(matches!(decode_refresh(raw), Err(AuthError::InvalidResponse)));
+        }
+    }
+
+    #[test]
     fn remote_session_rotates_only_on_valid_refresh() {
         let mut login = decode_login(
             br#"{"access_token":"old-access","refresh_token":"old-refresh","Key":"2.key","expires_in":3600}"#
@@ -483,8 +498,8 @@ mod tests {
         assert_eq!(session.bearer_token(), Some("old-access"));
 
         let mut invalid = RefreshReply {
-            access_token: "invalid".into(),
-            refresh_token: "invalid".into(),
+            access_token: Zeroizing::new("invalid".to_owned()),
+            refresh_token: Zeroizing::new("invalid".to_owned()),
             expires_in: 0,
         };
         assert!(session.apply_refresh(&mut invalid).is_err());
@@ -547,9 +562,9 @@ mod tests {
         let transport = ReadOnlySyncTransport::new().unwrap();
         let endpoint = ServerEndpoint::parse("https://vault.example.test").unwrap();
         let mut reply = LoginReply {
-            access_token: "synthetic".into(),
-            refresh_token: String::new(),
-            encrypted_user_key: "2.example".into(),
+            access_token: Zeroizing::new("synthetic".to_owned()),
+            refresh_token: Zeroizing::new(String::new()),
+            encrypted_user_key: Zeroizing::new("2.example".to_owned()),
             expires_in: 60,
         };
         let mut session = RemoteSession::new(&mut reply, &endpoint).unwrap();
