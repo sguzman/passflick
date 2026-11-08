@@ -24,6 +24,10 @@ Disposable Weston runs [`41901413863`](https://github.com/sguzman/passflick/acti
 - The separate Xvfb graphical test verifies wrong local passphrase remains locked followed by correct passphrase recovery, and no accidental copy. **Do not claim the wrong-then-correct sequence has passed natively under Weston.**
 - The Weston copy test needs a fresh pointer input serial **after** the locked editor has authenticated. Clicking during masked text entry can steal its keyboard focus. Treat this as a compositor/clipboard QA constraint, not proof that a user's actual clipboard manager ignores sensitive hints.
 
+## System appearance and Darkman QA
+
+The first actual Hyprland feature-enabled launch confirmed theme selector shortcuts and Escape but revealed a specific unresolved regression: choosing System did not reflect the user's current night/dark mode. Synthetic Light/Dark shortcuts and Linux CI did not catch that contradiction. The preview now has a bounded, read-only Darkman socket lookup (no external network or host changes), which prefers Darkman's `get` result when available and otherwise defers to the toolkit. [`7098537`](https://github.com/sguzman/passflick/commit/7098537fb2f24b15dbde4e18c869a713890035bb) is green in [Rust](https://github.com/sguzman/passflick/actions/runs/42506555432), [GUI on retry](https://github.com/sguzman/passflick/actions/runs/42506555416), and [disposable Vaultwarden](https://github.com/sguzman/passflick/actions/runs/42506555409), but remains unaccepted on the target host. Verify `darkman get`, Ctrl+1 System appearance, explicit Ctrl+2/3 overrides and a real automatic light/dark transition when one naturally occurs. Do not force a global theme switch, logout, or reboot solely for QA. E04 is reopened (38/100 current verified weighted points) until the host confirms it.
+
 ## Native Wayland input and clipboard
 
 - A populated feature-enabled preview launches as a floating, centered `passflick-projection-preview` window, without moving tiled windows or focusing another workspace. Record measured first-frame focus/startup latency, not an assumed target.
