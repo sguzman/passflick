@@ -8,6 +8,8 @@ Passflick is a low-latency, keyboard-first **read-only password projection for L
 
 **Verified opt-in picker search (November 8, 2026):** [`958b70b`](https://github.com/sguzman/passflick/commit/958b70bbb2892ce9e06092aec21ccc18b1b5aa3a) passed [Rust](https://github.com/sguzman/passflick/actions/runs/42491219294), [Synthetic GUI](https://github.com/sguzman/passflick/actions/runs/42491219287), and [disposable Vaultwarden/Xvfb](https://github.com/sguzman/passflick/actions/runs/42491219324) with two fictional upstream items sharing a title and username. The picker selects distinct IDs via ArrowDown, copies each corresponding password without conflation, supports Ctrl+Space switching to an independent username filter, and does not copy on unmatched queries. Safe variant labels and URI sanitization are separately unit-tested. These accept the **opt-in preview** search/duplicate-row milestones E02/E03, not the historical default-picker cutover. Real EndeavourOS/Hyprland session QA, clipboard-history policy and reversible migration remain outstanding.
 
+**Verified opt-in theme acceptance (November 8, 2026):** The preview picker supports immediate System (default), Light, and Dark appearance selection by its existing radio buttons and the new Ctrl+1/2/3 keyboard shortcuts. Tests validate resolved system/light/dark theme choices, default panel text contrast and keyboard search/copy retention on fictional credentials. [Rust](https://github.com/sguzman/passflick/actions/runs/42493598190), [Synthetic GUI](https://github.com/sguzman/passflick/actions/runs/42493598257), and [disposable Vaultwarden](https://github.com/sguzman/passflick/actions/runs/42493598191) are all green on implementation commit `f52e7da`. This accepts only E04; real Hyprland system-theme/focus verification remains under G04.
+
 ## Accepted user experience
 
 - Configure and authenticate with a user-selected Bitwarden-compatible server through a secure native Rust integration.
@@ -29,6 +31,6 @@ Local offline-unlock and revocation behavior is governed by [ADR-002](docs/adr-0
 
 ## Supported environment and status
 
-Rust + egui on Linux/Wayland/Hyprland; theme selector for System (default), Light and Dark must be verified as part of the new accepted UI. No npm. Preserve the existing MIT repository license unless a reviewed dependency and the owner authorize a change.
+Rust + egui on Linux/Wayland/Hyprland; theme selector for System (default), Light and Dark is accepted in the opt-in preview; target-host theme and focus QA remain required. No npm. Preserve the existing MIT repository license unless a reviewed dependency and the owner authorize a change.
 
 This is an **existing-project architectural replacement**, not a new application. Progress is tracked with a weighted roadmap and evidence-based acceptance; the finished implementation is **not** claimed until real server integration, security QA and target-host validation pass.
