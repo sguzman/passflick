@@ -23,7 +23,7 @@ New scope replaces the previous multi-browser-source objective, so old and new p
 
 **Rebaseline: 13/100 weighted points verified (13%) as of adoption.** Current verified completion: **40/100 weighted points (40%)**, including native architecture, encrypted projection schema/recovery, private-CA trust, upstream-ID search, distinct-variant selection (E02/E03), and keyboard-accessible System/Light/Dark theme acceptance (E04) in the opt-in projection picker. The legacy default picker is still active; target-host and production cutover acceptance remain pending. **This is not a production-ready Vaultwarden picker.** The disposable live-server evidence is documented below.
 
-`████████░░░░░░░░░░░░` **40%** (previous verified 38% → 40%, **+2 percentage points** this development round; adoption baseline 13%).
+`████████░░░░░░░░░░░░` **40%** (previous verified 40% → 40%, **+0 percentage points** this development round; adoption baseline 13%).
 
 **Status key:** ✅ verified complete | 🟡 active | ⬜ pending | ⛔ blocked. Every item's bracketed **w** is its share of the 100-point overall estimate. An item earns all its weight only after its acceptance check passes; partial activity is documented but not counted. Adjust weights transparently if discoveries materially change the project.
 
@@ -95,7 +95,7 @@ New scope replaces the previous multi-browser-source objective, so old and new p
 | ID | Task | w | Status | Acceptance / dependency |
 | --- | --- | ---: | --- | --- |
 | G01 ✅ | Preserve existing synthetic regression baseline | 2 | ✅ | Prior documented CI demonstrated Rust unit, GUI, clipboard and encrypted-vault checks; new behavior remains unverified and must pass fresh CI in G03 |
-| G02 🧪 | Synthetic server integration matrix | 3 | ⬜ | Disposable Vaultwarden; fictional logins, Unicode, multiple URIs, name collisions, TOTP-present records, archives, deletes, edits, MFA/session failures, expired auth and repeat update; B03, D01 |
+| G02 🧪 | Synthetic server integration matrix | 3 | 🟡 | Disposable Vaultwarden; fictional logins, Unicode, multiple URIs, name collisions, TOTP-present records, archives, deletes, edits, MFA/session failures, expired auth and repeat update; B03, D01 |
 | G03 🛡️ | Failure-path/security/regression review | 3 | ⬜ | No accidental upstream writes, plaintext leak, insecure TLS fallback, incomplete cache replacement, unlocked secret exposure or clipboard-history regression; all relevant Cargo gates green; C04, E02 |
 | G04 🖥️ | Real EndeavourOS/Hyprland acceptance and latency | 3 | ⬜ | Test on actual host with synthetic secrets; floating focus, UI theme, keyring, Wayland clipboard, update performance, offline launch and search responsiveness; E04, D01 |
 | G05 🧯 | End-to-end reversible migration validation | 2 | ⬜ | Demonstrate old encrypted vault kept intact, new snapshot sourced from a disposable test server, repeatable verification/recovery and zero upstream mutations; F01, G02 |
