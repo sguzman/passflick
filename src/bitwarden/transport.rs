@@ -220,7 +220,7 @@ fn status_error(status: u16) -> TransportError {
     }
 }
 
-fn validate_token(token: &str) -> Result<(), TransportError> {
+pub(super) fn validate_token(token: &str) -> Result<(), TransportError> {
     // RFC 6750 b64token, rejecting CR/LF and all request-header injection.
     // Tokens do not appear in debug output, logs, or command arguments here.
     if token.is_empty()

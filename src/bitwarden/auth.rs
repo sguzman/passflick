@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use super::decryptor::PersonalLoginDecryptor;
-use super::transport::{ReadOnlySyncTransport, ServerEndpoint};
+use super::transport::{ReadOnlySyncTransport, ServerEndpoint, validate_token};
 
 const MAX_REPLY: u64 = 64 * 1024;
 
@@ -224,12 +224,16 @@ fn read_response(response: reqwest::blocking::Response) -> Result<Zeroizing<Vec<
     Ok(body)
 }
 
+/// Validate tokens as RFC 6750 b64token *before* they can enter a session.
+/// The sync transport repeats this check at its own outbound boundary.
+fn valid_session_token(token: &str) -> bool {
+    token.len() <= 8192 && validate_token(token).is_ok()
+}
+
 fn decode_login(raw: &[u8]) -> Result<LoginReply, AuthError> {
     let parsed: LoginReply = serde_json::from_slice(raw).map_err(|_| AuthError::InvalidResponse)?;
-    if parsed.access_token.is_empty()
-        || parsed.access_token.len() > 8192
-        || parsed.refresh_token.is_empty()
-        || parsed.refresh_token.len() > 8192
+    if !valid_session_token(&parsed.access_token)
+        || !valid_session_token(&parsed.refresh_token)
         || parsed.encrypted_user_key.len() > 8192
         || parsed.encrypted_user_key.is_empty()
     {
@@ -242,10 +246,8 @@ fn decode_login(raw: &[u8]) -> Result<LoginReply, AuthError> {
 fn decode_refresh(raw: &[u8]) -> Result<RefreshReply, AuthError> {
     let parsed: RefreshReply =
         serde_json::from_slice(raw).map_err(|_| AuthError::InvalidResponse)?;
-    if parsed.access_token.is_empty()
-        || parsed.access_token.len() > 8192
-        || parsed.refresh_token.is_empty()
-        || parsed.refresh_token.len() > 8192
+    if !valid_session_token(&parsed.access_token)
+        || !valid_session_token(&parsed.refresh_token)
     {
         return Err(AuthError::InvalidResponse);
     }
@@ -388,13 +390,7 @@ impl ReadOnlySyncTransport {
         session: &mut RemoteSession,
     ) -> Result<(), AuthError> {
         session.ensure_endpoint(endpoint)?;
-        if session.refresh_token.is_empty()
-            || session.refresh_token.len() > 8192
-            || session
-                .refresh_token
-                .bytes()
-                .any(|byte| byte.is_ascii_control())
-        {
+        if !valid_session_token(&session.refresh_token) {
             return Err(AuthError::InvalidSettings);
         }
         let grant = RefreshGrant {
@@ -480,6 +476,75 @@ mod tests {
         ] {
             assert!(matches!(decode_refresh(raw), Err(AuthError::InvalidResponse)));
         }
+    }
+
+    #[test]
+    fn malformed_session_tokens_fail_at_reply_boundary_without_rotation() {
+        // The server reply is authenticated by TLS, but its fields are still
+        // untrusted data. No space, newline, Unicode or header separators may
+        // enter an in-memory bearer/refresh session.
+        let invalid = ["token with spaces", "bad\\nHeader: injected", "🗝️", "wrong?token"];
+        for value in invalid {
+            let login_access = serde_json::json!({
+                "access_token":value, "refresh_token":"fictional-refresh",
+                "Key":"2.fixture", "expires_in":3600
+            });
+            let login_refresh = serde_json::json!({
+                "access_token":"fictional-access", "refresh_token":value,
+                "Key":"2.fixture", "expires_in":3600
+            });
+            let refresh_access = serde_json::json!({
+                "access_token":value, "refresh_token":"fictional-refresh",
+                "expires_in":3600
+            });
+            let refresh_refresh = serde_json::json!({
+                "access_token":"fictional-access", "refresh_token":value,
+                "expires_in":3600
+            });
+            assert!(matches!(
+                decode_login(&serde_json::to_vec(&login_access).unwrap()),
+                Err(AuthError::InvalidResponse)
+            ));
+            assert!(matches!(
+                decode_login(&serde_json::to_vec(&login_refresh).unwrap()),
+                Err(AuthError::InvalidResponse)
+            ));
+            assert!(matches!(
+                decode_refresh(&serde_json::to_vec(&refresh_access).unwrap()),
+                Err(AuthError::InvalidResponse)
+            ));
+            assert!(matches!(
+                decode_refresh(&serde_json::to_vec(&refresh_refresh).unwrap()),
+                Err(AuthError::InvalidResponse)
+            ));
+        }
+
+        let endpoint = ServerEndpoint::parse("https://vault.example.test/").unwrap();
+        let mut reply = decode_login(
+            br#"{"access_token":"old-access","refresh_token":"old-refresh","Key":"2.fixture","expires_in":3600}"#,
+        )
+        .unwrap();
+        let mut session = RemoteSession::new(&mut reply, &endpoint).unwrap();
+        let bad = serde_json::json!({
+            "access_token":"new-access", "refresh_token":"malformed token",
+            "expires_in":3600
+        });
+        assert!(matches!(
+            decode_refresh(&serde_json::to_vec(&bad).unwrap()),
+            Err(AuthError::InvalidResponse)
+        ));
+        assert_eq!(session.bearer_token(), Some("old-access"));
+        assert_eq!(session.refresh_token.as_str(), "old-refresh");
+
+        // The outbound refresh boundary must also reject a malformed token,
+        // including when an in-memory session was corrupted after creation.
+        session.refresh_token = Zeroizing::new("invalid token".to_owned());
+        let transport = ReadOnlySyncTransport::new().unwrap();
+        assert!(matches!(
+            transport.refresh_session(&endpoint, &mut session),
+            Err(AuthError::InvalidSettings)
+        ));
+        assert_eq!(session.bearer_token(), Some("old-access"));
     }
 
     #[test]
