@@ -11,6 +11,7 @@ use std::time::Duration;
 use reqwest::Url;
 use reqwest::blocking::Client;
 use reqwest::redirect::Policy;
+use serde::Serialize;
 use serde_json::Value;
 use zeroize::Zeroizing;
 
@@ -145,9 +146,36 @@ impl ReadOnlySyncTransport {
         Ok(Self { client })
     }
 
-    /// Reuse the same trusted TLS and no-redirect policy for identity login.
-    pub(super) fn client(&self) -> &Client {
-        &self.client
+    /// The underlying HTTP client never leaves this transport module.
+    /// Authentication can only invoke the fixed prelogin and token endpoints,
+    /// not create a credential-write request or supply an arbitrary path.
+    pub(super) fn identity_prelogin(
+        &self,
+        endpoint: &ServerEndpoint,
+        email: &str,
+    ) -> Result<reqwest::blocking::Response, reqwest::Error> {
+        self.client
+            .post(endpoint.prelogin_url())
+            .json(&serde_json::json!({"email": email}))
+            .send()
+    }
+
+    /// Only the identity-service token endpoint is permitted to receive a
+    /// form-encoded password or refresh grant. The caller supplies no URL,
+    /// request method, or headers except the optional encoded auth-email.
+    pub(super) fn identity_token_grant<T: Serialize>(
+        &self,
+        endpoint: &ServerEndpoint,
+        encoded_auth_email: Option<&str>,
+        grant: &T,
+    ) -> Result<reqwest::blocking::Response, reqwest::Error> {
+        let request = self.client.post(endpoint.token_url());
+        let request = if let Some(email) = encoded_auth_email {
+            request.header("auth-email", email)
+        } else {
+            request
+        };
+        request.form(grant).send()
     }
 
     /// Fetch one complete user sync without any upstream mutation. TLS

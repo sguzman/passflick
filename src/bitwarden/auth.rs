@@ -297,14 +297,7 @@ impl ReadOnlySyncTransport {
         }
 
         let response = self
-            .client()
-            .post(endpoint.prelogin_url())
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(
-                serde_json::to_vec(&serde_json::json!({"email":email}))
-                    .map_err(|_| AuthError::InvalidSettings)?,
-            )
-            .send()
+            .identity_prelogin(endpoint, email)
             .map_err(|_| AuthError::Transport)?;
         if response.status() != reqwest::StatusCode::OK {
             return Err(AuthError::Rejected);
@@ -344,15 +337,9 @@ impl ReadOnlySyncTransport {
             two_factor_provider: mfa.as_ref().map(|value| value.provider.number()),
             two_factor_token: mfa.as_ref().map(|value| value.code),
         };
+        let auth_email = rbw::base64::encode_url_safe_no_pad(&normalized_email);
         let response = self
-            .client()
-            .post(endpoint.token_url())
-            .header(
-                "auth-email",
-                rbw::base64::encode_url_safe_no_pad(&normalized_email),
-            )
-            .form(&grant)
-            .send()
+            .identity_token_grant(endpoint, Some(&auth_email), &grant)
             .map_err(|_| AuthError::Transport)?;
         if response.status() != reqwest::StatusCode::OK {
             if response.status() == reqwest::StatusCode::BAD_REQUEST {
@@ -397,10 +384,7 @@ impl ReadOnlySyncTransport {
             refresh_token: session.refresh_token.as_str(),
         };
         let response = self
-            .client()
-            .post(endpoint.token_url())
-            .form(&grant)
-            .send()
+            .identity_token_grant(endpoint, None, &grant)
             .map_err(|_| AuthError::Transport)?;
         if response.status() != reqwest::StatusCode::OK {
             return Err(AuthError::Rejected);
