@@ -81,11 +81,7 @@ mod tests {
     fn explicit_themes_ignore_darkman() {
         for selection in [egui::ThemePreference::Light, egui::ThemePreference::Dark] {
             assert_eq!(
-                effective_preference(
-                    selection,
-                    Some(egui::Theme::Dark),
-                    Some(egui::Theme::Light)
-                ),
+                effective_preference(selection, Some(egui::Theme::Dark), Some(egui::Theme::Light)),
                 selection
             );
         }
