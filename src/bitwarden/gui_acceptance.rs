@@ -234,6 +234,39 @@ pub(super) fn run(
     assert_ne!(second_expected, expected);
     fs::remove_file(&clipboard).unwrap();
 
+    // The account filter is independent of the site filter. Ctrl+Space is
+    // the documented keyboard way to move into it; a nonmatching username
+    // must never fall back to copying the selected site's password.
+    {
+        let mut child = launch(binary, data, legacy, &clipboard, &bin);
+        visible_window(&mut child);
+        xdo(&["key", "--clearmodifiers", "ctrl+space"]);
+        xdo(&["type", "--clearmodifiers", "--delay", "20", "unmatched-user"]);
+        xdo(&["key", "--clearmodifiers", "Return"]);
+        thread::sleep(Duration::from_millis(350));
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "unmatched username search unexpectedly closed the picker"
+        );
+        assert!(
+            !clipboard.exists(),
+            "unmatched username filter copied a credential"
+        );
+        xdo(&["key", "--clearmodifiers", "Escape"]);
+        await_exit(&mut child);
+    }
+    // A matching account-prefix query must still allow deliberate copy.
+    {
+        let mut child = launch(binary, data, legacy, &clipboard, &bin);
+        visible_window(&mut child);
+        xdo(&["key", "--clearmodifiers", "ctrl+space"]);
+        xdo(&["type", "--clearmodifiers", "--delay", "20", "ma"]);
+        xdo(&["key", "--clearmodifiers", "Return"]);
+        await_exit(&mut child);
+    }
+    assert_eq!(fs::read(&clipboard).unwrap(), expected);
+    fs::remove_file(&clipboard).unwrap();
+
     // A successful remote update may replace the password under the same
     // upstream ID while this GUI still displays the old record. Such a GUI
     // must NOT copy the new, unseen value: the user must reopen first.
