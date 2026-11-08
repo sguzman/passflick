@@ -11,13 +11,33 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use eframe::egui;
 use zeroize::{Zeroize, Zeroizing};
 
-use super::offline_command;
+use super::offline_command::{self, PickerBootstrap};
 use super::projection_search::{display_row, rank_projection};
 use super::system_theme;
 use crate::projection::ProjectionSnapshot;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(800);
 const THEME_POLL_INTERVAL: Duration = Duration::from_secs(2);
+
+/// Match text sizing, keyboard target size and layout rhythm in both themes.
+/// Do not install dark-only visuals: System must continue following Darkman.
+fn configure_appearance(ctx: &egui::Context) {
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        let mut style = (*ctx.style_of(theme)).clone();
+        style
+            .text_styles
+            .insert(egui::TextStyle::Body, egui::FontId::proportional(16.0));
+        style
+            .text_styles
+            .insert(egui::TextStyle::Button, egui::FontId::proportional(15.0));
+        style
+            .text_styles
+            .insert(egui::TextStyle::Small, egui::FontId::proportional(13.0));
+        style.spacing.item_spacing = egui::vec2(10.0, 8.0);
+        style.spacing.interact_size.y = 34.0;
+        ctx.set_style_of(theme, style);
+    }
+}
 
 /// The opt-in picker is keyboard-first, including its appearance controls.
 /// Consume the shortcut before the focused search editor can receive it.
@@ -123,6 +143,7 @@ struct ProjectionPicker {
     focused: bool,
     notice: Option<&'static str>,
     error: Option<&'static str>,
+    bootstrap: PickerBootstrap,
     theme: egui::ThemePreference,
     darkman_theme: Option<egui::Theme>,
     last_theme_poll: Option<Instant>,
@@ -131,6 +152,14 @@ struct ProjectionPicker {
 
 impl ProjectionPicker {
     fn new(snapshot: Option<ProjectionSnapshot>, notice: Option<&'static str>) -> Self {
+        Self::with_bootstrap(snapshot, notice, PickerBootstrap::Existing)
+    }
+
+    fn with_bootstrap(
+        snapshot: Option<ProjectionSnapshot>,
+        notice: Option<&'static str>,
+        bootstrap: PickerBootstrap,
+    ) -> Self {
         let rows = snapshot
             .as_ref()
             .map(|data| rank_projection(data, "", ""))
@@ -146,6 +175,7 @@ impl ProjectionPicker {
             focused: false,
             notice,
             error: None,
+            bootstrap,
             theme: egui::ThemePreference::System,
             darkman_theme: None,
             last_theme_poll: None,
@@ -165,6 +195,7 @@ impl ProjectionPicker {
     }
 
     fn install_unlocked(&mut self, snapshot: ProjectionSnapshot) {
+        self.bootstrap = PickerBootstrap::Existing;
         self.snapshot = Some(snapshot);
         self.unlock_passphrase.zeroize();
         self.notice = None;
@@ -188,6 +219,14 @@ impl ProjectionPicker {
             return;
         }
         self.last_poll = Instant::now();
+        self.bootstrap = offline_command::picker_bootstrap();
+        if self.bootstrap != PickerBootstrap::Existing {
+            if self.snapshot.is_some() {
+                self.clear_sensitive();
+            }
+            self.notice = None;
+            return;
+        }
         match offline_command::session_present_for_picker() {
             Ok(false) | Err(_) => {
                 if self.snapshot.is_some() {
@@ -288,12 +327,21 @@ impl eframe::App for ProjectionPicker {
             ctx.input_mut(|input| input.consume_key(egui::Modifiers::CTRL, egui::Key::Space));
 
         let mut request_unlock = false;
-        egui::CentralPanel::default().show(ui, |ui| {
-            ui.add_space(10.0);
+        egui::CentralPanel::default()
+            .frame(egui::Frame::new().inner_margin(egui::Margin::same(18)))
+            .show(ui, |ui| {
+            ui.add_space(4.0);
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
-                    ui.label(egui::RichText::new("PASSFLICK  /  PROJECTION").strong().size(12.0));
-                    ui.heading(egui::RichText::new("Find a credential").size(27.0).strong());
+                    ui.label(egui::RichText::new("PASSFLICK  /  VAULTWARDEN").strong().size(12.0));
+                    let heading = if self.snapshot.is_none()
+                        && self.bootstrap == PickerBootstrap::FirstRun
+                    {
+                        "Connect Vaultwarden"
+                    } else {
+                        "Find a credential"
+                    };
+                    ui.heading(egui::RichText::new(heading).size(25.0).strong());
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     self.theme.radio_buttons(ui);
@@ -386,19 +434,50 @@ impl eframe::App for ProjectionPicker {
                             }
                         });
                 }
+            } else if self.bootstrap == PickerBootstrap::FirstRun {
+                ui.add_space(12.0);
+                ui.heading("No encrypted projection yet");
+                ui.label(
+                    "Passflick reads from one Vaultwarden server. It never changes upstream passwords.",
+                );
+                ui.add_space(8.0);
+                ui.label(
+                    egui::RichText::new("FIRST SYNC  /  TERMINAL").size(12.0).strong(),
+                );
+                ui.horizontal(|ui| {
+                    ui.monospace("passflick update");
+                    if ui.button("Copy command").clicked() {
+                        ctx.copy_text("passflick update".to_owned());
+                    }
+                });
+                ui.label(
+                    "Run the feature-enabled executable from a terminal using the SAME XDG_DATA_HOME as this window.",
+                );
+                ui.label(
+                    "The terminal securely asks for your server URL, account credentials, and a separate local passphrase.",
+                );
+                ui.label(
+                    egui::RichText::new(
+                        "QA: use a disposable Vaultwarden account with fictional passwords, not your personal vault.",
+                    )
+                    .weak(),
+                );
+            } else if self.bootstrap == PickerBootstrap::Incomplete {
+                ui.add_space(12.0);
+                ui.heading("Projection setup is incomplete");
+                ui.label(
+                    "Some projection files are present, missing, or unsafe. Offline unlock is unavailable.",
+                );
+                ui.label(
+                    "Existing files have not been changed. Check the terminal diagnostics before attempting another update.",
+                );
             } else {
-                ui.add_space(20.0);
+                ui.add_space(12.0);
                 ui.heading("Unlock offline projection");
                 ui.label(
                     "Enter the independent local projection passphrase. No server connection is made.",
                 );
-                ui.label(
-                    egui::RichText::new(
-                        "First use? Run 'passflick update' to create a verified encrypted snapshot.",
-                    )
-                    .weak(),
-                );
-                ui.add_space(12.0);
+                ui.add_space(10.0);
                 let field = ui.add(
                     egui::TextEdit::singleline(&mut *self.unlock_passphrase)
                         .password(true)
@@ -431,13 +510,21 @@ impl eframe::App for ProjectionPicker {
             }
             ui.add_space(14.0);
             ui.separator();
-            ui.label(
-                egui::RichText::new(
-                    "Ctrl+Space  Switch filter     ↑↓  Select     Enter  Copy password     Shift+Enter  Copy username     Esc  Close"
-                )
-                .size(11.0)
-                .weak(),
-            );
+            if self.snapshot.is_some() {
+                ui.label(
+                    egui::RichText::new(
+                        "Ctrl+Space  Filter    ↑↓  Select    Enter  Password    Shift+Enter  Username    Esc  Close",
+                    )
+                    .size(12.0)
+                    .weak(),
+                );
+            } else {
+                ui.label(
+                    egui::RichText::new("Ctrl+1/2/3  Appearance     Esc  Close")
+                        .size(12.0)
+                        .weak(),
+                );
+            }
         });
         // Wayland's toolkit theme signal is sometimes absent (or out of
         // sync with Darkman). Keep System selected in the UI while rendering
@@ -489,12 +576,17 @@ pub fn run() -> eframe::Result {
             Some("Offline projection is missing, locked or unauthenticated."),
         ),
     };
+    let bootstrap = offline_command::picker_bootstrap();
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Glow,
         viewport: egui::ViewportBuilder::default()
             .with_app_id("passflick-projection-preview")
             .with_title("Passflick · Offline Projection")
-            .with_inner_size([740.0, 495.0])
+            .with_inner_size(if snapshot.is_some() {
+                [740.0, 495.0]
+            } else {
+                [680.0, 370.0]
+            })
             .with_resizable(true)
             .with_always_on_top(),
         ..Default::default()
@@ -504,7 +596,10 @@ pub fn run() -> eframe::Result {
         options,
         Box::new(move |cc| {
             cc.egui_ctx.set_theme(egui::ThemePreference::System);
-            Ok(Box::new(ProjectionPicker::new(snapshot, notice)))
+            configure_appearance(&cc.egui_ctx);
+            Ok(Box::new(ProjectionPicker::with_bootstrap(
+                snapshot, notice, bootstrap,
+            )))
         }),
     )
 }
@@ -539,6 +634,15 @@ mod tests {
             ],
         )
         .unwrap()
+    }
+
+    #[test]
+    fn uninitialized_picker_does_not_offer_a_fake_passphrase_unlock() {
+        let app = ProjectionPicker::with_bootstrap(None, None, PickerBootstrap::FirstRun);
+        assert!(app.snapshot.is_none());
+        assert_eq!(app.bootstrap, PickerBootstrap::FirstRun);
+        assert!(app.unlock_passphrase.is_empty());
+        assert!(app.rows.is_empty());
     }
 
     #[test]
