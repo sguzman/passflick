@@ -30,6 +30,8 @@ pub enum AccessError {
     InvalidCachedKey,
     #[error("session keyring operation failed")]
     Keyring,
+    #[error("session keyring permission setup failed and key cleanup could not be confirmed")]
+    KeyringCleanup,
     #[error("projection lock coordination failed")]
     Coordination,
     #[error("offline projection authentication failed")]
@@ -51,6 +53,24 @@ pub struct KernelSessionStore;
 
 fn kernel_ring() -> Result<KeyRing, AccessError> {
     KeyRing::from_special_id(KeyRingIdentifier::Session, true).map_err(|_| AccessError::Keyring)
+}
+
+/// Kernel key insertion precedes permission hardening. If that second
+/// operation fails, invalidate the just-inserted key rather than leaving its
+/// sensitive bytes accessible with unreviewed default permissions.
+///
+/// The distinct cleanup error is important: when invalidation also fails,
+/// callers must not assume the key was removed.
+fn restrict_inserted_key<R, I>(restrict: R, invalidate: I) -> Result<(), AccessError>
+where
+    R: FnOnce() -> Result<(), AccessError>,
+    I: FnOnce() -> Result<(), AccessError>,
+{
+    if restrict().is_ok() {
+        return Ok(());
+    }
+    invalidate().map_err(|_| AccessError::KeyringCleanup)?;
+    Err(AccessError::Keyring)
 }
 
 impl SessionStore for KernelSessionStore {
@@ -83,7 +103,10 @@ impl SessionStore for KernelSessionStore {
         let permissions = KeyPermissionsBuilder::builder()
             .posessor(Permission::ALL)
             .build();
-        key.set_perms(permissions).map_err(|_| AccessError::Keyring)
+        restrict_inserted_key(
+            || key.set_perms(permissions).map_err(|_| AccessError::Keyring),
+            || key.invalidate().map_err(|_| AccessError::Keyring),
+        )
     }
 
     fn remove(&self, label: &str) -> Result<(), AccessError> {
@@ -325,6 +348,61 @@ mod tests {
         .unwrap();
         cache_store::publish(&dir.snapshot(), &key, &candidate).unwrap();
         (dir, scope)
+    }
+
+    #[test]
+    fn kernel_key_permission_failure_rolls_back_new_secret_before_reporting_error() {
+        // A fake key models the two Linux keyctl operations without touching
+        // the CI runner's real session keyring or storing a user secret.
+        let key_present = Cell::new(true);
+        let restricted = Cell::new(false);
+        let result = restrict_inserted_key(
+            || {
+                restricted.set(false);
+                Err(AccessError::Keyring)
+            },
+            || {
+                key_present.set(false);
+                Ok(())
+            },
+        );
+        assert_eq!(result, Err(AccessError::Keyring));
+        assert!(!key_present.get());
+        assert!(!restricted.get());
+    }
+
+    #[test]
+    fn kernel_key_permission_success_does_not_invalidate_valid_session_key() {
+        let key_present = Cell::new(true);
+        let invalidation_called = Cell::new(false);
+        assert_eq!(
+            restrict_inserted_key(
+                || Ok(()),
+                || {
+                    invalidation_called.set(true);
+                    Ok(())
+                },
+            ),
+            Ok(())
+        );
+        assert!(key_present.get());
+        assert!(!invalidation_called.get());
+    }
+
+    #[test]
+    fn failed_kernel_key_cleanup_is_distinct_from_confirmed_invalidation() {
+        let invalidation_called = Cell::new(false);
+        assert_eq!(
+            restrict_inserted_key(
+                || Err(AccessError::Keyring),
+                || {
+                    invalidation_called.set(true);
+                    Err(AccessError::Keyring)
+                },
+            ),
+            Err(AccessError::KeyringCleanup)
+        );
+        assert!(invalidation_called.get());
     }
 
     #[test]
