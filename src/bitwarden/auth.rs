@@ -167,10 +167,7 @@ impl RemoteSession {
         let expires_at = token_expiration(reply.expires_in)?;
         Ok(Self {
             endpoint_identity: endpoint.server_identity().to_owned(),
-            access_token: std::mem::replace(
-                &mut reply.access_token,
-                Zeroizing::new(String::new()),
-            ),
+            access_token: std::mem::replace(&mut reply.access_token, Zeroizing::new(String::new())),
             refresh_token: std::mem::replace(
                 &mut reply.refresh_token,
                 Zeroizing::new(String::new()),
