@@ -811,8 +811,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
         fixture_server_cipher_state(&client, &url, session.bearer_token().unwrap());
     assert!(
         upstream_corrupt.iter().any(|cipher| {
-            cipher["id"] == second_id
-                && cipher["login"]["password"] == "2.bad|ciphertext|mac"
+            cipher["id"] == second_id && cipher["login"]["password"] == "2.bad|ciphertext|mac"
         }),
         "disposable server did not retain the deliberately corrupt cipher"
     );
@@ -863,7 +862,10 @@ fn disposable_server_auth_sync_encrypted_offline() {
                 ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
                 ("Vaultwarden login email: ", EMAIL),
                 ("Vaultwarden master password: ", PASSWORD),
-                ("Custom trusted CA PEM path (empty for system trust): ", ca_path.as_str()),
+                (
+                    "Custom trusted CA PEM path (empty for system trust): ",
+                    ca_path.as_str(),
+                ),
             ],
             false,
         );
