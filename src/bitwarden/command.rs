@@ -37,8 +37,6 @@ pub enum PreviewError {
     RemoteSync,
     #[error("local projection directory or certificate is inaccessible or unsafe")]
     Storage,
-    #[error("local passphrase confirmation or strength check failed")]
-    Passphrase,
     #[error("local encrypted projection authentication or update failed")]
     Local,
 }
