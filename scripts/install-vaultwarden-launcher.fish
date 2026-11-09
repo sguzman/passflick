@@ -31,7 +31,7 @@ set -l target "$app_dir/passflick-vaultwarden.desktop"
 
 # Desktop-entry Exec uses special quoting and %-field codes. Reject names
 # with metacharacters instead of writing a misleading or unsafe command.
-if string match -rq '["%\x60\x24\\]' -- "$binary"
+if string match -rq '[^A-Za-z0-9_./ -]' -- "$binary"
     echo "The binary path needs desktop-entry escaping; no launcher was written." >&2
     exit 1
 end
