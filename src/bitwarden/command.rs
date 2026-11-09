@@ -111,7 +111,10 @@ pub(super) fn visible(prompt: &str) -> Result<Zeroizing<String>, PreviewError> {
     if unsafe { libc::tcsetattr(tty.as_raw_fd(), libc::TCSAFLUSH, &echoed) } != 0 {
         return Err(PreviewError::Input);
     }
-    let mut terminal = PromptTerminal { tty, saved: original };
+    let mut terminal = PromptTerminal {
+        tty,
+        saved: original,
+    };
     terminal
         .tty
         .write_all(prompt.as_bytes())
