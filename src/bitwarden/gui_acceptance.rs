@@ -129,6 +129,33 @@ fn await_gui_unlock(binary: &Path, data: &Path, legacy: &Path, child: &mut Picke
     panic!("masked GUI unlock did not establish an authenticated local session");
 }
 
+/// Wait for the picker itself to commit the keyring lock, rather than
+/// assuming the compositor processed a simulated shortcut synchronously.
+fn await_gui_lock(binary: &Path, data: &Path, legacy: &Path, child: &mut PickerChild) {
+    let deadline = Instant::now() + TIMEOUT;
+    while Instant::now() < deadline {
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "fictional picker exited during local manual lock"
+        );
+        let output = Command::new(binary)
+            .args(["projection", "status"])
+            .env("XDG_DATA_HOME", data)
+            .env("PASSFLICK_VAULT", legacy)
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .output()
+            .expect("fictional projection status command could not start");
+        if output.status.success()
+            && output.stdout.starts_with(b"Offline projection manually locked.")
+        {
+            return;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    panic!("Ctrl+L did not establish the expected manual keyring lock");
+}
+
 fn write_stub(dir: &Path) -> PathBuf {
     let bin = dir.join("bin");
     fs::create_dir(&bin).unwrap();
@@ -412,4 +439,38 @@ pub(super) fn run(
     }
     assert_eq!(fs::read(&clipboard).unwrap(), b"fictional-UPDATED-password");
     fs::remove_file(&clipboard).unwrap();
+
+    // An explicit Ctrl+L while the site editor is focused must lock the
+    // scoped keyring, not copy a selected credential or close the picker.
+    // Exercise the real GUI event path with fictional entries only.
+    {
+        let mut child = launch(binary, data, legacy, &clipboard, &bin);
+        visible_window(&mut child);
+        xdo(&[
+            "type",
+            "--clearmodifiers",
+            "--delay",
+            "20",
+            "Synthetic Vaultwarden",
+        ]);
+        xdo(&["key", "--clearmodifiers", "ctrl+l"]);
+        await_gui_lock(binary, data, legacy, &mut child);
+        assert!(
+            !clipboard.exists(),
+            "Ctrl+L unexpectedly copied a fictional credential"
+        );
+        // Enter on the now-locked view must never select a password.
+        xdo(&["key", "--clearmodifiers", "Return"]);
+        thread::sleep(Duration::from_millis(300));
+        assert!(
+            child.0.try_wait().unwrap().is_none(),
+            "manual lock unexpectedly closed the picker"
+        );
+        assert!(
+            !clipboard.exists(),
+            "Enter after Ctrl+L copied a credential without re-unlock"
+        );
+        xdo(&["key", "--clearmodifiers", "Escape"]);
+        await_exit(&mut child);
+    }
 }
