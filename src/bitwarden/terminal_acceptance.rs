@@ -14,8 +14,8 @@ use zeroize::Zeroizing;
 const LIMIT: usize = 32 * 1024;
 const DEADLINE: Duration = Duration::from_secs(100);
 
-/// Drive each masked prompt *after* observing it, rather than piping input
-/// before rpassword has disabled terminal echo. Output is never printed.
+/// Drive each prompt after observing its echo policy: non-secret settings
+/// must be visible and credentials must remain hidden. Never print output.
 pub(super) fn run_cli(
     binary: &Path,
     data_dir: &Path,
@@ -56,6 +56,16 @@ pub(super) fn run_projection_cli(
         should_succeed,
         Some(expected_output),
     );
+}
+
+fn is_visible_configuration_prompt(prompt: &str) -> bool {
+    matches!(
+        prompt,
+        "Vaultwarden HTTPS server URL: "
+            | "Vaultwarden login email: "
+            | "Custom trusted CA PEM path (empty for system trust): "
+            | "MFA method (totp/email): "
+    )
 }
 
 fn run_arguments(
@@ -160,11 +170,19 @@ fn run_arguments(
                     );
                     // SAFETY: the preceding tcgetattr succeeded.
                     let current = unsafe { current.assume_init() };
-                    assert_eq!(
-                        current.c_lflag & (libc::ECHO | libc::ECHONL),
-                        0,
-                        "a prompt appeared before terminal echo was disabled"
-                    );
+                    if is_visible_configuration_prompt(prompt) {
+                        assert_ne!(
+                            current.c_lflag & libc::ECHO,
+                            0,
+                            "non-secret configuration prompt must allow visible input"
+                        );
+                    } else {
+                        assert_eq!(
+                            current.c_lflag & (libc::ECHO | libc::ECHONL),
+                            0,
+                            "secret prompt appeared before echo was disabled"
+                        );
+                    }
                     master.write_all(reply.as_bytes()).unwrap();
                     master.write_all(b"\n").unwrap();
                     next += 1;
@@ -196,16 +214,18 @@ fn run_arguments(
             "projection CLI did not report expected safe status"
         );
     }
-    // These inputs are fictional, but echoed input is still a terminal
-    // privacy failure. Do not leak transcript bytes into assertions/logs.
-    for (_, reply) in answers {
+    // Synthetic configuration is expected to echo. Secrets must not.
+    // Never include the captured terminal transcript in test logs.
+    for (prompt, reply) in answers {
         if !reply.is_empty() && reply.len() >= 8 {
-            assert!(
-                !transcript
-                    .windows(reply.len())
-                    .any(|window| window == reply.as_bytes()),
-                "terminal prompt leaked a supplied value"
-            );
+            let was_echoed = transcript
+                .windows(reply.len())
+                .any(|window| window == reply.as_bytes());
+            if is_visible_configuration_prompt(prompt) {
+                assert!(was_echoed, "non-secret input was not visible");
+            } else {
+                assert!(!was_echoed, "secret input was echoed");
+            }
         }
     }
     buf.fill(0);
