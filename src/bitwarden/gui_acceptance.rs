@@ -147,7 +147,9 @@ fn await_gui_lock(binary: &Path, data: &Path, legacy: &Path, child: &mut PickerC
             .output()
             .expect("fictional projection status command could not start");
         if output.status.success()
-            && output.stdout.starts_with(b"Offline projection manually locked.")
+            && output
+                .stdout
+                .starts_with(b"Offline projection manually locked.")
         {
             return;
         }
