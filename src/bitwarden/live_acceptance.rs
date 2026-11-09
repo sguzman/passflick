@@ -1476,7 +1476,11 @@ fn disposable_server_auth_sync_encrypted_offline() {
         ));
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         loop {
-            if partial_tls.try_wait().unwrap().is_some() {
+            if let Some(status) = partial_tls.try_wait().unwrap() {
+                assert!(
+                    status.success(),
+                    "partial-response TLS fixture failed instead of serving a connection"
+                );
                 break;
             }
             if std::time::Instant::now() >= deadline {
