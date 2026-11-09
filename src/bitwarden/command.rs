@@ -36,6 +36,8 @@ pub enum PreviewError {
     Transport,
     #[error("Vaultwarden authentication or MFA failed")]
     Authentication,
+    #[error("Vaultwarden HTTPS connection or certificate validation failed; local snapshot unchanged")]
+    Network,
     #[error("complete authenticated Vaultwarden sync failed; local snapshot unchanged")]
     RemoteSync,
     #[error("local projection directory or certificate is inaccessible or unsafe")]
@@ -50,9 +52,19 @@ impl PreviewError {
             Self::Input => Outcome::Input,
             Self::Endpoint | Self::ServerMismatch => Outcome::Configuration,
             Self::Authentication => Outcome::Authentication,
-            Self::Transport | Self::RemoteSync => Outcome::Sync,
+            Self::Transport | Self::Network | Self::RemoteSync => Outcome::Sync,
             Self::Storage | Self::Local => Outcome::Local,
         }
+    }
+}
+
+/// Keep TLS/connectivity failures distinct from a rejected password or MFA.
+/// Never preserve or display the upstream reqwest error: it may contain
+/// private endpoint details.
+fn auth_failure(error: AuthError) -> PreviewError {
+    match error {
+        AuthError::Transport => PreviewError::Network,
+        _ => PreviewError::Authentication,
     }
 }
 
@@ -446,9 +458,9 @@ fn run_explicit() -> Result<(), PreviewError> {
                             code: &code,
                         }),
                     )
-                    .map_err(|_| PreviewError::Authentication)?
+                    .map_err(auth_failure)?
             }
-            Err(_) => return Err(PreviewError::Authentication),
+            Err(error) => return Err(auth_failure(error)),
         };
 
     let timestamp = SystemTime::now()
@@ -534,7 +546,20 @@ mod tests {
             PreviewError::Authentication.refresh_outcome(),
             Outcome::Authentication
         );
+        assert_eq!(PreviewError::Network.refresh_outcome(), Outcome::Sync);
         assert_eq!(PreviewError::Transport.refresh_outcome(), Outcome::Sync);
+        assert_eq!(
+            auth_failure(AuthError::Transport),
+            PreviewError::Network
+        );
+        assert_eq!(
+            auth_failure(AuthError::Rejected),
+            PreviewError::Authentication
+        );
+        assert_eq!(
+            auth_failure(AuthError::MfaRequired),
+            PreviewError::Authentication
+        );
         assert_eq!(PreviewError::RemoteSync.refresh_outcome(), Outcome::Sync);
         assert_eq!(PreviewError::Storage.refresh_outcome(), Outcome::Local);
         assert_eq!(PreviewError::Local.refresh_outcome(), Outcome::Local);
