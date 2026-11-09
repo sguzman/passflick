@@ -1,8 +1,16 @@
 # 🗺️ Passflick — Vaultwarden projection roadmap
 
-**Status:** native adapter verified in disposable Vaultwarden CI; an opt-in, non-default native update preview is available behind `vaultwarden-preview`. The installed production picker remains on the encrypted legacy vault. Do not use personal credentials for acceptance until target-host security gates pass.  
+**Status:** the feature-enabled native Vaultwarden picker has passed isolated CI and partial real EndeavourOS/Hyprland host QA (sync, offline GUI unlock, search/copy, same-session key reuse). It remains **opt-in**, and the default picker still uses the legacy encrypted vault. Security-edge acceptance must continue with fictional data; release/default cutover is not approved.  
 **Target:** Rust + egui on Linux/Wayland (EndeavourOS/Hyprland first).  
 **Mission:** Passflick is a small, fast, keyboard-first, **read-only downstream projection of a Bitwarden-compatible personal vault**, not an independent password manager or a browser CSV aggregator.
+
+### 2026-11-08 — host milestone and opt-in application launcher
+
+- **Real host evidence, anonymized:** The user confirmed a successful read-only sync from their existing self-hosted Vaultwarden with private-CA HTTPS, an authenticated encrypted local snapshot, populated native Hyprland picker, website/account filtering, selected-row clipboard actions and both Light/Dark System-theme appearances. Do not copy hostnames, private account labels, actual records or clipboard values into public documentation. Screenshot content alone does not prove exact clipboard bytes or history suppression.
+- **Installed, session reuse verified:** With the encrypted projection copied from the temporary QA XDG directory into the normal user-data directory, the first permanent-directory launch required its **independent local** passphrase; the next process in the same login session opened directly using its cached key. The feature-enabled executable was installed through the normal Cargo workflow, not by copying to `~/.local/bin`. No kernel-keyring cross-logout lifetime test was performed.
+- **Launcher design:** A separate, opt-in `scripts/install-vaultwarden-launcher.fish` creates a desktop entry pointing to the existing cargo-installed binary's **`projection picker`** subcommand. It must not replace `desktop/passflick.desktop`, mutate the installed executable, edit compositor keybinds, or touch historical `vault.passvault`. A fictional CLI desktop-smoke check verifies this behavior. Existing normal `passflick` remains the rollback path.
+- **Remaining blockers:** manual lock while open, wrong-then-correct local Wayland unlock, logout/login keyring cleanup, clipboard-history manager behavior, explicit offline/failed-refresh preservation, app-menu activation on the user's host, first-frame latency, synthetic account migration, and owner-approved default/release cutover. All must be kept separate from live-account usage.
+- **Progress:** **40/100 → 40/100 (Δ +0 weighted points)**. These host observations improve evidence for C03/C05/G04/H02 but do not complete their full acceptance criteria.
 
 ## 🎯 Authorized product contract
 
