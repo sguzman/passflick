@@ -27,6 +27,7 @@ if grep -E '^Exec=.*(kitty|sh -c|bash -c)' "$installed"; then
   exit 1
 fi
 echo "Standalone desktop installer passed."
+cp -- "$installed" "$root/original-legacy.desktop"
 
 # The feature-gated Vaultwarden picker gets its own desktop entry. Test with
 # a fake CLI so no user data or encrypted projection can be accessed.
@@ -46,7 +47,7 @@ preview="$XDG_DATA_HOME/applications/passflick-vaultwarden.desktop"
 desktop-file-validate "$preview"
 grep -Fx "Exec=\"$HOME/.cargo/bin/passflick\" projection picker" "$preview"
 grep -Fx 'Terminal=false' "$preview"
-cmp -- "$bundle/passflick.desktop" "$bundle/passflick.desktop" # legacy source remains
+cmp -- "$root/original-legacy.desktop" "$installed" # existing launcher untouched
 grep -Fx "Exec=\"$XDG_BIN_HOME/passflick\"" "$installed" # old installed entry untouched
 sha_before="$(sha256sum "$preview" | cut -d ' ' -f1)"
 if fish scripts/install-vaultwarden-launcher.fish; then
