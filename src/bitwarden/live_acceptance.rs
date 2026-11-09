@@ -551,10 +551,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
             false,
         );
         let untrusted_tls = super::refresh_status::read(&path).unwrap().unwrap();
-        assert_eq!(
-            untrusted_tls.outcome,
-            super::refresh_status::Outcome::Sync
-        );
+        assert_eq!(untrusted_tls.outcome, super::refresh_status::Outcome::Sync);
         assert!(untrusted_tls.at >= first_report.at);
         assert_eq!(fs::read(&path).unwrap(), first_bytes);
         assert_eq!(fs::read(&keypath).unwrap(), first_keywrap_bytes);
@@ -1311,10 +1308,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
         let old_snapshot = fs::read(&snapshot).unwrap();
         let old_keywrap = fs::read(&keywrap).unwrap();
         let before = super::refresh_status::read(&snapshot).unwrap().unwrap();
-        assert_eq!(
-            before.outcome,
-            super::refresh_status::Outcome::Success
-        );
+        assert_eq!(before.outcome, super::refresh_status::Outcome::Success);
 
         super::terminal_acceptance::run_cli(
             Path::new(&binary),
