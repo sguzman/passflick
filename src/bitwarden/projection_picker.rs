@@ -110,10 +110,10 @@ fn now_epoch() -> u64 {
         .map_or(0, |elapsed| elapsed.as_secs())
 }
 
-/// Enter activates a focused GUI control too. The explicit refresh button
-/// must never let the same keypress fall through to password copying.
-fn picker_copy_action(events: &[egui::Event], refresh_command_clicked: bool) -> Option<bool> {
-    if refresh_command_clicked {
+/// Enter activates a focused GUI control too. An explicit auxiliary
+/// action must never let the same keypress copy a selected password.
+fn picker_copy_action(events: &[egui::Event], auxiliary_action_clicked: bool) -> Option<bool> {
+    if auxiliary_action_clicked {
         None
     } else {
         crate::copy_shortcut::enter_copy_username(events)
@@ -185,6 +185,7 @@ struct ProjectionPicker {
     labels: HashMap<usize, Zeroizing<String>>,
     selected: usize,
     focused: bool,
+    manual_lock_requested: bool,
     notice: Option<&'static str>,
     error: Option<&'static str>,
     bootstrap: PickerBootstrap,
@@ -218,6 +219,7 @@ impl ProjectionPicker {
             labels: HashMap::new(),
             selected: 0,
             focused: false,
+            manual_lock_requested: false,
             notice,
             error: None,
             bootstrap,
@@ -239,8 +241,25 @@ impl ProjectionPicker {
         self.focused = false;
     }
 
+    /// Never automatically reinstall a cached projection into a window whose
+    /// user explicitly requested a lock, even if keyring invalidation fails.
+    fn allows_passive_restore(&self) -> bool {
+        self.snapshot.is_none() && !self.manual_lock_requested
+    }
+
+    /// Hide the decrypted snapshot and all search text before attempting the
+    /// cross-process lock. This remains fail-closed for this window even if
+    /// the kernel-keyring operation cannot be confirmed.
+    fn clear_for_manual_lock(&mut self) {
+        self.clear_sensitive();
+        self.manual_lock_requested = true;
+        self.notice = None;
+        self.error = None;
+    }
+
     fn install_unlocked(&mut self, snapshot: ProjectionSnapshot) {
         self.bootstrap = PickerBootstrap::Existing;
+        self.manual_lock_requested = false;
         self.snapshot = Some(snapshot);
         self.unlock_passphrase.zeroize();
         self.notice = None;
@@ -280,7 +299,7 @@ impl ProjectionPicker {
                 self.notice =
                     Some("Projection locked or unavailable. Unlock in this login session.");
             }
-            Ok(true) if self.snapshot.is_none() => {
+            Ok(true) if self.allows_passive_restore() => {
                 if let Ok(Some(snapshot)) = offline_command::read_for_picker() {
                     self.install_unlocked(snapshot);
                 }
@@ -372,7 +391,8 @@ impl eframe::App for ProjectionPicker {
             ctx.input_mut(|input| input.consume_key(egui::Modifiers::CTRL, egui::Key::Space));
 
         let mut request_unlock = false;
-        let mut refresh_command_clicked = false;
+        let mut request_lock = false;
+        let mut auxiliary_action_clicked = false;
         egui::CentralPanel::default()
             .frame(preview_panel_frame(ui.visuals()))
             .show(ui, |ui| {
@@ -424,7 +444,7 @@ impl eframe::App for ProjectionPicker {
                     {
                         // Enter on a focused button must not also copy a
                         // selected password via the global picker shortcut.
-                        refresh_command_clicked = true;
+                        auxiliary_action_clicked = true;
                         if let Some(command) = exact_update_command() {
                             ctx.copy_text(command);
                             self.notice = Some("Refresh command copied. Paste it into Kitty.");
@@ -432,6 +452,14 @@ impl eframe::App for ProjectionPicker {
                         } else {
                             self.error = Some("Cannot construct the update command for this session.");
                         }
+                    }
+                    if ui
+                        .small_button("Lock now")
+                        .on_hover_text("Invalidate this login session's cached projection key without deleting encrypted data.")
+                        .clicked()
+                    {
+                        request_lock = true;
+                        auxiliary_action_clicked = true;
                     }
                     if let Some(notice) = self.notice {
                         ui.label(egui::RichText::new(notice).size(11.0).weak());
@@ -599,6 +627,23 @@ impl eframe::App for ProjectionPicker {
                 );
             }
         });
+        if request_lock {
+            // Do not retain decrypted entries while waiting on the keyring.
+            self.clear_for_manual_lock();
+            match offline_command::lock_for_picker() {
+                Ok(()) => {
+                    self.notice = Some("Projection manually locked. Enter the local passphrase to unlock.");
+                }
+                Err(_) => {
+                    self.error = Some(
+                        "Manual lock could not be confirmed. Data is hidden here, but other processes may remain unlocked.",
+                    );
+                }
+            }
+            ctx.request_repaint();
+            // A keyboard-activated Lock button must never copy a credential.
+            return;
+        }
         // Wayland's toolkit theme signal is sometimes absent (or out of
         // sync with Darkman). Keep System selected in the UI while rendering
         // Darkman's live mode; manual Light/Dark always wins.
@@ -630,7 +675,7 @@ impl eframe::App for ProjectionPicker {
             // Enter used to unlock must never also copy the first password.
             return;
         }
-        let action = ctx.input(|input| picker_copy_action(&input.events, refresh_command_clicked));
+        let action = ctx.input(|input| picker_copy_action(&input.events, auxiliary_action_clicked));
         if let Some(username) = action {
             self.copy_selected(&ctx, username);
         }
@@ -710,7 +755,7 @@ mod tests {
     }
 
     #[test]
-    fn refresh_button_activation_suppresses_global_enter_to_copy() {
+    fn auxiliary_button_activation_suppresses_global_enter_to_copy() {
         let enter = egui::Event::Key {
             key: egui::Key::Enter,
             physical_key: None,
@@ -724,6 +769,31 @@ mod tests {
         );
         assert_eq!(picker_copy_action(&[enter], true), None);
         assert_eq!(picker_copy_action(&[], true), None);
+    }
+
+    #[test]
+    fn manual_lock_hides_decrypted_state_and_never_passively_reopens() {
+        let mut picker = ProjectionPicker::new(Some(fixture()), None);
+        picker.site_query.push_str("example");
+        picker.username_query.push_str("alice");
+        picker.unlock_passphrase.push_str("fictional private input");
+        assert!(!picker.allows_passive_restore());
+
+        picker.clear_for_manual_lock();
+        assert!(picker.manual_lock_requested);
+        assert!(!picker.allows_passive_restore());
+        assert!(picker.snapshot.is_none());
+        assert!(picker.rows.is_empty());
+        assert!(picker.labels.is_empty());
+        assert!(picker.site_query.is_empty());
+        assert!(picker.username_query.is_empty());
+        assert!(picker.unlock_passphrase.is_empty());
+
+        // Only an explicit successful local unlock may restore the window.
+        picker.install_unlocked(fixture());
+        assert!(!picker.manual_lock_requested);
+        assert!(picker.snapshot.is_some());
+        assert!(!picker.allows_passive_restore());
     }
 
     #[test]
