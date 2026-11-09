@@ -493,6 +493,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
         let devicepath = passflick_dir.join("projection.pfdevice");
         let device = fs::read(&devicepath).unwrap();
         let first_bytes = fs::read(&path).unwrap();
+        let first_keywrap_bytes = fs::read(&keypath).unwrap();
         // Real CLI invocation must persist only an outcome/time hint, never
         // account identity, plaintext or encrypted projection bytes.
         let first_report = super::refresh_status::read(&path).unwrap().unwrap();
@@ -534,6 +535,57 @@ fn disposable_server_auth_sync_encrypted_offline() {
                 .any(|w| w == b"JBSWY3DPEHPK3PXP")
         );
 
+        // A rejected remote password is not an HTTPS outage. The updater
+        // must report Authentication and stop before the local passphrase
+        // prompt without changing the last-good encrypted projection.
+        super::terminal_acceptance::run_cli(
+            binary,
+            data,
+            &legacy,
+            &[
+                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden login email: ", EMAIL),
+                (
+                    "Vaultwarden master password: ",
+                    "fictional incorrect remote master password",
+                ),
+                ("Custom trusted CA PEM path (empty for system trust): ", ca),
+            ],
+            false,
+        );
+        let rejected = super::refresh_status::read(&path).unwrap().unwrap();
+        assert_eq!(
+            rejected.outcome,
+            super::refresh_status::Outcome::Authentication
+        );
+        assert!(rejected.at >= first_report.at);
+
+        // The disposable server presents a private certificate. Without
+        // the explicitly configured CA, the TLS prelogin must fail before
+        // remote authentication, with a distinct non-secret network category.
+        super::terminal_acceptance::run_cli(
+            binary,
+            data,
+            &legacy,
+            &[
+                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden login email: ", EMAIL),
+                ("Vaultwarden master password: ", PASSWORD),
+                ("Custom trusted CA PEM path (empty for system trust): ", ""),
+            ],
+            false,
+        );
+        let untrusted_tls = super::refresh_status::read(&path).unwrap().unwrap();
+        assert_eq!(
+            untrusted_tls.outcome,
+            super::refresh_status::Outcome::Sync
+        );
+        assert!(untrusted_tls.at >= rejected.at);
+        assert_eq!(fs::read(&path).unwrap(), first_bytes);
+        assert_eq!(fs::read(&keypath).unwrap(), first_keywrap_bytes);
+        assert_eq!(fs::read(&devicepath).unwrap(), device);
+        assert_eq!(fs::read(&legacy).unwrap(), original_legacy);
+
         super::terminal_acceptance::run_cli(
             binary,
             data,
@@ -554,7 +606,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
         assert_eq!(fs::read(&devicepath).unwrap(), device);
         let failed_report = super::refresh_status::read(&path).unwrap().unwrap();
         assert_eq!(failed_report.outcome, super::refresh_status::Outcome::Local);
-        assert!(failed_report.at >= first_report.at);
+        assert!(failed_report.at >= untrusted_tls.at);
 
         super::terminal_acceptance::run_cli(
             binary,
