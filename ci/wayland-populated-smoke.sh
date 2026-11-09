@@ -270,10 +270,12 @@ projection_cli status >"$root/lock.status"
 grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
 assert_clipboard after-wrong-recovery
 
-# The failed attempt zeroizes the masked field and requests its focus on
-# the next egui frame. Preserve the same native Wayland keyboard focus here:
-# refocusing Weston's *X11 output* or injecting Ctrl+A can instead redirect
-# subsequent input away from the actual password editor.
+# An invalid unlock may leave Weston keyboard focus on the button rather
+# than the editor. Use Passflick's explicit *locked-view* Ctrl+Space refocus
+# shortcut, then wait for its native Wayland egui frame before retrying.
+# The local field was zeroized on failure, so no Ctrl+A or pointer click.
+xdotool key --clearmodifiers ctrl+space
+sleep 0.4
 xdotool type --clearmodifiers --delay 15 -- "$PASSFLICK_NATIVE_LOCAL_PASSPHRASE"
 xdotool key --clearmodifiers Return
 recovered=0
