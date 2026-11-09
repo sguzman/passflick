@@ -1403,7 +1403,10 @@ fn disposable_server_auth_sync_encrypted_offline() {
             .args(["stop", "--time", "2", &proxy])
             .output()
             .expect("disposable HTTPS proxy stop could not run");
-        assert!(stopped.status.success(), "disposable HTTPS proxy did not stop");
+        assert!(
+            stopped.status.success(),
+            "disposable HTTPS proxy did not stop"
+        );
 
         // No TLS or auth response can arrive: the correct certificate and
         // fictional credentials are supplied, but localhost no longer has
