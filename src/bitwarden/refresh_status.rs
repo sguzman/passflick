@@ -161,7 +161,7 @@ pub fn record(snapshot: &Path, report: Report) -> Result<(), ReportError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::unix::fs::{DirBuilderExt, symlink};
+    use std::os::unix::fs::DirBuilderExt;
     use std::path::PathBuf;
 
     struct Fixture(PathBuf);
@@ -221,7 +221,7 @@ mod tests {
         let snapshot = fixture.snapshot();
         let destination = fixture.0.join("fictional-foreign");
         fs::write(&destination, b"untouched").unwrap();
-        symlink(&destination, fixture.report()).unwrap();
+        std::os::unix::fs::symlink(&destination, fixture.report()).unwrap();
         let report = Report { at: 100, outcome: Outcome::Sync };
         assert_eq!(read(&snapshot), Err(ReportError::Unsafe));
         assert_eq!(record(&snapshot, report), Err(ReportError::Unsafe));
