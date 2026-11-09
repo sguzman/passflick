@@ -403,6 +403,26 @@ impl eframe::App for ProjectionPicker {
                 } else {
                     info.weak()
                 });
+                // Refresh needs masked interactive terminal prompts. Offer an
+                // explicit exact command instead of spawning a networked CLI
+                // from this strictly offline picker or guessing XDG paths.
+                ui.horizontal(|ui| {
+                    if ui.small_button("Copy refresh command")
+                        .on_hover_text("Copy the exact installed executable and XDG data path; run it in Kitty when you want to refresh.")
+                        .clicked()
+                    {
+                        if let Some(command) = exact_update_command() {
+                            ctx.copy_text(command);
+                            self.notice = Some("Refresh command copied. Paste it into Kitty.");
+                            self.error = None;
+                        } else {
+                            self.error = Some("Cannot construct the update command for this session.");
+                        }
+                    }
+                    if let Some(notice) = self.notice {
+                        ui.label(egui::RichText::new(notice).size(11.0).weak());
+                    }
+                });
                 ui.add_space(10.0);
 
                 let site = ui.horizontal(|ui| {
