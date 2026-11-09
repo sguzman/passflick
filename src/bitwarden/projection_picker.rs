@@ -738,13 +738,19 @@ impl eframe::App for ProjectionPicker {
                     .size(12.0)
                     .weak(),
                 );
-            } else {
+            } else if self.bootstrap == PickerBootstrap::Existing {
                 ui.label(
                     egui::RichText::new(
                         "Ctrl+Space  Focus passphrase    Ctrl+1/2/3  Appearance    Esc  Close",
                     )
                     .size(12.0)
                     .weak(),
+                );
+            } else {
+                ui.label(
+                    egui::RichText::new("Ctrl+1/2/3  Appearance     Esc  Close")
+                        .size(12.0)
+                        .weak(),
                 );
             }
         });
