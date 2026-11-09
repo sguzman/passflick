@@ -14,6 +14,7 @@ use zeroize::{Zeroize, Zeroizing};
 
 use super::offline_command::{self, PickerBootstrap};
 use super::projection_search::{display_row, rank_projection};
+use super::refresh_status::{self, Report};
 use super::system_theme;
 use crate::projection::ProjectionSnapshot;
 
@@ -120,6 +121,32 @@ fn snapshot_status_line(timestamp: u64, now: u64, count: usize) -> (String, bool
     )
 }
 
+fn failed_refresh_line(report: Report, last_success: u64, now: u64) -> Option<String> {
+    // Success is not a failure, and a newer authenticated snapshot supersedes
+    // any earlier failed attempt from a separate process.
+    let label = report.outcome.failure_label()?;
+    if report.at < last_success {
+        return None;
+    }
+    let since = if report.at > now {
+        "time not available".to_owned()
+    } else {
+        let elapsed = now - report.at;
+        if elapsed < 120 {
+            "less than 2 minutes ago".to_owned()
+        } else if elapsed < 7_200 {
+            format!("{} minutes ago", elapsed / 60)
+        } else if elapsed < 172_800 {
+            format!("{} hours ago", elapsed / 3_600)
+        } else {
+            format!("{} days ago", elapsed / 86_400)
+        }
+    };
+    Some(format!(
+        "Last explicit update failed ({label}; {since}). Local snapshot age is separate."
+    ))
+}
+
 fn now_epoch() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -202,6 +229,8 @@ struct ProjectionPicker {
     selected: usize,
     focused: bool,
     manual_lock_requested: bool,
+    refresh_report: Option<Report>,
+    refresh_status_unavailable: bool,
     notice: Option<&'static str>,
     error: Option<&'static str>,
     bootstrap: PickerBootstrap,
@@ -236,6 +265,8 @@ impl ProjectionPicker {
             selected: 0,
             focused: false,
             manual_lock_requested: false,
+            refresh_report: None,
+            refresh_status_unavailable: false,
             notice,
             error: None,
             bootstrap,
@@ -317,6 +348,24 @@ impl ProjectionPicker {
         }
         self.last_poll = Instant::now();
         self.bootstrap = offline_command::picker_bootstrap();
+        if self.bootstrap == PickerBootstrap::Existing {
+            match crate::paths::projection_path()
+                .map_err(|_| ())
+                .and_then(|path| refresh_status::read(&path).map_err(|_| ()))
+            {
+                Ok(report) => {
+                    self.refresh_report = report;
+                    self.refresh_status_unavailable = false;
+                }
+                Err(()) => {
+                    self.refresh_report = None;
+                    self.refresh_status_unavailable = true;
+                }
+            }
+        } else {
+            self.refresh_report = None;
+            self.refresh_status_unavailable = false;
+        }
         if self.bootstrap != PickerBootstrap::Existing {
             if self.snapshot.is_some() {
                 self.clear_sensitive();
@@ -481,6 +530,25 @@ impl eframe::App for ProjectionPicker {
                     .size(11.0)
                     .weak(),
                 );
+                if let Some(report) = self.refresh_report
+                    && let Some(line) =
+                        failed_refresh_line(report, snapshot.last_success_at(), now_epoch())
+                {
+                    ui.label(
+                        egui::RichText::new(line)
+                            .size(11.0)
+                            .color(ui.visuals().warn_fg_color),
+                    );
+                }
+                if self.refresh_status_unavailable {
+                    ui.label(
+                        egui::RichText::new(
+                            "Update status metadata is unavailable; the server has not been checked.",
+                        )
+                        .size(11.0)
+                        .color(ui.visuals().warn_fg_color),
+                    );
+                }
                 // Refresh needs masked interactive terminal prompts. Offer an
                 // explicit exact command instead of spawning a networked CLI
                 // from this strictly offline picker or guessing XDG paths.
@@ -1091,6 +1159,30 @@ mod tests {
             &other_server,
             "distinct-a"
         ));
+    }
+
+    #[test]
+    fn last_failed_refresh_is_distinct_from_authenticated_snapshot_age() {
+        use super::refresh_status::Outcome;
+        let auth = Report {
+            at: 100_200,
+            outcome: Outcome::Authentication,
+        };
+        let message = failed_refresh_line(auth, 100_000, 100_240).unwrap();
+        assert!(message.contains("remote authentication or MFA failed"));
+        assert!(message.contains("Local snapshot age is separate"));
+        let sync = Report {
+            at: 100_200,
+            outcome: Outcome::Sync,
+        };
+        assert!(failed_refresh_line(sync, 100_000, 100_240)
+            .unwrap()
+            .contains("transport, sync or decryption failed"));
+        assert!(failed_refresh_line(sync, 100_300, 100_400).is_none());
+        assert!(failed_refresh_line(Report {
+            at: 100_200,
+            outcome: Outcome::Success,
+        }, 100_000, 100_240).is_none());
     }
 
     #[test]
