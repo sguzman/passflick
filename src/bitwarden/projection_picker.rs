@@ -700,7 +700,11 @@ impl eframe::App for ProjectionPicker {
                         .hint_text("Local projection passphrase")
                         .desired_width(f32::INFINITY),
                 );
-                if !self.focused {
+                // Ctrl+Space already moves focus between the populated
+                // search fields. On the locked view it explicitly returns
+                // focus to the masked editor, including after a rejected
+                // local unlock when a compositor has moved keyboard focus.
+                if !self.focused || toggle {
                     field.request_focus();
                     self.focused = true;
                 }
@@ -736,9 +740,11 @@ impl eframe::App for ProjectionPicker {
                 );
             } else {
                 ui.label(
-                    egui::RichText::new("Ctrl+1/2/3  Appearance     Esc  Close")
-                        .size(12.0)
-                        .weak(),
+                    egui::RichText::new(
+                        "Ctrl+Space  Focus passphrase    Ctrl+1/2/3  Appearance    Esc  Close",
+                    )
+                    .size(12.0)
+                    .weak(),
                 );
             }
         });
