@@ -110,6 +110,16 @@ fn snapshot_age(timestamp: u64, now: u64) -> (String, bool) {
     (description, timestamp > now || age >= 86_400)
 }
 
+/// Offline availability is not evidence of a successful remote reachability
+/// check, a current password, or a still-authorized upstream account.
+fn snapshot_status_line(timestamp: u64, now: u64, count: usize) -> (String, bool) {
+    let (age, stale) = snapshot_age(timestamp, now);
+    (
+        format!("{age}  ·  {count} login items  ·  Last successful sync only"),
+        stale,
+    )
+}
+
 fn now_epoch() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -447,16 +457,16 @@ impl eframe::App for ProjectionPicker {
             });
             ui.add_space(5.0);
             ui.label(
-                egui::RichText::new("OFFLINE · READ-ONLY · VAULTWARDEN PREVIEW")
+                egui::RichText::new("OFFLINE · READ-ONLY · SERVER NOT CHECKED")
                     .size(11.0)
                     .weak(),
             );
             ui.add_space(10.0);
             if let Some(snapshot) = self.snapshot.as_ref() {
-                let (age, stale) = snapshot_age(snapshot.last_success_at(), now_epoch());
-                let description = format!(
-                    "{}   ·   {} separate login items   ·   Offline copy may be stale",
-                    age, snapshot.items().len()
+                let (description, stale) = snapshot_status_line(
+                    snapshot.last_success_at(),
+                    now_epoch(),
+                    snapshot.items().len(),
                 );
                 let info = egui::RichText::new(description).size(12.0);
                 ui.label(if stale {
@@ -464,6 +474,13 @@ impl eframe::App for ProjectionPicker {
                 } else {
                     info.weak()
                 });
+                ui.label(
+                    egui::RichText::new(
+                        "Offline data can outlive remote password changes, deletions or revocation.",
+                    )
+                    .size(11.0)
+                    .weak(),
+                );
                 // Refresh needs masked interactive terminal prompts. Offer an
                 // explicit exact command instead of spawning a networked CLI
                 // from this strictly offline picker or guessing XDG paths.
@@ -1074,6 +1091,20 @@ mod tests {
             &other_server,
             "distinct-a"
         ));
+    }
+
+    #[test]
+    fn offline_status_never_implies_remote_reachability_or_valid_credentials() {
+        let (recent, stale) = snapshot_status_line(100_000, 100_100, 2);
+        assert!(!stale);
+        assert!(recent.contains("2 login items"));
+        assert!(recent.contains("Last successful sync only"));
+        let (old, stale) = snapshot_status_line(1, 100_000, 1);
+        assert!(stale);
+        assert!(old.contains("Last successful sync only"));
+        let (future, stale) = snapshot_status_line(200_000, 100_000, 1);
+        assert!(stale);
+        assert!(future.contains("Sync timestamp is in the future"));
     }
 
     #[test]
