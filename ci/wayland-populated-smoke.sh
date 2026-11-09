@@ -83,7 +83,6 @@ launch() {
   env -u DISPLAY -u WINIT_UNIX_BACKEND \
     XDG_DATA_HOME="$PASSFLICK_DISPOSABLE_TEST_DATA" \
     PASSFLICK_VAULT="$PASSFLICK_DISPOSABLE_TEST_LEGACY" \
-    PASSFLICK_CI_UNLOCK_PROBE=synthetic-only \
     "$PASSFLICK_PREVIEW_BINARY" projection picker >"$root/picker.stdout" 2>"$root/picker.stderr" &
   picker_pid="$!"
   # The compositor window is the X11 test-input target, not the application.
@@ -191,9 +190,8 @@ grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
 projection_cli status >"$root/lock.status"
 grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
 
-# Isolate initial native Wayland text entry from post-error recovery.
-# This stage deliberately tests a fresh correct-only masked unlock; the
-# wrong-passphrase/recovery sequence remains covered under disposable Xvfb.
+# First verify a fresh correct-only masked unlock under native Weston.
+# The same-window wrong-then-correct recovery stage follows below.
 # No passphrase contents may appear in CI logs or clipboard.
 printf 'fictional pre-unlock clipboard marker' >"$root/expected"
 env -u DISPLAY wl-copy --sensitive <"$root/expected"
@@ -297,9 +295,6 @@ for _ in $(seq 1 120); do
 done
 [[ "$recovered" == 1 ]] || {
   echo 'Native Wayland wrong-then-correct local recovery failed.' >&2
-  # Safe booleans only: the debug-only CI probe never logs passphrases,
-  # clipboard bytes or account details.
-  grep -E '^PASSFLICK_CI_UNLOCK_(EVENT|RESULT)' "$root/picker.stderr" >&2 || true
   exit 1
 }
 assert_clipboard after-correct-recovery
