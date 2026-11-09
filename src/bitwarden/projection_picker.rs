@@ -771,25 +771,7 @@ impl eframe::App for ProjectionPicker {
             ctx.system_theme(),
         ));
         if request_unlock {
-            // Diagnostic only for the disposable CI build. Never emit
-            // passphrase bytes, lengths, fields or upstream account details.
-            // This distinguishes a lost Wayland retry event from a genuine
-            // rejected local unlock without exposing synthetic secrets.
-            #[cfg(debug_assertions)]
-            let ci_probe = std::env::var("PASSFLICK_CI_UNLOCK_PROBE").as_deref()
-                == Ok("synthetic-only");
-            #[cfg(debug_assertions)]
-            if ci_probe {
-                eprintln!(
-                    "PASSFLICK_CI_UNLOCK_EVENT nonempty={}",
-                    !self.unlock_passphrase.is_empty()
-                );
-            }
             let result = offline_command::unlock_for_picker(self.unlock_passphrase.as_bytes());
-            #[cfg(debug_assertions)]
-            if ci_probe {
-                eprintln!("PASSFLICK_CI_UNLOCK_RESULT success={}", result.is_ok());
-            }
             self.unlock_passphrase.zeroize();
             match result {
                 Ok(snapshot) => self.install_unlocked(snapshot),
