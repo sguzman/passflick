@@ -42,7 +42,14 @@ fi
 EOF
 chmod 755 "$HOME/.cargo/bin/passflick"
 fish --no-execute scripts/install-vaultwarden-launcher.fish
-fish scripts/install-vaultwarden-launcher.fish
+fish scripts/install-vaultwarden-launcher.fish > "$root/launcher-install.log" 2>&1
+# Syntax-only fish parsing did not catch the original invalid regex.
+# A runtime regexp failure must make installation fail, never claim success.
+if grep -Fq 'Regular expression compile error' "$root/launcher-install.log"; then
+  echo "Vaultwarden installer emitted an invalid-regex warning." >&2
+  exit 1
+fi
+grep -F 'Installed Vaultwarden launcher:' "$root/launcher-install.log"
 preview="$XDG_DATA_HOME/applications/passflick-vaultwarden.desktop"
 desktop-file-validate "$preview"
 grep -Fx "Exec=\"$HOME/.cargo/bin/passflick\" projection picker" "$preview"
@@ -56,3 +63,22 @@ if fish scripts/install-vaultwarden-launcher.fish; then
 fi
 test "$sha_before" = "$(sha256sum "$preview" | cut -d ' ' -f1)"
 echo "Opt-in Vaultwarden desktop launcher passed."
+
+# Unsafe executable paths must be rejected before writing any desktop entry.
+# Deliberately use a literal %: it is an XDG desktop field-code delimiter.
+invalid_cargo="$root/invalid%cargo"
+mkdir -p -- "$invalid_cargo/bin"
+cp -- "$HOME/.cargo/bin/passflick" "$invalid_cargo/bin/passflick"
+invalid_data="$root/invalid desktop data"
+if env CARGO_HOME="$invalid_cargo" XDG_DATA_HOME="$invalid_data" fish scripts/install-vaultwarden-launcher.fish > "$root/invalid-launcher.log" 2>&1; then
+  echo "Vaultwarden installer accepted an unsafe Exec path." >&2
+  exit 1
+fi
+grep -Fq 'binary path needs desktop-entry escaping' "$root/invalid-launcher.log"
+test ! -e "$invalid_data/applications/passflick-vaultwarden.desktop"
+if grep -Fq 'Regular expression compile error' "$root/invalid-launcher.log"; then
+  echo "Vaultwarden installer contains an invalid regular expression." >&2
+  exit 1
+fi
+cmp -- "$root/original-legacy.desktop" "$installed"
+echo "Unsafe desktop executable path rejected without touching legacy launcher."
