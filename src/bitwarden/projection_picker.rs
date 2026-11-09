@@ -88,6 +88,12 @@ fn shortcut_theme(ctx: &egui::Context) -> Option<egui::ThemePreference> {
     None
 }
 
+/// The explicit local lock shortcut is handled before search widgets draw,
+/// so a credential cannot be rendered for another frame after the keypress.
+fn shortcut_manual_lock(ctx: &egui::Context) -> bool {
+    ctx.input_mut(|input| input.consume_key(egui::Modifiers::CTRL, egui::Key::L))
+}
+
 fn snapshot_age(timestamp: u64, now: u64) -> (String, bool) {
     let age = now.saturating_sub(timestamp);
     let description = if timestamp > now {
@@ -257,6 +263,23 @@ impl ProjectionPicker {
         self.error = None;
     }
 
+    fn perform_manual_lock(&mut self) {
+        // Clear decrypted state first. If the keyring refuses the lock,
+        // this window stays empty and never claims a successful global lock.
+        self.clear_for_manual_lock();
+        match offline_command::lock_for_picker() {
+            Ok(()) => {
+                self.notice =
+                    Some("Projection manually locked. Enter the local passphrase to unlock.");
+            }
+            Err(_) => {
+                self.error = Some(
+                    "Manual lock could not be confirmed. Data is hidden here, but other processes may remain unlocked.",
+                );
+            }
+        }
+    }
+
     fn install_unlocked(&mut self, snapshot: ProjectionSnapshot) {
         self.bootstrap = PickerBootstrap::Existing;
         self.manual_lock_requested = false;
@@ -374,6 +397,13 @@ impl eframe::App for ProjectionPicker {
         let ctx = ui.ctx().clone();
         ctx.request_repaint_after(POLL_INTERVAL);
         self.poll_lock();
+        // Consume the shortcut before a focused search editor handles input.
+        // A locked picker has nothing to lock again.
+        if shortcut_manual_lock(&ctx) && self.snapshot.is_some() {
+            self.perform_manual_lock();
+            ctx.request_repaint();
+            return;
+        }
         if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             return;
@@ -455,7 +485,7 @@ impl eframe::App for ProjectionPicker {
                     }
                     if ui
                         .small_button("Lock now")
-                        .on_hover_text("Invalidate this login session's cached projection key without deleting encrypted data.")
+                        .on_hover_text("Ctrl+L · Lock this login session's projection without deleting encrypted data.")
                         .clicked()
                     {
                         request_lock = true;
@@ -614,7 +644,7 @@ impl eframe::App for ProjectionPicker {
             if self.snapshot.is_some() {
                 ui.label(
                     egui::RichText::new(
-                        "Ctrl+Space  Filter    ↑↓  Select    Enter  Password    Shift+Enter  Username    Esc  Close",
+                        "Ctrl+Space  Filter    ↑↓  Select    Enter  Password    Shift+Enter  Username    Ctrl+L  Lock    Esc  Close",
                     )
                     .size(12.0)
                     .weak(),
@@ -628,19 +658,7 @@ impl eframe::App for ProjectionPicker {
             }
         });
         if request_lock {
-            // Do not retain decrypted entries while waiting on the keyring.
-            self.clear_for_manual_lock();
-            match offline_command::lock_for_picker() {
-                Ok(()) => {
-                    self.notice =
-                        Some("Projection manually locked. Enter the local passphrase to unlock.");
-                }
-                Err(_) => {
-                    self.error = Some(
-                        "Manual lock could not be confirmed. Data is hidden here, but other processes may remain unlocked.",
-                    );
-                }
-            }
+            self.perform_manual_lock();
             ctx.request_repaint();
             // A keyboard-activated Lock button must never copy a credential.
             return;
@@ -770,6 +788,28 @@ mod tests {
         );
         assert_eq!(picker_copy_action(&[enter], true), None);
         assert_eq!(picker_copy_action(&[], true), None);
+    }
+
+    #[test]
+    fn ctrl_l_is_consumed_before_search_receives_the_lock_shortcut() {
+        let ctx = egui::Context::default();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                events: vec![egui::Event::Key {
+                    key: egui::Key::L,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::CTRL,
+                }],
+                ..Default::default()
+            },
+            |ui| {
+                assert!(shortcut_manual_lock(ui.ctx()));
+                assert!(!shortcut_manual_lock(ui.ctx()));
+            },
+        );
+        output.textures_delta.clear();
     }
 
     #[test]
