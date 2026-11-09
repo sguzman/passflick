@@ -270,10 +270,10 @@ projection_cli status >"$root/lock.status"
 grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
 assert_clipboard after-wrong-recovery
 
-# The failed attempt resets the masked editor and schedules focus on its
-# next egui frame. Explicitly select the current field content before retry.
-timeout 10s xdotool windowfocus --sync "$weston_window"
-xdotool key --clearmodifiers ctrl+a
+# The failed attempt zeroizes the masked field and requests its focus on
+# the next egui frame. Preserve the same native Wayland keyboard focus here:
+# refocusing Weston's *X11 output* or injecting Ctrl+A can instead redirect
+# subsequent input away from the actual password editor.
 xdotool type --clearmodifiers --delay 15 -- "$PASSFLICK_NATIVE_LOCAL_PASSPHRASE"
 xdotool key --clearmodifiers Return
 recovered=0
