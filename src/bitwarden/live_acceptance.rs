@@ -4,7 +4,7 @@
 //! The test is ignored by ordinary cargo test and hard-bound to localhost.
 
 use std::fs::{self, DirBuilder};
-use std::os::unix::fs::DirBuilderExt;
+use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use data_encoding::BASE32;
@@ -491,6 +491,21 @@ fn disposable_server_auth_sync_encrypted_offline() {
         let devicepath = passflick_dir.join("projection.pfdevice");
         let device = fs::read(&devicepath).unwrap();
         let first_bytes = fs::read(&path).unwrap();
+        // Real CLI invocation must persist only an outcome/time hint, never
+        // account identity, plaintext or encrypted projection bytes.
+        let first_report = super::refresh_status::read(&path).unwrap().unwrap();
+        assert_eq!(
+            first_report.outcome,
+            super::refresh_status::Outcome::Success
+        );
+        assert_eq!(
+            fs::metadata(passflick_dir.join("projection.pfrefresh"))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
         assert_eq!(device.len(), 32);
         let first_key = keywrap::unlock(
             &keypath,
@@ -535,6 +550,12 @@ fn disposable_server_auth_sync_encrypted_offline() {
         );
         assert_eq!(fs::read(&path).unwrap(), first_bytes);
         assert_eq!(fs::read(&devicepath).unwrap(), device);
+        let failed_report = super::refresh_status::read(&path).unwrap().unwrap();
+        assert_eq!(
+            failed_report.outcome,
+            super::refresh_status::Outcome::Local
+        );
+        assert!(failed_report.at >= first_report.at);
 
         super::terminal_acceptance::run_cli(
             binary,
@@ -551,6 +572,12 @@ fn disposable_server_auth_sync_encrypted_offline() {
         );
         assert_ne!(fs::read(&path).unwrap(), first_bytes);
         assert_eq!(fs::read(&devicepath).unwrap(), device);
+        let recovered_report = super::refresh_status::read(&path).unwrap().unwrap();
+        assert_eq!(
+            recovered_report.outcome,
+            super::refresh_status::Outcome::Success
+        );
+        assert!(recovered_report.at >= failed_report.at);
         assert_eq!(fs::read(&legacy).unwrap(), original_legacy);
         assert!(
             fixture_server_cipher_state(&client, &url, session.bearer_token().unwrap())
