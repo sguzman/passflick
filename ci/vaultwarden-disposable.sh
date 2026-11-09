@@ -60,6 +60,7 @@ docker run -d --name "$vault" --network "$network" \
   -e ROCKET_PORT=80 \
   vaultwarden/server:1.37.5 >/dev/null
 docker run -d --name "$proxy" --network "$network" \
+  --add-host host.docker.internal:host-gateway \
   --publish 127.0.0.1:18443:18443 \
   --mount "type=bind,source=$work/Caddyfile,target=/etc/caddy/Caddyfile,readonly" \
   --mount "type=bind,source=$work/certs,target=/etc/caddy/certs,readonly" \
@@ -104,5 +105,6 @@ PASSFLICK_DISPOSABLE_CA="$work/certs/root.pem" \
 PASSFLICK_CI_DISPOSABLE_PROXY="$proxy" \
 PASSFLICK_CI_DISPOSABLE_TLS_CERT="$work/certs/server.crt" \
 PASSFLICK_CI_DISPOSABLE_TLS_KEY="$work/certs/server.key" \
+PASSFLICK_CI_DISPOSABLE_CADDYFILE="$work/Caddyfile" \
   xvfb-run -a cargo test --locked --features vaultwarden-preview bitwarden::live_acceptance::disposable_server_auth_sync_encrypted_offline \
   -- --ignored --nocapture
