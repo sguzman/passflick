@@ -8,7 +8,7 @@ if test (id -u) -eq 0
 end
 
 set -l binary "$HOME/.cargo/bin/passflick"
-if set -q CARGO_HOME
+if set -q CARGO_HOME; and test -x "$CARGO_HOME/bin/passflick"
     set binary "$CARGO_HOME/bin/passflick"
 end
 if not test -x "$binary"
