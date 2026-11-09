@@ -36,7 +36,9 @@ pub enum PreviewError {
     Transport,
     #[error("Vaultwarden authentication or MFA failed")]
     Authentication,
-    #[error("Vaultwarden HTTPS connection or certificate validation failed; local snapshot unchanged")]
+    #[error(
+        "Vaultwarden HTTPS connection or certificate validation failed; local snapshot unchanged"
+    )]
     Network,
     #[error("complete authenticated Vaultwarden sync failed; local snapshot unchanged")]
     RemoteSync,
@@ -548,10 +550,7 @@ mod tests {
         );
         assert_eq!(PreviewError::Network.refresh_outcome(), Outcome::Sync);
         assert_eq!(PreviewError::Transport.refresh_outcome(), Outcome::Sync);
-        assert_eq!(
-            auth_failure(AuthError::Transport),
-            PreviewError::Network
-        );
+        assert_eq!(auth_failure(AuthError::Transport), PreviewError::Network);
         assert_eq!(
             auth_failure(AuthError::Rejected),
             PreviewError::Authentication
