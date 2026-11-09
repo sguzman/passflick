@@ -393,7 +393,9 @@ pub fn run() -> Result<(), PreviewError> {
         )
         .is_err()
         {
-            eprintln!("Passflick: refresh status could not be recorded; local snapshot status is unchanged.");
+            eprintln!(
+                "Passflick: refresh status could not be recorded; local snapshot status is unchanged."
+            );
         }
     }
     result
