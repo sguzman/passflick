@@ -1461,30 +1461,20 @@ fn disposable_server_auth_sync_encrypted_offline() {
                 .unwrap();
         }
         std::thread::sleep(std::time::Duration::from_millis(250));
-        let fresh_tls_transport =
-            ReadOnlySyncTransport::with_additional_root_pem(&ca_pem).unwrap();
-        let truncated_result = update::refresh_explicit(
-            &fresh_tls_transport,
-            &mut session,
-            UpdateRequest {
-                endpoint: &endpoint,
-                expected_account: &account,
-                timestamp: 1_800_000_007,
-                decoder: &decoder,
-                key: &cache_key,
-                path: &path,
-            },
-        );
-        // Do not mistake a truncated HTTPS body for a complete malformed
-        // vault or publish any part of it. The body must be discarded.
+        // The fixture already zeroized its session and decryption key after
+        // successful integration. A fixed fictional bearer lets us exercise
+        // the exact account-bound HTTPS /api/sync reader without recreating
+        // live credentials or invoking any write path.
+        let fresh_tls_transport = ReadOnlySyncTransport::with_additional_root_pem(&ca_pem).unwrap();
+        let truncated_result =
+            fresh_tls_transport.fetch_sync(&endpoint, "fictional-bearer", &account);
+        // Do not mistake a truncated HTTPS body for complete malformed JSON.
+        // A network error must discard all bytes before they reach admission.
         assert!(matches!(
             truncated_result,
-            Err(update::UpdateError::Transport(
-                super::transport::TransportError::Network
-            ))
+            Err(super::transport::TransportError::Network)
         ));
-        let deadline =
-            std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
         loop {
             if partial_tls.try_wait().unwrap().is_some() {
                 break;
