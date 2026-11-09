@@ -29,6 +29,8 @@ pub enum PreviewError {
     Input,
     #[error("unsupported or invalid HTTPS endpoint")]
     Endpoint,
+    #[error("server differs from the existing offline projection; no authentication attempted")]
+    ServerMismatch,
     #[error("trusted HTTPS transport could not be initialized")]
     Transport,
     #[error("Vaultwarden authentication or MFA failed")]
@@ -253,6 +255,23 @@ fn snapshot_exists(path: &Path) -> Result<bool, PreviewError> {
     }
 }
 
+/// Fail early on a known different configured server, before reading any
+/// account identifier or master password and before attempting HTTPS login.
+/// This 0600 metadata is only a preflight hint: publication must still verify
+/// the authenticated encrypted snapshot and source account. Older snapshots
+/// without the sidecar retain their existing authenticated migration path.
+fn preflight_server_scope(
+    snapshot_path: &Path,
+    endpoint: &ServerEndpoint,
+) -> Result<(), PreviewError> {
+    match projection_identity::read(&snapshot_path.with_file_name("projection.pfidentity")) {
+        Ok(identity) if identity.server() == endpoint.server_identity() => Ok(()),
+        Ok(_) => Err(PreviewError::ServerMismatch),
+        Err(IdentityError::Missing) => Ok(()),
+        Err(_) => Err(PreviewError::Local),
+    }
+}
+
 /// Local-only publication step. Initial install creates a distinct keywrap
 /// and ciphertext; later updates verify old AEAD and identity before replace.
 /// In either case the same server-issued account is bound to the snapshot.
@@ -342,6 +361,12 @@ fn prompt_new_projection_passphrase(
 pub fn run() -> Result<(), PreviewError> {
     let server = visible("Vaultwarden HTTPS server URL: ")?;
     let endpoint = ServerEndpoint::parse(&server).map_err(|_| PreviewError::Endpoint)?;
+    // Reject a different server before accepting remote account credentials.
+    // This preflight never authorizes publication: the encrypted identity,
+    // keywrap and snapshot are checked again after a full remote sync.
+    let path = crate::paths::projection_path().map_err(|_| PreviewError::Storage)?;
+    private_parent(&path)?;
+    preflight_server_scope(&path, &endpoint)?;
     let email = visible("Vaultwarden login email: ")?;
     let master = masked("Vaultwarden master password: ")?;
     let ca_path = visible("Custom trusted CA PEM path (empty for system trust): ")?;
@@ -353,10 +378,8 @@ pub fn run() -> Result<(), PreviewError> {
     }
     .map_err(|_| PreviewError::Transport)?;
 
-    let path = crate::paths::projection_path().map_err(|_| PreviewError::Storage)?;
     // Keep the device identifier outside the historical encrypted vault.
     // Validate the local destination before any login request is transmitted.
-    private_parent(&path)?;
     let identifier = device_id(&path)?;
     let (mut session, decoder) =
         match transport.authenticate(&endpoint, &email, &master, &identifier, None) {
@@ -553,6 +576,49 @@ mod tests {
             fs::read(legacy).unwrap(),
             b"original fictional legacy encrypted data"
         );
+    }
+
+    #[test]
+    fn configured_server_scope_is_checked_before_credential_prompts() {
+        let fixture = Fixture::new();
+        let path = fixture.snapshot();
+        let configured = ServerEndpoint::parse("https://vault.example.test/").unwrap();
+        let different = ServerEndpoint::parse("https://other.example.test/").unwrap();
+
+        // Fresh and older sidecar-less snapshots retain their safe migration
+        // path. This hint cannot authorize publication by itself.
+        assert_eq!(preflight_server_scope(&path, &different), Ok(()));
+        publish_candidate(
+            &candidate(100, "fictional-secret"),
+            &path,
+            b"fictional independent local passphrase",
+            true,
+        )
+        .unwrap();
+        let original_ciphertext = fs::read(&path).unwrap();
+        let identity_path = fixture.0.join("projection.pfidentity");
+        let original_identity = fs::read(&identity_path).unwrap();
+
+        assert_eq!(preflight_server_scope(&path, &configured), Ok(()));
+        assert_eq!(
+            preflight_server_scope(&path, &different),
+            Err(PreviewError::ServerMismatch)
+        );
+        assert_eq!(fs::read(&path).unwrap(), original_ciphertext);
+        assert_eq!(fs::read(&identity_path).unwrap(), original_identity);
+
+        // An invalid sidecar cannot be used to choose another authority.
+        fs::write(&identity_path, b"invalid metadata").unwrap();
+        assert_eq!(
+            preflight_server_scope(&path, &configured),
+            Err(PreviewError::Local)
+        );
+        assert_eq!(fs::read(&path).unwrap(), original_ciphertext);
+
+        // For old installations without a sidecar, the final authenticated
+        // cache checks remain mandatory before a replacement can succeed.
+        fs::remove_file(&identity_path).unwrap();
+        assert_eq!(preflight_server_scope(&path, &different), Ok(()));
     }
 
     #[test]
