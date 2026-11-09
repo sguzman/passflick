@@ -4,7 +4,9 @@
 //! The test is ignored by ordinary cargo test and hard-bound to localhost.
 
 use std::fs::{self, DirBuilder};
-use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+use std::os::unix::fs::DirBuilderExt;
+#[cfg(feature = "vaultwarden-preview")]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use data_encoding::BASE32;
