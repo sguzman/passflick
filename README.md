@@ -28,6 +28,20 @@ passflick projection status           # local state/freshness
 
 Always run `update` and `projection picker` with the **same `XDG_DATA_HOME`**, otherwise the picker will report no projection. The first-run GUI distinguishes never-configured state from incomplete/unsafe projection files and does **not** request an impossible local passphrase on a pristine installation. Appearance supports System/Light/Dark; on Darkman-based Wayland desktops, System reads the session's current light/dark mode. No automatic periodic sync or upstream writes are performed.
 
+### Launch the working Vaultwarden preview from your application menu
+
+For a **feature-enabled** binary already installed by `cargo install --path . --locked --features vaultwarden-preview`, a separate, opt-in desktop entry is available. From the repository:
+
+```fish
+fish scripts/install-vaultwarden-launcher.fish
+```
+
+This installer **does not copy or rebuild executables**, change the existing `passflick` launcher, update Hyprland bindings, touch any encrypted data, or configure automatic syncing. It checks the installed `$CARGO_HOME/bin/passflick` (or `~/.cargo/bin/passflick`), verifies the `projection picker` command is available, and creates `$XDG_DATA_HOME/applications/passflick-vaultwarden.desktop` (normally `~/.local/share/applications/passflick-vaultwarden.desktop`). The desktop file uses the **absolute executable path**, not a shell or terminal, and is deliberately not installed again if that entry already exists.
+
+In the app menu, launch **Passflick (Vaultwarden)**. Its first offline launch may request the *independent local projection passphrase*. Once unlocked, subsequent opens in a shared Linux keyring session can reuse the cached key; this does **not** automatically unlock after a new login or reboot. For CLI use, `passflick projection picker` remains the explicit entry point and `passflick projection lock` manually locks it.
+
+**Rollback:** remove only the `passflick-vaultwarden.desktop` entry if you no longer want the new launcher. The historical `passflick.desktop` and `vault.passvault` remain untouched. Do not delete `projection.pfsnapshot`, `projection.pfkey`, `projection.pfidentity`, or `projection.pfdevice`: they hold the encrypted offline projection and its identity. Default-command cutover and release acceptance remain separate unfinished work.
+
 For further constraints, see the [weighted roadmap](ROADMAP.md), [host QA plan](docs/vaultwarden-host-acceptance.md), and [architecture design](docs/vaultwarden-architecture.md).
 
 ## Historical default picker (browser CSV imports)
