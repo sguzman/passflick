@@ -1408,6 +1408,99 @@ fn disposable_server_auth_sync_encrypted_offline() {
             "disposable HTTPS proxy did not stop"
         );
 
+        // Exercise a *true HTTPS response-body cutoff* against the existing
+        // authenticated, account-bound read-only sync path. The original
+        // disposable proxy has been stopped; a one-shot localhost OpenSSL
+        // test server uses only this fixture's temporary TLS certificate.
+        // It replies HTTP 200 and sends a short JSON prefix while declaring
+        // a longer Content-Length. The TLS connection then closes.
+        let cert_path = std::env::var("PASSFLICK_CI_DISPOSABLE_TLS_CERT")
+            .expect("missing disposable TLS server cert path");
+        let key_path = std::env::var("PASSFLICK_CI_DISPOSABLE_TLS_KEY")
+            .expect("missing disposable TLS server key path");
+        assert!(Path::new(&cert_path).is_file());
+        assert!(Path::new(&key_path).is_file());
+        let original_native_snapshot = fs::read(&path).unwrap();
+        let original_native_keywrap = fs::read(&keywrap_path).unwrap();
+        let mut port_released = false;
+        for _ in 0..40 {
+            if let Ok(listener) = std::net::TcpListener::bind("127.0.0.1:18443") {
+                drop(listener);
+                port_released = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(port_released, "disposable HTTPS test port was not released");
+
+        let mut partial_tls = std::process::Command::new("openssl")
+            .args([
+                "s_server",
+                "-quiet",
+                "-naccept",
+                "1",
+                "-accept",
+                "127.0.0.1:18443",
+                "-cert",
+                &cert_path,
+                "-key",
+                &key_path,
+            ])
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("could not start local partial-response TLS fixture");
+        {
+            use std::io::Write as _;
+            let mut stdin = partial_tls.stdin.take().unwrap();
+            stdin
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 2048\r\nConnection: close\r\n\r\n{\"object\":\"sync\",\"profile\":",
+                )
+                .unwrap();
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+        let fresh_tls_transport =
+            ReadOnlySyncTransport::with_additional_root_pem(&ca_pem).unwrap();
+        let truncated_result = update::refresh_explicit(
+            &fresh_tls_transport,
+            &mut session,
+            UpdateRequest {
+                endpoint: &endpoint,
+                expected_account: &account,
+                timestamp: 1_800_000_007,
+                decoder: &decoder,
+                key: &cache_key,
+                path: &path,
+            },
+        );
+        // Do not mistake a truncated HTTPS body for a complete malformed
+        // vault or publish any part of it. The body must be discarded.
+        assert!(matches!(
+            truncated_result,
+            Err(update::UpdateError::Transport(
+                super::transport::TransportError::Network
+            ))
+        ));
+        let deadline =
+            std::time::Instant::now() + std::time::Duration::from_secs(5);
+        loop {
+            if partial_tls.try_wait().unwrap().is_some() {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                let _ = partial_tls.kill();
+                let _ = partial_tls.wait();
+                panic!("partial-response TLS fixture did not terminate");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        assert_eq!(fs::read(&path).unwrap(), original_native_snapshot);
+        assert_eq!(fs::read(&keywrap_path).unwrap(), original_native_keywrap);
+        assert_eq!(fs::read(&snapshot).unwrap(), snapshot_before);
+        assert_eq!(fs::read(&keywrap).unwrap(), keywrap_before);
+
         // No TLS or auth response can arrive: the correct certificate and
         // fictional credentials are supplied, but localhost no longer has
         // an HTTPS server. The CLI must never request a local passphrase or
