@@ -718,7 +718,7 @@ mod tests {
             repeat: false,
             modifiers: egui::Modifiers::NONE,
         };
-        assert_eq!(picker_copy_action(&[enter.clone()], false), Some(false));
+        assert_eq!(picker_copy_action(std::slice::from_ref(&enter), false), Some(false));
         assert_eq!(picker_copy_action(&[enter], true), None);
         assert_eq!(picker_copy_action(&[], true), None);
     }
