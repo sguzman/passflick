@@ -124,6 +124,14 @@ pub(super) fn unlock_for_picker(
     unlock_snapshot_with(&KernelSessionStore, &path, local_passphrase)
 }
 
+/// Explicit GUI manual-lock action. Reuse the CLI's scoped, serialized
+/// deny-marker-first path; never remove encrypted projection files or connect
+/// to Vaultwarden. The picker clears decrypted UI state independently.
+pub(super) fn lock_for_picker() -> Result<(), OfflineError> {
+    let path = crate::paths::projection_path().map_err(|_| OfflineError::Identity)?;
+    lock_with(&KernelSessionStore, &path)
+}
+
 fn status_with<S: SessionStore>(backend: &S, path: &Path) -> Result<LocalState, OfflineError> {
     let (identity, scope) = scope(path)?;
     match session_cache::cached_read(backend, &scope, path, identity.server(), identity.account()) {
