@@ -245,4 +245,71 @@ fi
 assert_clipboard after-unlock-copy
 env -u DISPLAY wl-copy --clear >/dev/null 2>&1 || true
 
-echo 'Native Wayland populated and fresh masked-unlock picker passed exact fictional clipboard checks.'
+# Additional native *same-window* recovery: wrong passphrase must leave the
+# manual-lock marker in the shared session keyring, keep the picker visible,
+# and never copy. The second, correct passphrase must explicitly unlock it
+# without copying on that same Enter event. This closes the earlier Xvfb-only
+# wrong-then-correct coverage gap using an actual Wayland egui client.
+projection_cli lock >"$root/lock.status"
+grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
+printf 'fictional wrong-then-correct clipboard marker' >"$root/expected"
+env -u DISPLAY wl-copy --sensitive <"$root/expected"
+assert_clipboard before-wrong-recovery
+
+launch locked
+xdotool type --clearmodifiers --delay 15 -- 'fictional wrong native offline passphrase'
+xdotool key --clearmodifiers Return
+# A wrong local passphrase still performs a full password KDF. Give that
+# single frame time to finish and restore editor focus before a new entry.
+sleep 3
+[[ -n "$picker_pid" ]] && kill -0 "$picker_pid" || {
+  echo 'Wrong passphrase closed the native Wayland picker.' >&2
+  exit 1
+}
+projection_cli status >"$root/lock.status"
+grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
+assert_clipboard after-wrong-recovery
+
+# The failed attempt resets the masked editor and schedules focus on its
+# next egui frame. Explicitly select the current field content before retry.
+timeout 10s xdotool windowfocus --sync "$weston_window"
+xdotool key --clearmodifiers ctrl+a
+xdotool type --clearmodifiers --delay 15 -- "$PASSFLICK_NATIVE_LOCAL_PASSPHRASE"
+xdotool key --clearmodifiers Return
+recovered=0
+for _ in $(seq 1 120); do
+  if projection_cli status >"$root/lock.status" &&
+      grep -Fq 'Offline projection unlocked:' "$root/lock.status"; then
+    recovered=1
+    break
+  fi
+  [[ -n "$picker_pid" ]] && kill -0 "$picker_pid" || {
+    echo 'Native Wayland picker closed during wrong-then-correct recovery.' >&2
+    exit 1
+  }
+  sleep 0.1
+done
+[[ "$recovered" == 1 ]] || {
+  echo 'Native Wayland wrong-then-correct local recovery failed.' >&2
+  exit 1
+}
+assert_clipboard after-correct-recovery
+echo 'Native Wayland same-window wrong-then-correct unlock preserved clipboard.'
+
+# Only a subsequent deliberate copy, with a new Weston pointer serial,
+# may replace the fictional clipboard marker with the selected password.
+sleep 0.8
+timeout 10s xdotool windowfocus --sync "$weston_window"
+xdotool mousemove --window "$weston_window" 430 125 click 1
+sleep 0.3
+xdotool key --clearmodifiers Return
+await_close after-recovery-copy
+if [[ "$PASSFLICK_NATIVE_FIRST_PASSWORD" == first ]]; then
+  printf '  🗝️ contraseña  ' >"$root/expected"
+else
+  printf 'second secret' >"$root/expected"
+fi
+assert_clipboard after-recovery-copy
+env -u DISPLAY wl-copy --clear >/dev/null 2>&1 || true
+
+echo 'Native Wayland populated, fresh unlock and wrong-then-correct recovery passed fictional clipboard checks.'
