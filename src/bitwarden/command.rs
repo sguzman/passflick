@@ -5,7 +5,7 @@
 //! The original vault.passvault and its picker are never opened by this path.
 
 use std::fs::{self, DirBuilder, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{BufRead, Read, Write};
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::Path;
@@ -42,12 +42,12 @@ pub enum PreviewError {
 }
 
 /// Prevent an input-echo race: rpassword prints before it disables echo.
-struct HiddenPromptTerminal {
+struct PromptTerminal {
     tty: fs::File,
     saved: libc::termios,
 }
 
-impl Drop for HiddenPromptTerminal {
+impl Drop for PromptTerminal {
     fn drop(&mut self) {
         // SAFETY: saved was initialized by tcgetattr on this live TTY.
         unsafe {
@@ -75,7 +75,7 @@ pub(super) fn masked(prompt: &str) -> Result<Zeroizing<String>, PreviewError> {
     if unsafe { libc::tcsetattr(tty.as_raw_fd(), libc::TCSAFLUSH, &hidden) } != 0 {
         return Err(PreviewError::Input);
     }
-    let mut protected = HiddenPromptTerminal {
+    let mut protected = PromptTerminal {
         tty,
         saved: original,
     };
@@ -88,6 +88,49 @@ pub(super) fn masked(prompt: &str) -> Result<Zeroizing<String>, PreviewError> {
     // The outer guard restores the original terminal flags on every exit.
     let password = rpassword::read_password().map_err(|_| PreviewError::Input)?;
     Ok(Zeroizing::new(password))
+}
+
+/// Visible, editable input for non-secret configuration only. The TTY
+/// mode is restored on every exit. Never use for credentials or MFA codes.
+pub(super) fn visible(prompt: &str) -> Result<Zeroizing<String>, PreviewError> {
+    let tty = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/tty")
+        .map_err(|_| PreviewError::Input)?;
+    let mut original = std::mem::MaybeUninit::<libc::termios>::uninit();
+    // SAFETY: tty is live; the destination points to writable termios storage.
+    if unsafe { libc::tcgetattr(tty.as_raw_fd(), original.as_mut_ptr()) } != 0 {
+        return Err(PreviewError::Input);
+    }
+    // SAFETY: successful tcgetattr initialized the termios.
+    let original = unsafe { original.assume_init() };
+    let mut echoed = original;
+    echoed.c_lflag |= libc::ECHO;
+    // SAFETY: tty remains open; enable echo before showing the prompt.
+    if unsafe { libc::tcsetattr(tty.as_raw_fd(), libc::TCSAFLUSH, &echoed) } != 0 {
+        return Err(PreviewError::Input);
+    }
+    let mut terminal = PromptTerminal { tty, saved: original };
+    terminal
+        .tty
+        .write_all(prompt.as_bytes())
+        .and_then(|_| terminal.tty.flush())
+        .map_err(|_| PreviewError::Input)?;
+    let mut value = Zeroizing::new(String::new());
+    let count = std::io::BufReader::new(&mut terminal.tty)
+        .read_line(&mut value)
+        .map_err(|_| PreviewError::Input)?;
+    if count == 0 {
+        return Err(PreviewError::Input);
+    }
+    if value.ends_with('\n') {
+        value.pop();
+        if value.ends_with('\r') {
+            value.pop();
+        }
+    }
+    Ok(value)
 }
 
 /// The non-secret device identifier must survive explicit reauthentication.
@@ -294,11 +337,11 @@ fn prompt_new_projection_passphrase(
 /// during normal picker/search/copy. Login is performed for each update;
 /// remote tokens are never cached or serialized.
 pub fn run() -> Result<(), PreviewError> {
-    let server = masked("Vaultwarden HTTPS server URL: ")?;
+    let server = visible("Vaultwarden HTTPS server URL: ")?;
     let endpoint = ServerEndpoint::parse(&server).map_err(|_| PreviewError::Endpoint)?;
-    let email = masked("Vaultwarden login email: ")?;
+    let email = visible("Vaultwarden login email: ")?;
     let master = masked("Vaultwarden master password: ")?;
-    let ca_path = masked("Custom trusted CA PEM path (empty for system trust): ")?;
+    let ca_path = visible("Custom trusted CA PEM path (empty for system trust): ")?;
     let transport = if ca_path.is_empty() {
         ReadOnlySyncTransport::new()
     } else {
@@ -316,7 +359,7 @@ pub fn run() -> Result<(), PreviewError> {
         match transport.authenticate(&endpoint, &email, &master, &identifier, None) {
             Ok(result) => result,
             Err(AuthError::MfaRequired) => {
-                let method = masked("MFA method (totp/email): ")?;
+                let method = visible("MFA method (totp/email): ")?;
                 let provider = match method.as_str() {
                     "totp" => MfaProvider::Totp,
                     "email" => MfaProvider::EmailCode,
