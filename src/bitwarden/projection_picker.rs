@@ -630,8 +630,7 @@ impl eframe::App for ProjectionPicker {
             // Enter used to unlock must never also copy the first password.
             return;
         }
-        let action =
-            ctx.input(|input| picker_copy_action(&input.events, refresh_command_clicked));
+        let action = ctx.input(|input| picker_copy_action(&input.events, refresh_command_clicked));
         if let Some(username) = action {
             self.copy_selected(&ctx, username);
         }
