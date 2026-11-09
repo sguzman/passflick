@@ -20,6 +20,7 @@ use super::auth::{AuthError, MfaChallenge, MfaProvider};
 use super::cache_store;
 use super::keywrap;
 use super::projection_identity::{self, IdentityError};
+use super::refresh_status::{self, Outcome, Report};
 use super::transport::{ReadOnlySyncTransport, ServerEndpoint};
 use super::update;
 
@@ -41,6 +42,18 @@ pub enum PreviewError {
     Storage,
     #[error("local encrypted projection authentication or update failed")]
     Local,
+}
+
+impl PreviewError {
+    fn refresh_outcome(&self) -> Outcome {
+        match self {
+            Self::Input => Outcome::Input,
+            Self::Endpoint | Self::ServerMismatch => Outcome::Configuration,
+            Self::Authentication => Outcome::Authentication,
+            Self::Transport | Self::RemoteSync => Outcome::Sync,
+            Self::Storage | Self::Local => Outcome::Local,
+        }
+    }
 }
 
 /// Prevent an input-echo race: rpassword prints before it disables echo.
@@ -359,6 +372,34 @@ fn prompt_new_projection_passphrase(
 /// during normal picker/search/copy. Login is performed for each update;
 /// remote tokens are never cached or serialized.
 pub fn run() -> Result<(), PreviewError> {
+    let result = run_explicit();
+    // This non-secret record is advisory only. Never create it for a missing
+    // projection, and never let a reporting error change the update result.
+    // The encrypted snapshot remains the sole authority for offline data.
+    if let Ok(path) = crate::paths::projection_path()
+        && snapshot_exists(&path) == Ok(true)
+        && let Ok(at) = SystemTime::now().duration_since(UNIX_EPOCH)
+    {
+        let outcome = match &result {
+            Ok(()) => Outcome::Success,
+            Err(error) => error.refresh_outcome(),
+        };
+        if refresh_status::record(
+            &path,
+            Report {
+                at: at.as_secs(),
+                outcome,
+            },
+        )
+        .is_err()
+        {
+            eprintln!("Passflick: refresh status could not be recorded; local snapshot status is unchanged.");
+        }
+    }
+    result
+}
+
+fn run_explicit() -> Result<(), PreviewError> {
     let server = visible("Vaultwarden HTTPS server URL: ")?;
     let endpoint = ServerEndpoint::parse(&server).map_err(|_| PreviewError::Endpoint)?;
     // Reject a different server before accepting remote account credentials.
@@ -474,6 +515,18 @@ mod tests {
             )],
         )
         .unwrap()
+    }
+
+    #[test]
+    fn update_failures_have_only_fixed_privacy_safe_status_categories() {
+        assert_eq!(PreviewError::Input.refresh_outcome(), Outcome::Input);
+        assert_eq!(PreviewError::Endpoint.refresh_outcome(), Outcome::Configuration);
+        assert_eq!(PreviewError::ServerMismatch.refresh_outcome(), Outcome::Configuration);
+        assert_eq!(PreviewError::Authentication.refresh_outcome(), Outcome::Authentication);
+        assert_eq!(PreviewError::Transport.refresh_outcome(), Outcome::Sync);
+        assert_eq!(PreviewError::RemoteSync.refresh_outcome(), Outcome::Sync);
+        assert_eq!(PreviewError::Storage.refresh_outcome(), Outcome::Local);
+        assert_eq!(PreviewError::Local.refresh_outcome(), Outcome::Local);
     }
 
     #[test]
