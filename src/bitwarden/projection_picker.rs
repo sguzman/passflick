@@ -110,6 +110,16 @@ fn now_epoch() -> u64 {
         .map_or(0, |elapsed| elapsed.as_secs())
 }
 
+/// Enter activates a focused GUI control too. The explicit refresh button
+/// must never let the same keypress fall through to password copying.
+fn picker_copy_action(events: &[egui::Event], refresh_command_clicked: bool) -> Option<bool> {
+    if refresh_command_clicked {
+        None
+    } else {
+        crate::copy_shortcut::enter_copy_username(events)
+    }
+}
+
 fn copy_value<'a>(
     snapshot: &'a ProjectionSnapshot,
     selected_id: &str,
@@ -620,12 +630,8 @@ impl eframe::App for ProjectionPicker {
             // Enter used to unlock must never also copy the first password.
             return;
         }
-        // Prevent a keyboard-activated refresh button from also triggering
-        // the picker's global Enter-to-copy secret action in this frame.
-        if refresh_command_clicked {
-            return;
-        }
-        let action = ctx.input(|input| crate::copy_shortcut::enter_copy_username(&input.events));
+        let action =
+            ctx.input(|input| picker_copy_action(&input.events, refresh_command_clicked));
         if let Some(username) = action {
             self.copy_selected(&ctx, username);
         }
@@ -702,6 +708,20 @@ mod tests {
             ],
         )
         .unwrap()
+    }
+
+    #[test]
+    fn refresh_button_activation_suppresses_global_enter_to_copy() {
+        let enter = egui::Event::Key {
+            key: egui::Key::Enter,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        };
+        assert_eq!(picker_copy_action(&[enter.clone()], false), Some(false));
+        assert_eq!(picker_copy_action(&[enter], true), None);
+        assert_eq!(picker_copy_action(&[], true), None);
     }
 
     #[test]
