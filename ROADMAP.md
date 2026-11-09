@@ -4,6 +4,13 @@
 **Target:** Rust + egui on Linux/Wayland (EndeavourOS/Hyprland first).  
 **Mission:** Passflick is a small, fast, keyboard-first, **read-only downstream projection of a Bitwarden-compatible personal vault**, not an independent password manager or a browser CSV aggregator.
 
+### 2026-11-09 — explicit offline freshness semantics (D03 partial)
+
+- **Implemented:** the opt-in Vaultwarden picker now labels itself **OFFLINE · READ-ONLY · SERVER NOT CHECKED** and explicitly marks its item count and timestamp as **last successful sync only**. It explains that remote password changes, deletions and account revocation can outlive a local encrypted snapshot. Unusually future or stale timestamps retain the existing warning color; no network request or automatic refresh was added.
+- **Focused unit regression:** checks the same status wording with recent, stale and future-dated fictional snapshots; no real account details are used. This makes offline availability distinct from verified current server status, not a guarantee that a password remains valid.
+- **Exact-code-commit CI green:** implementation [`c3ea20f`](https://github.com/sguzman/passflick/commit/c3ea20fd6351aa4ab59bb69715d7b9bce044417c) passed [Rust `42665354779`](https://github.com/sguzman/passflick/actions/runs/42665354779), [Synthetic GUI `42665354726`](https://github.com/sguzman/passflick/actions/runs/42665354726), and [disposable Vaultwarden `42665354744`](https://github.com/sguzman/passflick/actions/runs/42665354744).
+- **Incomplete:** D03 still needs persistent, privacy-safe failed-refresh reporting and explicit distinction between a failed server request versus authentication failure; native host appearance QA is also pending. No binary was installed, no user snapshot or historical vault was changed, and the legacy default stays available. **40/100 → 40/100 (Δ +0 points).**
+
 ### 2026-11-09 — keyboard-first manual lock and disposable GUI proof (C03 active)
 
 - **Implemented:** `Ctrl+L` in the opt-in Vaultwarden picker triggers the same **Lock now** operation without needing mouse focus or navigating away from the site filter. The shortcut is consumed before search widgets render, clears decrypted entries and local query/passphrase state, and uses the existing scoped, serialized keyring denial path. The button and shortcut share one fail-closed action: an unconfirmed keyring lock does not claim success or silently repopulate that window.
