@@ -1280,20 +1280,6 @@ fn disposable_server_auth_sync_encrypted_offline() {
     drop(argon_session);
     drop(argon_decoder);
 
-    // A deliberately wrong password can trigger server-side throttling.
-    // Verify correct login/decryption first, then reject the wrong password
-    // without making any later successful login depend on the rate limit.
-    assert!(matches!(
-        transport.authenticate(
-            &endpoint,
-            ARGON_EMAIL,
-            "fictional wrong Argon2id master password",
-            "passflick-argon-wrong-device",
-            None,
-        ),
-        Err(AuthError::Rejected)
-    ));
-
     // Keep deliberate rejected logins at the END of disposable acceptance:
     // Vaultwarden may rate-limit an IP after failed password grants, which
     // would otherwise cause valid later Argon2id and MFA tests to fail.
@@ -1309,6 +1295,39 @@ fn disposable_server_auth_sync_encrypted_offline() {
         let old_keywrap = fs::read(&keywrap).unwrap();
         let before = super::refresh_status::read(&snapshot).unwrap().unwrap();
         assert_eq!(before.outcome, super::refresh_status::Outcome::Success);
+
+        // Do not run a rejected MFA code before successful sign-in fixtures:
+        // the disposable server may throttle later unrelated authentication.
+        // This uses the real masked CLI prompt and no retained remote token.
+        super::terminal_acceptance::run_cli(
+            Path::new(&binary),
+            data,
+            &legacy,
+            &[
+                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden login email: ", EMAIL),
+                ("Vaultwarden master password: ", PASSWORD),
+                (
+                    "Custom trusted CA PEM path (empty for system trust): ",
+                    ca_path.as_str(),
+                ),
+                ("MFA method (totp/email): ", "totp"),
+                ("MFA code: ", "fictional-invalid-otp"),
+            ],
+            false,
+        );
+        let invalid_mfa = super::refresh_status::read(&snapshot).unwrap().unwrap();
+        assert_eq!(
+            invalid_mfa.outcome,
+            super::refresh_status::Outcome::Authentication
+        );
+        assert!(invalid_mfa.at >= before.at);
+        assert_eq!(fs::read(&snapshot).unwrap(), old_snapshot);
+        assert_eq!(fs::read(&keywrap).unwrap(), old_keywrap);
+        assert_eq!(
+            fs::read(&legacy).unwrap(),
+            b"fictional historical ciphertext unchanged"
+        );
 
         super::terminal_acceptance::run_cli(
             Path::new(&binary),
@@ -1333,7 +1352,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
             rejected.outcome,
             super::refresh_status::Outcome::Authentication
         );
-        assert!(rejected.at >= before.at);
+        assert!(rejected.at >= invalid_mfa.at);
         assert_eq!(fs::read(&snapshot).unwrap(), old_snapshot);
         assert_eq!(fs::read(&keywrap).unwrap(), old_keywrap);
         assert_eq!(
@@ -1341,4 +1360,17 @@ fn disposable_server_auth_sync_encrypted_offline() {
             b"fictional historical ciphertext unchanged"
         );
     }
+
+    // Final deliberately rejected login; nothing afterward requires another
+    // successful password grant, avoiding false failures from rate limiting.
+    assert!(matches!(
+        transport.authenticate(
+            &endpoint,
+            ARGON_EMAIL,
+            "fictional wrong Argon2id master password",
+            "passflick-argon-wrong-device",
+            None,
+        ),
+        Err(AuthError::Rejected)
+    ));
 }
