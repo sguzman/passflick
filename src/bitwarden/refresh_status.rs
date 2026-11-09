@@ -260,6 +260,17 @@ mod tests {
         bytes[16] = 255;
         fs::write(fixture.report(), &bytes).unwrap();
         assert_eq!(read(&snapshot), Err(ReportError::Invalid));
+        assert_eq!(
+            record(
+                &snapshot,
+                Report {
+                    at: 101,
+                    outcome: Outcome::Authentication,
+                }
+            ),
+            Err(ReportError::Invalid)
+        );
+        assert_eq!(fs::read(fixture.report()).unwrap(), bytes);
         bytes[16] = 0;
         bytes[0] = b'X';
         fs::write(fixture.report(), &bytes).unwrap();
