@@ -125,7 +125,7 @@ pub fn record(snapshot: &Path, report: Report) -> Result<(), ReportError> {
     let parent = private_parent(snapshot)?;
     let _guard = crate::write_lock::acquire(snapshot).map_err(|_| ReportError::Unsafe)?;
     // Includes filename, owner, mode, link count and format validation.
-    read(snapshot)?;
+    let _ = read(snapshot)?;
     let mut entropy = [0_u8; 8];
     getrandom::fill(&mut entropy).map_err(|_| ReportError::Io)?;
     let temporary = parent.join(format!(
@@ -209,7 +209,10 @@ mod tests {
             assert_eq!(fs::read(&snapshot).unwrap(), b"fictional encrypted projection bytes");
         }
         assert_eq!(Outcome::Success.failure_label(), None);
-        assert_eq!(Outcome::Authentication.failure_label(), Some("remote authentication or MFA failed"));
+        assert_eq!(
+            Outcome::Authentication.failure_label(),
+            Some("remote authentication or MFA failed")
+        );
     }
 
     #[test]
@@ -242,7 +245,16 @@ mod tests {
     fn invalid_version_timestamp_and_status_are_rejected() {
         let fixture = Fixture::new();
         let snapshot = fixture.snapshot();
-        assert_eq!(record(&snapshot, Report { at: 0, outcome: Outcome::Success }), Err(ReportError::Invalid));
+        assert_eq!(
+            record(
+                &snapshot,
+                Report {
+                    at: 0,
+                    outcome: Outcome::Success
+                }
+            ),
+            Err(ReportError::Invalid)
+        );
         record(&snapshot, Report { at: 100, outcome: Outcome::Success }).unwrap();
         let mut bytes = fs::read(fixture.report()).unwrap();
         bytes[16] = 255;
