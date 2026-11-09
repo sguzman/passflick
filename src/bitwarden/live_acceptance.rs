@@ -1294,8 +1294,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
         assert!(!run_id.is_empty() && run_id.bytes().all(|b| b.is_ascii_digit()));
         let proxy = std::env::var("PASSFLICK_CI_DISPOSABLE_PROXY").unwrap();
         assert_eq!(proxy, format!("passflick-proxy-{run_id}"));
-        let caddy_path =
-            std::env::var("PASSFLICK_CI_DISPOSABLE_CADDYFILE").unwrap();
+        let caddy_path = std::env::var("PASSFLICK_CI_DISPOSABLE_CADDYFILE").unwrap();
         assert!(Path::new(&caddy_path).is_file());
 
         let separate = PrivateDirectory::new();
@@ -1338,7 +1337,10 @@ fn disposable_server_auth_sync_encrypted_offline() {
             fs::read(&legacy).unwrap(),
         ];
         assert_eq!(
-            super::refresh_status::read(&snapshot).unwrap().unwrap().outcome,
+            super::refresh_status::read(&snapshot)
+                .unwrap()
+                .unwrap()
+                .outcome,
             super::refresh_status::Outcome::Success
         );
 
@@ -1354,7 +1356,10 @@ fn disposable_server_auth_sync_encrypted_offline() {
                 match listener.accept() {
                     Ok(value) => break value,
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        assert!(Instant::now() < deadline, "no intercepted sync request arrived");
+                        assert!(
+                            Instant::now() < deadline,
+                            "no intercepted sync request arrived"
+                        );
                         std::thread::sleep(Duration::from_millis(25));
                     }
                     Err(_) => panic!("intercepted sync listener failed"),
@@ -1387,7 +1392,10 @@ fn disposable_server_auth_sync_encrypted_offline() {
             .args(["restart", &proxy])
             .output()
             .expect("could not restart disposable HTTPS proxy");
-        assert!(restarted.status.success(), "disposable proxy restart failed");
+        assert!(
+            restarted.status.success(),
+            "disposable proxy restart failed"
+        );
         let mut ready = false;
         for _ in 0..40 {
             if client
@@ -1400,7 +1408,10 @@ fn disposable_server_auth_sync_encrypted_offline() {
             }
             std::thread::sleep(Duration::from_millis(100));
         }
-        assert!(ready, "disposable proxy did not reload its test-only sync route");
+        assert!(
+            ready,
+            "disposable proxy did not reload its test-only sync route"
+        );
 
         // The CLI authenticates normally, receives an incomplete HTTPS sync
         // response, exits unsuccessfully and records only a fixed Sync code.
@@ -1422,7 +1433,10 @@ fn disposable_server_auth_sync_encrypted_offline() {
         );
         cutoff_server.join().expect("truncated sync fixture failed");
         assert_eq!(
-            super::refresh_status::read(&snapshot).unwrap().unwrap().outcome,
+            super::refresh_status::read(&snapshot)
+                .unwrap()
+                .unwrap()
+                .outcome,
             super::refresh_status::Outcome::Sync
         );
         for (actual, original) in [
