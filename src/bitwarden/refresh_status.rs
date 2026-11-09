@@ -101,7 +101,8 @@ pub fn read(snapshot: &Path) -> Result<Option<Report>, ReportError> {
         return Err(ReportError::Unsafe);
     }
     let mut bytes = [0_u8; SIZE];
-    file.read_exact(&mut bytes).map_err(|_| ReportError::Invalid)?;
+    file.read_exact(&mut bytes)
+        .map_err(|_| ReportError::Invalid)?;
     if &bytes[..8] != MAGIC {
         return Err(ReportError::Invalid);
     }
@@ -204,9 +205,15 @@ mod tests {
             let report = Report { at, outcome };
             record(&snapshot, report).unwrap();
             assert_eq!(read(&snapshot).unwrap(), Some(report));
-            assert_eq!(fs::metadata(fixture.report()).unwrap().permissions().mode() & 0o777, 0o600);
+            assert_eq!(
+                fs::metadata(fixture.report()).unwrap().permissions().mode() & 0o777,
+                0o600
+            );
             assert_eq!(fs::metadata(fixture.report()).unwrap().len(), SIZE as u64);
-            assert_eq!(fs::read(&snapshot).unwrap(), b"fictional encrypted projection bytes");
+            assert_eq!(
+                fs::read(&snapshot).unwrap(),
+                b"fictional encrypted projection bytes"
+            );
         }
         assert_eq!(Outcome::Success.failure_label(), None);
         assert_eq!(
@@ -222,7 +229,10 @@ mod tests {
         let destination = fixture.0.join("fictional-foreign");
         fs::write(&destination, b"untouched").unwrap();
         std::os::unix::fs::symlink(&destination, fixture.report()).unwrap();
-        let report = Report { at: 100, outcome: Outcome::Sync };
+        let report = Report {
+            at: 100,
+            outcome: Outcome::Sync,
+        };
         assert_eq!(read(&snapshot), Err(ReportError::Unsafe));
         assert_eq!(record(&snapshot, report), Err(ReportError::Unsafe));
         assert_eq!(fs::read(&destination).unwrap(), b"untouched");
@@ -255,7 +265,14 @@ mod tests {
             ),
             Err(ReportError::Invalid)
         );
-        record(&snapshot, Report { at: 100, outcome: Outcome::Success }).unwrap();
+        record(
+            &snapshot,
+            Report {
+                at: 100,
+                outcome: Outcome::Success,
+            },
+        )
+        .unwrap();
         let mut bytes = fs::read(fixture.report()).unwrap();
         bytes[16] = 255;
         fs::write(fixture.report(), &bytes).unwrap();
