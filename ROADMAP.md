@@ -4,6 +4,14 @@
 **Target:** Rust + egui on Linux/Wayland (EndeavourOS/Hyprland first).  
 **Mission:** Passflick is a small, fast, keyboard-first, **read-only downstream projection of a Bitwarden-compatible personal vault**, not an independent password manager or a browser CSV aggregator.
 
+### 2026-11-09 — early configured-server rejection during explicit update (D01/B02 hardening)
+
+- **Security improvement:** an opt-in `passflick update` first checks its existing private `projection.pfidentity` server hint against the entered HTTPS endpoint **before requesting account email or master password** or making any authentication request. A known different server receives neither remote credentials nor an attempted sync. An invalid/unsafe scope hint fails closed. The sidecar is not an authority for publication: all existing encrypted cache, keywrap and authenticated server/account checks still run after successful sync.
+- **Legacy scope:** a first install and earlier preview snapshots lacking a sidecar preserve their previous path. For those, no early server match can be guaranteed; an encrypted replacement still requires full local authentication and source matching. No real host identity, server URL, user email, credential or snapshot contents were added to code or fixtures.
+- **Regression:** new isolated tests verify matching/mismatched configured servers, malformed scope metadata, unchanged ciphertext/identity when rejected, and sidecar-less compatibility. This is a preflight unit test, not a separate real-server wrong-URL credential-entry test.
+- **All three exact-code-commit workflows passed:** implementation [`65ddfa2`](https://github.com/sguzman/passflick/commit/65ddfa2737a18fda4cffb87bbee4076cc15cfebf) — [Rust `42659863127`](https://github.com/sguzman/passflick/actions/runs/42659863127), [Synthetic GUI `42659863018`](https://github.com/sguzman/passflick/actions/runs/42659863018), and [disposable Vaultwarden `42659863022`](https://github.com/sguzman/passflick/actions/runs/42659863022).
+- **Unfinished:** complete supported-login policy matrix, remote server failure UX, native host security validation, and reversible default-picker cutover. No installed executable, local account, historical encrypted vault or password cache was changed. **40/100 → 40/100 (Δ +0 points).**
+
 ### 2026-11-08 — host milestone and opt-in application launcher
 
 - **Real host evidence, anonymized:** The user confirmed a successful read-only sync from their existing self-hosted Vaultwarden with private-CA HTTPS, an authenticated encrypted local snapshot, populated native Hyprland picker, website/account filtering, selected-row clipboard actions and both Light/Dark System-theme appearances. Do not copy hostnames, private account labels, actual records or clipboard values into public documentation. Screenshot content alone does not prove exact clipboard bytes or history suppression.
