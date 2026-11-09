@@ -1175,14 +1175,23 @@ mod tests {
             at: 100_200,
             outcome: Outcome::Sync,
         };
-        assert!(failed_refresh_line(sync, 100_000, 100_240)
-            .unwrap()
-            .contains("transport, sync or decryption failed"));
+        assert!(
+            failed_refresh_line(sync, 100_000, 100_240)
+                .unwrap()
+                .contains("transport, sync or decryption failed")
+        );
         assert!(failed_refresh_line(sync, 100_300, 100_400).is_none());
-        assert!(failed_refresh_line(Report {
-            at: 100_200,
-            outcome: Outcome::Success,
-        }, 100_000, 100_240).is_none());
+        assert!(
+            failed_refresh_line(
+                Report {
+                    at: 100_200,
+                    outcome: Outcome::Success,
+                },
+                100_000,
+                100_240
+            )
+            .is_none()
+        );
     }
 
     #[test]
