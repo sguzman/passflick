@@ -1280,6 +1280,162 @@ fn disposable_server_auth_sync_encrypted_offline() {
     drop(argon_session);
     drop(argon_decoder);
 
+    // Test the COMPLETE CLI refresh path after a response is cut short.
+    // This second, separately encrypted fictional Argon2id projection means
+    // a successful remote login can reach /api/sync without replaying TOTP.
+    // The original first-account projection and credentials remain untouched.
+    #[cfg(feature = "vaultwarden-preview")]
+    {
+        use std::io::{Read as _, Write as _};
+        use std::time::{Duration, Instant};
+
+        assert_eq!(std::env::var("GITHUB_ACTIONS").as_deref(), Ok("true"));
+        let run_id = std::env::var("GITHUB_RUN_ID").unwrap();
+        assert!(!run_id.is_empty() && run_id.bytes().all(|b| b.is_ascii_digit()));
+        let proxy = std::env::var("PASSFLICK_CI_DISPOSABLE_PROXY").unwrap();
+        assert_eq!(proxy, format!("passflick-proxy-{run_id}"));
+        let caddy_path =
+            std::env::var("PASSFLICK_CI_DISPOSABLE_CADDYFILE").unwrap();
+        assert!(Path::new(&caddy_path).is_file());
+
+        let separate = PrivateDirectory::new();
+        let data = &separate.0;
+        let dir = data.join("passflick");
+        DirBuilder::new().mode(0o700).create(&dir).unwrap();
+        let legacy = dir.join("vault.passvault");
+        fs::write(&legacy, b"fictional separate Argon2id legacy bytes").unwrap();
+        let binary = std::env::var("PASSFLICK_PREVIEW_BINARY").unwrap();
+        let local = std::str::from_utf8(LOCAL_PASSPHRASE).unwrap();
+        super::terminal_acceptance::run_cli(
+            Path::new(&binary),
+            data,
+            &legacy,
+            &[
+                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden login email: ", ARGON_EMAIL),
+                ("Vaultwarden master password: ", PASSWORD),
+                (
+                    "Custom trusted CA PEM path (empty for system trust): ",
+                    ca_path.as_str(),
+                ),
+                (
+                    "New independent local projection passphrase (12–1024 characters): ",
+                    local,
+                ),
+                ("Confirm local projection passphrase: ", local),
+            ],
+            true,
+        );
+        let snapshot = dir.join("projection.pfsnapshot");
+        let keywrap_path = dir.join("projection.pfkey");
+        let identity = dir.join("projection.pfidentity");
+        let device = dir.join("projection.pfdevice");
+        let before = [
+            fs::read(&snapshot).unwrap(),
+            fs::read(&keywrap_path).unwrap(),
+            fs::read(&identity).unwrap(),
+            fs::read(&device).unwrap(),
+            fs::read(&legacy).unwrap(),
+        ];
+        assert_eq!(
+            super::refresh_status::read(&snapshot).unwrap().unwrap().outcome,
+            super::refresh_status::Outcome::Success
+        );
+
+        // Caddy continues forwarding identity/login requests to the real
+        // disposable Vaultwarden. Only its read-only /api/sync route is
+        // redirected to a bounded, single-connection host-side test server.
+        let listener = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        listener.set_nonblocking(true).unwrap();
+        let cutoff_server = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(20);
+            let (mut connection, _) = loop {
+                match listener.accept() {
+                    Ok(value) => break value,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(Instant::now() < deadline, "no intercepted sync request arrived");
+                        std::thread::sleep(Duration::from_millis(25));
+                    }
+                    Err(_) => panic!("intercepted sync listener failed"),
+                }
+            };
+            connection
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut request = [0_u8; 8192];
+            let count = connection.read(&mut request).unwrap();
+            assert!(
+                request[..count].starts_with(b"GET /api/sync "),
+                "intercepted request was not the read-only sync route"
+            );
+            // The declared body is much longer than the short JSON prefix.
+            // Close the socket immediately after forwarding those bytes.
+            connection
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 4096\r\nConnection: close\r\n\r\n{\"object\":\"sync\",\"profile\":",
+                )
+                .unwrap();
+            connection.flush().unwrap();
+            let _ = connection.shutdown(std::net::Shutdown::Both);
+        });
+        let modified_caddy = format!(
+            "{{\n    auto_https off\n    admin off\n}}\nhttps://localhost:18443 {{\n    tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key\n    @cut_sync path /api/sync\n    handle @cut_sync {{\n        reverse_proxy http://host.docker.internal:{port} {{\n            flush_interval -1\n        }}\n    }}\n    handle {{\n        reverse_proxy http://passflick-vault:80\n    }}\n}}\n"
+        );
+        fs::write(&caddy_path, modified_caddy).unwrap();
+        let restarted = std::process::Command::new("docker")
+            .args(["restart", &proxy])
+            .output()
+            .expect("could not restart disposable HTTPS proxy");
+        assert!(restarted.status.success(), "disposable proxy restart failed");
+        let mut ready = false;
+        for _ in 0..40 {
+            if client
+                .get(route(&url, "api/config"))
+                .send()
+                .is_ok_and(|response| response.status().is_success())
+            {
+                ready = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert!(ready, "disposable proxy did not reload its test-only sync route");
+
+        // The CLI authenticates normally, receives an incomplete HTTPS sync
+        // response, exits unsuccessfully and records only a fixed Sync code.
+        // It must never prompt for a local key or replace last-good ciphertext.
+        super::terminal_acceptance::run_cli(
+            Path::new(&binary),
+            data,
+            &legacy,
+            &[
+                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden login email: ", ARGON_EMAIL),
+                ("Vaultwarden master password: ", PASSWORD),
+                (
+                    "Custom trusted CA PEM path (empty for system trust): ",
+                    ca_path.as_str(),
+                ),
+            ],
+            false,
+        );
+        cutoff_server.join().expect("truncated sync fixture failed");
+        assert_eq!(
+            super::refresh_status::read(&snapshot).unwrap().unwrap().outcome,
+            super::refresh_status::Outcome::Sync
+        );
+        for (actual, original) in [
+            (&snapshot, &before[0]),
+            (&keywrap_path, &before[1]),
+            (&identity, &before[2]),
+            (&device, &before[3]),
+            (&legacy, &before[4]),
+        ] {
+            assert_eq!(fs::read(actual).unwrap(), *original);
+        }
+    }
+
     // Keep deliberate rejected logins at the END of disposable acceptance:
     // Vaultwarden may rate-limit an IP after failed password grants, which
     // would otherwise cause valid later Argon2id and MFA tests to fail.
