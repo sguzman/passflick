@@ -535,31 +535,6 @@ fn disposable_server_auth_sync_encrypted_offline() {
                 .any(|w| w == b"JBSWY3DPEHPK3PXP")
         );
 
-        // A rejected remote password is not an HTTPS outage. The updater
-        // must report Authentication and stop before the local passphrase
-        // prompt without changing the last-good encrypted projection.
-        super::terminal_acceptance::run_cli(
-            binary,
-            data,
-            &legacy,
-            &[
-                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
-                ("Vaultwarden login email: ", EMAIL),
-                (
-                    "Vaultwarden master password: ",
-                    "fictional incorrect remote master password",
-                ),
-                ("Custom trusted CA PEM path (empty for system trust): ", ca),
-            ],
-            false,
-        );
-        let rejected = super::refresh_status::read(&path).unwrap().unwrap();
-        assert_eq!(
-            rejected.outcome,
-            super::refresh_status::Outcome::Authentication
-        );
-        assert!(rejected.at >= first_report.at);
-
         // The disposable server presents a private certificate. Without
         // the explicitly configured CA, the TLS prelogin must fail before
         // remote authentication, with a distinct non-secret network category.
@@ -580,7 +555,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
             untrusted_tls.outcome,
             super::refresh_status::Outcome::Sync
         );
-        assert!(untrusted_tls.at >= rejected.at);
+        assert!(untrusted_tls.at >= first_report.at);
         assert_eq!(fs::read(&path).unwrap(), first_bytes);
         assert_eq!(fs::read(&keypath).unwrap(), first_keywrap_bytes);
         assert_eq!(fs::read(&devicepath).unwrap(), device);
@@ -1321,4 +1296,55 @@ fn disposable_server_auth_sync_encrypted_offline() {
         ),
         Err(AuthError::Rejected)
     ));
+
+    // Keep deliberate rejected logins at the END of disposable acceptance:
+    // Vaultwarden may rate-limit an IP after failed password grants, which
+    // would otherwise cause valid later Argon2id and MFA tests to fail.
+    #[cfg(feature = "vaultwarden-preview")]
+    {
+        let binary = std::env::var("PASSFLICK_PREVIEW_BINARY").unwrap();
+        let data = &cli_directory.0;
+        let root = data.join("passflick");
+        let snapshot = root.join("projection.pfsnapshot");
+        let legacy = root.join("vault.passvault");
+        let keywrap = root.join("projection.pfkey");
+        let old_snapshot = fs::read(&snapshot).unwrap();
+        let old_keywrap = fs::read(&keywrap).unwrap();
+        let before = super::refresh_status::read(&snapshot).unwrap().unwrap();
+        assert_eq!(
+            before.outcome,
+            super::refresh_status::Outcome::Success
+        );
+
+        super::terminal_acceptance::run_cli(
+            Path::new(&binary),
+            data,
+            &legacy,
+            &[
+                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden login email: ", EMAIL),
+                (
+                    "Vaultwarden master password: ",
+                    "fictional incorrect remote master password",
+                ),
+                (
+                    "Custom trusted CA PEM path (empty for system trust): ",
+                    ca_path.as_str(),
+                ),
+            ],
+            false,
+        );
+        let rejected = super::refresh_status::read(&snapshot).unwrap().unwrap();
+        assert_eq!(
+            rejected.outcome,
+            super::refresh_status::Outcome::Authentication
+        );
+        assert!(rejected.at >= before.at);
+        assert_eq!(fs::read(&snapshot).unwrap(), old_snapshot);
+        assert_eq!(fs::read(&keywrap).unwrap(), old_keywrap);
+        assert_eq!(
+            fs::read(&legacy).unwrap(),
+            b"fictional historical ciphertext unchanged"
+        );
+    }
 }
