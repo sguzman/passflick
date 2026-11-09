@@ -1373,4 +1373,65 @@ fn disposable_server_auth_sync_encrypted_offline() {
         ),
         Err(AuthError::Rejected)
     ));
+
+    #[cfg(feature = "vaultwarden-preview")]
+    {
+        // CI-only final test: the server was reachable during earlier
+        // successful updates, but its disposable HTTPS proxy is now stopped.
+        // No later success case is allowed to depend on this fixture.
+        assert_eq!(std::env::var("GITHUB_ACTIONS").as_deref(), Ok("true"));
+        let run_id = std::env::var("GITHUB_RUN_ID").expect("missing CI run ID");
+        assert!(!run_id.is_empty() && run_id.bytes().all(|b| b.is_ascii_digit()));
+        let proxy = std::env::var("PASSFLICK_CI_DISPOSABLE_PROXY")
+            .expect("missing isolated CI HTTPS proxy name");
+        assert_eq!(proxy, format!("passflick-proxy-{run_id}"));
+        let data = &cli_directory.0;
+        let root = data.join("passflick");
+        let snapshot = root.join("projection.pfsnapshot");
+        let keywrap = root.join("projection.pfkey");
+        let device = root.join("projection.pfdevice");
+        let identity = root.join("projection.pfidentity");
+        let legacy = root.join("vault.passvault");
+        let snapshot_before = fs::read(&snapshot).unwrap();
+        let keywrap_before = fs::read(&keywrap).unwrap();
+        let device_before = fs::read(&device).unwrap();
+        let identity_before = fs::read(&identity).unwrap();
+        let legacy_before = fs::read(&legacy).unwrap();
+        let status_before = super::refresh_status::read(&snapshot).unwrap().unwrap();
+
+        let stopped = std::process::Command::new("docker")
+            .args(["stop", "--time", "2", &proxy])
+            .output()
+            .expect("disposable HTTPS proxy stop could not run");
+        assert!(stopped.status.success(), "disposable HTTPS proxy did not stop");
+
+        // No TLS or auth response can arrive: the correct certificate and
+        // fictional credentials are supplied, but localhost no longer has
+        // an HTTPS server. The CLI must never request a local passphrase or
+        // publish a partial snapshot when the remote endpoint is down.
+        let binary = std::env::var("PASSFLICK_PREVIEW_BINARY").unwrap();
+        super::terminal_acceptance::run_cli(
+            Path::new(&binary),
+            data,
+            &legacy,
+            &[
+                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden login email: ", EMAIL),
+                ("Vaultwarden master password: ", PASSWORD),
+                (
+                    "Custom trusted CA PEM path (empty for system trust): ",
+                    ca_path.as_str(),
+                ),
+            ],
+            false,
+        );
+        let outage = super::refresh_status::read(&snapshot).unwrap().unwrap();
+        assert_eq!(outage.outcome, super::refresh_status::Outcome::Sync);
+        assert!(outage.at >= status_before.at);
+        assert_eq!(fs::read(&snapshot).unwrap(), snapshot_before);
+        assert_eq!(fs::read(&keywrap).unwrap(), keywrap_before);
+        assert_eq!(fs::read(&device).unwrap(), device_before);
+        assert_eq!(fs::read(&identity).unwrap(), identity_before);
+        assert_eq!(fs::read(&legacy).unwrap(), legacy_before);
+    }
 }
