@@ -553,10 +553,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
         assert_eq!(fs::read(&path).unwrap(), first_bytes);
         assert_eq!(fs::read(&devicepath).unwrap(), device);
         let failed_report = super::refresh_status::read(&path).unwrap().unwrap();
-        assert_eq!(
-            failed_report.outcome,
-            super::refresh_status::Outcome::Local
-        );
+        assert_eq!(failed_report.outcome, super::refresh_status::Outcome::Local);
         assert!(failed_report.at >= first_report.at);
 
         super::terminal_acceptance::run_cli(
