@@ -522,9 +522,18 @@ mod tests {
     #[test]
     fn update_failures_have_only_fixed_privacy_safe_status_categories() {
         assert_eq!(PreviewError::Input.refresh_outcome(), Outcome::Input);
-        assert_eq!(PreviewError::Endpoint.refresh_outcome(), Outcome::Configuration);
-        assert_eq!(PreviewError::ServerMismatch.refresh_outcome(), Outcome::Configuration);
-        assert_eq!(PreviewError::Authentication.refresh_outcome(), Outcome::Authentication);
+        assert_eq!(
+            PreviewError::Endpoint.refresh_outcome(),
+            Outcome::Configuration
+        );
+        assert_eq!(
+            PreviewError::ServerMismatch.refresh_outcome(),
+            Outcome::Configuration
+        );
+        assert_eq!(
+            PreviewError::Authentication.refresh_outcome(),
+            Outcome::Authentication
+        );
         assert_eq!(PreviewError::Transport.refresh_outcome(), Outcome::Sync);
         assert_eq!(PreviewError::RemoteSync.refresh_outcome(), Outcome::Sync);
         assert_eq!(PreviewError::Storage.refresh_outcome(), Outcome::Local);
