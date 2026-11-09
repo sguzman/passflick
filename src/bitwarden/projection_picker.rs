@@ -632,7 +632,8 @@ impl eframe::App for ProjectionPicker {
             self.clear_for_manual_lock();
             match offline_command::lock_for_picker() {
                 Ok(()) => {
-                    self.notice = Some("Projection manually locked. Enter the local passphrase to unlock.");
+                    self.notice =
+                        Some("Projection manually locked. Enter the local passphrase to unlock.");
                 }
                 Err(_) => {
                     self.error = Some(
