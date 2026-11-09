@@ -46,11 +46,16 @@ https://localhost:18443 {
 EOF
 
 docker network create "$network" >/dev/null
+# This is exclusively a throwaway CI server: rate limiting is not the
+# subject of this acceptance suite, and earlier login/MFA cases must not
+# throttle later, otherwise-valid fictional test credentials.
 docker run -d --name "$vault" --network "$network" \
   --network-alias passflick-vault \
   -e DOMAIN=https://localhost:18443 \
   -e SIGNUPS_ALLOWED=true \
   -e SIGNUPS_VERIFY=false \
+  -e LOGIN_RATELIMIT_SECONDS=1 \
+  -e LOGIN_RATELIMIT_MAX_BURST=128 \
   -e I_REALLY_WANT_VOLATILE_STORAGE=true \
   -e ROCKET_PORT=80 \
   vaultwarden/server:1.37.5 >/dev/null
