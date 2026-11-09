@@ -362,6 +362,7 @@ impl eframe::App for ProjectionPicker {
             ctx.input_mut(|input| input.consume_key(egui::Modifiers::CTRL, egui::Key::Space));
 
         let mut request_unlock = false;
+        let mut refresh_command_clicked = false;
         egui::CentralPanel::default()
             .frame(preview_panel_frame(ui.visuals()))
             .show(ui, |ui| {
@@ -411,6 +412,9 @@ impl eframe::App for ProjectionPicker {
                         .on_hover_text("Copy the exact installed executable and XDG data path; run it in Kitty when you want to refresh.")
                         .clicked()
                     {
+                        // Enter on a focused button must not also copy a
+                        // selected password via the global picker shortcut.
+                        refresh_command_clicked = true;
                         if let Some(command) = exact_update_command() {
                             ctx.copy_text(command);
                             self.notice = Some("Refresh command copied. Paste it into Kitty.");
@@ -614,6 +618,11 @@ impl eframe::App for ProjectionPicker {
             }
             ctx.request_repaint();
             // Enter used to unlock must never also copy the first password.
+            return;
+        }
+        // Prevent a keyboard-activated refresh button from also triggering
+        // the picker's global Enter-to-copy secret action in this frame.
+        if refresh_command_clicked {
             return;
         }
         let action = ctx.input(|input| crate::copy_shortcut::enter_copy_username(&input.events));
