@@ -16,7 +16,7 @@ use zeroize::Zeroizing;
 use crate::passphrase;
 use crate::projection::ProjectionSnapshot;
 
-use super::auth::{AuthError, MfaChallenge, MfaProvider};
+use super::auth::{AuthError, AuthStage, MfaChallenge, MfaProvider};
 use super::cache_store;
 use super::keywrap;
 use super::projection_identity::{self, IdentityError};
@@ -42,8 +42,8 @@ pub enum PreviewError {
     Network,
     #[error("Vaultwarden authentication rate limited; retry later; local snapshot unchanged")]
     RateLimited,
-    #[error("Vaultwarden authentication service returned HTTP {0}; local snapshot unchanged")]
-    RemoteService(u16),
+    #[error("Vaultwarden {1} returned HTTP {0}; local snapshot unchanged")]
+    RemoteService(u16, AuthStage),
     #[error("complete authenticated Vaultwarden sync failed; local snapshot unchanged")]
     RemoteSync,
     #[error("local projection directory or certificate is inaccessible or unsafe")]
@@ -61,7 +61,7 @@ impl PreviewError {
             Self::Transport
             | Self::Network
             | Self::RateLimited
-            | Self::RemoteService(_)
+            | Self::RemoteService(_, _)
             | Self::RemoteSync => Outcome::Sync,
             Self::Storage | Self::Local => Outcome::Local,
         }
@@ -75,7 +75,7 @@ fn auth_failure(error: AuthError) -> PreviewError {
     match error {
         AuthError::Transport => PreviewError::Network,
         AuthError::RateLimited => PreviewError::RateLimited,
-        AuthError::RemoteService(status) => PreviewError::RemoteService(status),
+        AuthError::RemoteService(status, stage) => PreviewError::RemoteService(status, stage),
         _ => PreviewError::Authentication,
     }
 }
@@ -575,7 +575,7 @@ mod tests {
         assert_eq!(PreviewError::Network.refresh_outcome(), Outcome::Sync);
         assert_eq!(PreviewError::RateLimited.refresh_outcome(), Outcome::Sync);
         assert_eq!(
-            PreviewError::RemoteService(503).refresh_outcome(),
+            PreviewError::RemoteService(503, AuthStage::PasswordGrant).refresh_outcome(),
             Outcome::Sync
         );
         assert_eq!(PreviewError::Transport.refresh_outcome(), Outcome::Sync);
@@ -585,8 +585,8 @@ mod tests {
             PreviewError::RateLimited
         );
         assert_eq!(
-            auth_failure(AuthError::RemoteService(503)),
-            PreviewError::RemoteService(503)
+            auth_failure(AuthError::RemoteService(503, AuthStage::PasswordGrant)),
+            PreviewError::RemoteService(503, AuthStage::PasswordGrant)
         );
         assert_eq!(
             auth_failure(AuthError::Rejected),
