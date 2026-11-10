@@ -29,6 +29,8 @@ pub enum AuthError {
     InvalidSettings,
     #[error("HTTPS authentication request failed")]
     Transport,
+    #[error("Vaultwarden authentication service rate limited the request")]
+    RateLimited,
     #[error("Vaultwarden authentication service returned an unexpected response")]
     RemoteService,
     #[error("authentication rejected")]
@@ -217,6 +219,7 @@ fn valid_device_id(id: &str) -> bool {
 fn auth_status_error(status: reqwest::StatusCode) -> AuthError {
     match status.as_u16() {
         400 | 401 | 403 => AuthError::Rejected,
+        429 => AuthError::RateLimited,
         _ => AuthError::RemoteService,
     }
 }
@@ -420,7 +423,11 @@ mod tests {
                 AuthError::Rejected
             );
         }
-        for code in [302, 404, 408, 429, 500, 502, 503, 504] {
+        assert_eq!(
+            auth_status_error(reqwest::StatusCode::TOO_MANY_REQUESTS),
+            AuthError::RateLimited
+        );
+        for code in [302, 404, 408, 500, 502, 503, 504] {
             assert_eq!(
                 auth_status_error(reqwest::StatusCode::from_u16(code).unwrap()),
                 AuthError::RemoteService
