@@ -40,8 +40,10 @@ pub enum PreviewError {
         "Vaultwarden HTTPS connection or certificate validation failed; local snapshot unchanged"
     )]
     Network,
+    #[error("Vaultwarden temporarily rate limited authentication; retry later; local snapshot unchanged")]
+    RateLimited,
     #[error(
-        "Vaultwarden authentication service unavailable or throttled; local snapshot unchanged"
+        "Vaultwarden authentication service unavailable; local snapshot unchanged"
     )]
     RemoteService,
     #[error("complete authenticated Vaultwarden sync failed; local snapshot unchanged")]
@@ -58,9 +60,11 @@ impl PreviewError {
             Self::Input => Outcome::Input,
             Self::Endpoint | Self::ServerMismatch => Outcome::Configuration,
             Self::Authentication => Outcome::Authentication,
-            Self::Transport | Self::Network | Self::RemoteService | Self::RemoteSync => {
-                Outcome::Sync
-            }
+            Self::Transport
+            | Self::Network
+            | Self::RateLimited
+            | Self::RemoteService
+            | Self::RemoteSync => Outcome::Sync,
             Self::Storage | Self::Local => Outcome::Local,
         }
     }
@@ -72,6 +76,7 @@ impl PreviewError {
 fn auth_failure(error: AuthError) -> PreviewError {
     match error {
         AuthError::Transport => PreviewError::Network,
+        AuthError::RateLimited => PreviewError::RateLimited,
         AuthError::RemoteService => PreviewError::RemoteService,
         _ => PreviewError::Authentication,
     }
@@ -570,9 +575,14 @@ mod tests {
             Outcome::Authentication
         );
         assert_eq!(PreviewError::Network.refresh_outcome(), Outcome::Sync);
+        assert_eq!(PreviewError::RateLimited.refresh_outcome(), Outcome::Sync);
         assert_eq!(PreviewError::RemoteService.refresh_outcome(), Outcome::Sync);
         assert_eq!(PreviewError::Transport.refresh_outcome(), Outcome::Sync);
         assert_eq!(auth_failure(AuthError::Transport), PreviewError::Network);
+        assert_eq!(
+            auth_failure(AuthError::RateLimited),
+            PreviewError::RateLimited
+        );
         assert_eq!(
             auth_failure(AuthError::RemoteService),
             PreviewError::RemoteService
