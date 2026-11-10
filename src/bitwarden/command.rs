@@ -40,6 +40,8 @@ pub enum PreviewError {
         "Vaultwarden HTTPS connection or certificate validation failed; local snapshot unchanged"
     )]
     Network,
+    #[error("Vaultwarden authentication service unavailable or throttled; local snapshot unchanged")]
+    RemoteService,
     #[error("complete authenticated Vaultwarden sync failed; local snapshot unchanged")]
     RemoteSync,
     #[error("local projection directory or certificate is inaccessible or unsafe")]
@@ -54,7 +56,9 @@ impl PreviewError {
             Self::Input => Outcome::Input,
             Self::Endpoint | Self::ServerMismatch => Outcome::Configuration,
             Self::Authentication => Outcome::Authentication,
-            Self::Transport | Self::Network | Self::RemoteSync => Outcome::Sync,
+            Self::Transport | Self::Network | Self::RemoteService | Self::RemoteSync => {
+                Outcome::Sync
+            }
             Self::Storage | Self::Local => Outcome::Local,
         }
     }
@@ -66,6 +70,7 @@ impl PreviewError {
 fn auth_failure(error: AuthError) -> PreviewError {
     match error {
         AuthError::Transport => PreviewError::Network,
+        AuthError::RemoteService => PreviewError::RemoteService,
         _ => PreviewError::Authentication,
     }
 }
@@ -563,8 +568,13 @@ mod tests {
             Outcome::Authentication
         );
         assert_eq!(PreviewError::Network.refresh_outcome(), Outcome::Sync);
+        assert_eq!(PreviewError::RemoteService.refresh_outcome(), Outcome::Sync);
         assert_eq!(PreviewError::Transport.refresh_outcome(), Outcome::Sync);
         assert_eq!(auth_failure(AuthError::Transport), PreviewError::Network);
+        assert_eq!(
+            auth_failure(AuthError::RemoteService),
+            PreviewError::RemoteService
+        );
         assert_eq!(
             auth_failure(AuthError::Rejected),
             PreviewError::Authentication
