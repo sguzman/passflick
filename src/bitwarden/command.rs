@@ -42,10 +42,8 @@ pub enum PreviewError {
     Network,
     #[error("Vaultwarden authentication rate limited; retry later; local snapshot unchanged")]
     RateLimited,
-    #[error(
-        "Vaultwarden authentication service unavailable; local snapshot unchanged"
-    )]
-    RemoteService,
+    #[error("Vaultwarden authentication service returned HTTP {0}; local snapshot unchanged")]
+    RemoteService(u16),
     #[error("complete authenticated Vaultwarden sync failed; local snapshot unchanged")]
     RemoteSync,
     #[error("local projection directory or certificate is inaccessible or unsafe")]
@@ -77,7 +75,7 @@ fn auth_failure(error: AuthError) -> PreviewError {
     match error {
         AuthError::Transport => PreviewError::Network,
         AuthError::RateLimited => PreviewError::RateLimited,
-        AuthError::RemoteService => PreviewError::RemoteService,
+        AuthError::RemoteService(status) => PreviewError::RemoteService(status),
         _ => PreviewError::Authentication,
     }
 }
@@ -576,7 +574,7 @@ mod tests {
         );
         assert_eq!(PreviewError::Network.refresh_outcome(), Outcome::Sync);
         assert_eq!(PreviewError::RateLimited.refresh_outcome(), Outcome::Sync);
-        assert_eq!(PreviewError::RemoteService.refresh_outcome(), Outcome::Sync);
+        assert_eq!(PreviewError::RemoteService(503).refresh_outcome(), Outcome::Sync);
         assert_eq!(PreviewError::Transport.refresh_outcome(), Outcome::Sync);
         assert_eq!(auth_failure(AuthError::Transport), PreviewError::Network);
         assert_eq!(
@@ -584,8 +582,8 @@ mod tests {
             PreviewError::RateLimited
         );
         assert_eq!(
-            auth_failure(AuthError::RemoteService),
-            PreviewError::RemoteService
+            auth_failure(AuthError::RemoteService(503)),
+            PreviewError::RemoteService(503)
         );
         assert_eq!(
             auth_failure(AuthError::Rejected),
