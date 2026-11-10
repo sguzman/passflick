@@ -70,6 +70,20 @@ fn auth_failure(error: AuthError) -> PreviewError {
     }
 }
 
+/// A rejected read-only sync bearer is an authorization failure, not a
+/// network outage. Keep malformed payloads and remote HTTP/server failures
+/// classified as Sync; neither case may publish an incomplete projection.
+/// Return only fixed categories, never the upstream response or URL.
+fn sync_failure(error: update::UpdateError) -> PreviewError {
+    match error {
+        update::UpdateError::Auth(error) => auth_failure(error),
+        update::UpdateError::Transport(super::transport::TransportError::Unauthorized) => {
+            PreviewError::Authentication
+        }
+        _ => PreviewError::RemoteSync,
+    }
+}
+
 /// Prevent an input-echo race: rpassword prints before it disables echo.
 struct PromptTerminal {
     tty: fs::File,
@@ -471,7 +485,7 @@ fn run_explicit() -> Result<(), PreviewError> {
         .as_secs();
     let candidate =
         update::prepare_initial_sync(&transport, &mut session, &endpoint, timestamp, &decoder)
-            .map_err(|_| PreviewError::RemoteSync)?;
+            .map_err(sync_failure)?;
     // Do not touch the historical PASSFLICK_VAULT override or original file.
     let first_install = !snapshot_exists(&path)?;
     let local = if first_install {
@@ -560,6 +574,36 @@ mod tests {
             PreviewError::Authentication
         );
         assert_eq!(PreviewError::RemoteSync.refresh_outcome(), Outcome::Sync);
+        // Rejected access to /api/sync must not masquerade as a TLS outage
+        // or cause any snapshot publication; only a fixed category persists.
+        assert_eq!(
+            sync_failure(update::UpdateError::Transport(
+                super::super::transport::TransportError::Unauthorized
+            )),
+            PreviewError::Authentication
+        );
+        for status in [429, 500, 503] {
+            assert_eq!(
+                sync_failure(update::UpdateError::Transport(
+                    super::super::transport::TransportError::UnexpectedStatus(status)
+                )),
+                PreviewError::RemoteSync
+            );
+        }
+        assert_eq!(
+            sync_failure(update::UpdateError::Transport(
+                super::super::transport::TransportError::Network
+            )),
+            PreviewError::RemoteSync
+        );
+        assert_eq!(
+            sync_failure(update::UpdateError::Auth(AuthError::Transport)),
+            PreviewError::Network
+        );
+        assert_eq!(
+            sync_failure(update::UpdateError::Auth(AuthError::Rejected)),
+            PreviewError::Authentication
+        );
         assert_eq!(PreviewError::Storage.refresh_outcome(), Outcome::Local);
         assert_eq!(PreviewError::Local.refresh_outcome(), Outcome::Local);
     }
