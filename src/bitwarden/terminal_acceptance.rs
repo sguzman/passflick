@@ -202,18 +202,16 @@ fn run_arguments(
         // and potentially fictional or real-looking credential input.
         let categories = [
             ("Vaultwarden authentication or MFA failed", "authentication"),
+            ("Vaultwarden authentication rate limited", "rate-limit"),
             (
-                "Vaultwarden authentication service unavailable or throttled",
+                "Vaultwarden authentication service unavailable",
                 "identity-service",
             ),
             (
                 "Vaultwarden HTTPS connection or certificate validation failed",
                 "network",
             ),
-            (
-                "complete authenticated Vaultwarden sync failed",
-                "sync",
-            ),
+            ("complete authenticated Vaultwarden sync failed", "sync"),
             (
                 "local encrypted projection authentication or update failed",
                 "local",
@@ -222,8 +220,14 @@ fn run_arguments(
                 "local projection directory or certificate is inaccessible",
                 "storage",
             ),
-            ("trusted HTTPS transport could not be initialized", "transport"),
-            ("server differs from the existing offline projection", "server-mismatch"),
+            (
+                "trusted HTTPS transport could not be initialized",
+                "transport",
+            ),
+            (
+                "server differs from the existing offline projection",
+                "server-mismatch",
+            ),
             ("unsupported or invalid HTTPS endpoint", "endpoint"),
         ];
         let outcome = categories
