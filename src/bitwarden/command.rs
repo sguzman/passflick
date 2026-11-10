@@ -40,7 +40,9 @@ pub enum PreviewError {
         "Vaultwarden HTTPS connection or certificate validation failed; local snapshot unchanged"
     )]
     Network,
-    #[error("Vaultwarden authentication service unavailable or throttled; local snapshot unchanged")]
+    #[error(
+        "Vaultwarden authentication service unavailable or throttled; local snapshot unchanged"
+    )]
     RemoteService,
     #[error("complete authenticated Vaultwarden sync failed; local snapshot unchanged")]
     RemoteSync,
