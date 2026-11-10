@@ -748,7 +748,10 @@ mod tests {
 
         let competing_path = path.clone();
         let competing = std::thread::spawn(move || {
-            matches!(acquire_update_lock(&competing_path), Err(PreviewError::Busy))
+            matches!(
+                acquire_update_lock(&competing_path),
+                Err(PreviewError::Busy)
+            )
         });
         assert!(competing.join().unwrap(), "second update did not fail fast");
 
