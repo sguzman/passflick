@@ -65,9 +65,6 @@ docker network create "$network" >/dev/null
 # This is exclusively a throwaway CI server: rate limiting is not the
 # subject of this acceptance suite, and earlier login/MFA cases must not
 # throttle later, otherwise-valid fictional test credentials.
-# Repeated fictional logins and native GUI stages can exhaust the default
-# 10-connection pool. Expand capacity only for this disposable server.
-# Never change the owner's Vaultwarden database or service configuration.
 docker run -d --name "$vault" --network "$network" \
   --network-alias passflick-vault \
   -e DOMAIN=https://localhost:18443 \
@@ -75,7 +72,6 @@ docker run -d --name "$vault" --network "$network" \
   -e SIGNUPS_VERIFY=false \
   -e LOGIN_RATELIMIT_SECONDS=1 \
   -e LOGIN_RATELIMIT_MAX_BURST=128 \
-  -e DATABASE_MAX_CONNS=32 \
   -e I_REALLY_WANT_VOLATILE_STORAGE=true \
   -e ROCKET_PORT=80 \
   vaultwarden/server:1.37.5 >/dev/null
@@ -123,6 +119,7 @@ PASSFLICK_PREVIEW_BINARY="$(pwd)/target/debug/passflick" \
 PASSFLICK_DISPOSABLE_URL=https://localhost:18443/ \
 PASSFLICK_DISPOSABLE_CA="$work/certs/root.pem" \
 PASSFLICK_CI_DISPOSABLE_PROXY="$proxy" \
+PASSFLICK_CI_DISPOSABLE_VAULT="$vault" \
 PASSFLICK_CI_DISPOSABLE_TLS_CERT="$work/certs/server.crt" \
 PASSFLICK_CI_DISPOSABLE_TLS_KEY="$work/certs/server.key" \
 PASSFLICK_CI_DISPOSABLE_CADDYFILE="$work/Caddyfile" \
