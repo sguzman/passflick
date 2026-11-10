@@ -203,9 +203,11 @@ fn run_arguments(
         let categories = [
             ("Vaultwarden authentication or MFA failed", "authentication"),
             ("Vaultwarden authentication rate limited", "rate-limit"),
+            ("Vaultwarden prelogin returned HTTP ", "identity-prelogin"),
+            ("Vaultwarden token grant returned HTTP ", "identity-token"),
             (
-                "Vaultwarden authentication service returned HTTP ",
-                "identity-service",
+                "Vaultwarden token refresh returned HTTP ",
+                "identity-refresh",
             ),
             (
                 "Vaultwarden HTTPS connection or certificate validation failed",
@@ -243,12 +245,16 @@ fn run_arguments(
             answers.len(),
             exit.success()
         );
-        // Keep only the three-digit HTTP status, never any transcript text.
-        // The prefix is a fixed CLI message, not arbitrary upstream content.
-        let prefix = b"Vaultwarden authentication service returned HTTP ";
-        let http_status = transcript
-            .windows(prefix.len() + 3)
-            .find_map(|window| {
+        // Extract only a three-digit status after one of our immutable
+        // phase labels, not arbitrary text from the untrusted server.
+        let http_status = [
+            b"Vaultwarden prelogin returned HTTP ".as_slice(),
+            b"Vaultwarden token grant returned HTTP ".as_slice(),
+            b"Vaultwarden token refresh returned HTTP ".as_slice(),
+        ]
+        .iter()
+        .find_map(|prefix| {
+            transcript.windows(prefix.len() + 3).find_map(|window| {
                 let digits = window.strip_prefix(prefix)?;
                 if digits.iter().all(|digit| digit.is_ascii_digit()) {
                     Some(
@@ -260,7 +266,8 @@ fn run_arguments(
                     None
                 }
             })
-            .filter(|status| (100..=599).contains(status));
+        })
+        .filter(|status| (100..=599).contains(status));
         if let Some(status) = http_status {
             eprintln!("Synthetic CLI upstream response status: HTTP {status}");
         }
