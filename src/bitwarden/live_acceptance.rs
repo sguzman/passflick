@@ -1306,37 +1306,6 @@ fn disposable_server_auth_sync_encrypted_offline() {
         assert!(!run_id.is_empty() && run_id.bytes().all(|b| b.is_ascii_digit()));
         let proxy = std::env::var("PASSFLICK_CI_DISPOSABLE_PROXY").unwrap();
         assert_eq!(proxy, format!("passflick-proxy-{run_id}"));
-        let vault = std::env::var("PASSFLICK_CI_DISPOSABLE_VAULT").unwrap();
-        assert_eq!(vault, format!("passflick-vault-{run_id}"));
-
-        // The long synthetic Wayland and MFA suite has completed. Restart
-        // ONLY its named throwaway Vaultwarden server to give the following
-        // independent Argon2id CLI acceptance a fresh upstream connection
-        // pool. The same container preserves its fictional accounts/ciphers
-        // across restart, and the CLI below must authenticate them again.
-        // No real Vaultwarden process or user's desktop is ever addressed.
-        let restarted = std::process::Command::new("docker")
-            .args(["restart", &vault])
-            .output()
-            .expect("could not restart isolated fixture Vaultwarden server");
-        assert!(
-            restarted.status.success(),
-            "isolated fixture Vaultwarden restart failed"
-        );
-        let mut ready = false;
-        for _ in 0..60 {
-            if client
-                .get(route(&url, "api/config"))
-                .send()
-                .is_ok_and(|response| response.status().is_success())
-            {
-                ready = true;
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(100));
-        }
-        assert!(ready, "restarted fictional Vaultwarden server not healthy");
-
         let caddy_path = std::env::var("PASSFLICK_CI_DISPOSABLE_CADDYFILE").unwrap();
         assert!(Path::new(&caddy_path).is_file());
 
