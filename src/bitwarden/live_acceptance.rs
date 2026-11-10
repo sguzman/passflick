@@ -512,6 +512,50 @@ fn disposable_server_auth_sync_encrypted_offline() {
             0o600
         );
         assert_eq!(device.len(), 32);
+
+        // Hold the same persistent lock inode as a first explicit update.
+        // A *second real CLI process* must reject contention before showing
+        // a single terminal prompt. A Busy error must never replace the
+        // encrypted projection, keywrap, scope, device, refresh-status hint
+        // or historical vault, and it must never mutate the disposable server.
+        {
+            use std::os::fd::AsRawFd;
+            let status_path = passflick_dir.join("projection.pfrefresh");
+            let scope_path = passflick_dir.join("projection.pfidentity");
+            let locked_status = fs::read(&status_path).unwrap();
+            let locked_scope = fs::read(&scope_path).unwrap();
+            let update_lock = passflick_dir.join(".passflick.projection-update-lock");
+            let guard = fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&update_lock)
+                .expect("real updater did not retain a persistent lock file");
+            assert_eq!(
+                guard.metadata().unwrap().permissions().mode() & 0o777,
+                0o600
+            );
+            // SAFETY: guard owns a live descriptor. The kernel releases
+            // the advisory lock once this fixture's guard is dropped.
+            assert_eq!(
+                unsafe { libc::flock(guard.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
+                0,
+                "could not hold the real update-lock inode for CLI contention"
+            );
+            super::terminal_acceptance::assert_update_lock_busy(binary, data, &legacy);
+            assert_eq!(fs::read(&path).unwrap(), first_bytes);
+            assert_eq!(fs::read(&keypath).unwrap(), first_keywrap_bytes);
+            assert_eq!(fs::read(&devicepath).unwrap(), device);
+            assert_eq!(fs::read(&scope_path).unwrap(), locked_scope);
+            assert_eq!(fs::read(&status_path).unwrap(), locked_status);
+            assert_eq!(fs::read(&legacy).unwrap(), original_legacy);
+            assert!(
+                fixture_server_cipher_state(&client, &url, session.bearer_token().unwrap())
+                    == upstream_initial,
+                "rejected competing CLI mutated disposable upstream ciphers"
+            );
+            drop(guard);
+        }
+
         let first_key = keywrap::unlock(
             &keypath,
             LOCAL_PASSPHRASE,
