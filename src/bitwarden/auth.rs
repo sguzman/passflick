@@ -353,14 +353,15 @@ impl ReadOnlySyncTransport {
         let response = self
             .identity_token_grant(endpoint, Some(&auth_email), &grant)
             .map_err(|_| AuthError::Transport)?;
-        if response.status() != reqwest::StatusCode::OK {
-            if response.status() == reqwest::StatusCode::BAD_REQUEST {
+        let status = response.status();
+        if status != reqwest::StatusCode::OK {
+            if status == reqwest::StatusCode::BAD_REQUEST {
                 let body = read_response(response)?;
                 if mfa_required(&body) {
                     return Err(AuthError::MfaRequired);
                 }
             }
-            return Err(auth_status_error(response.status()));
+            return Err(auth_status_error(status));
         }
         let body = read_response(response)?;
         let mut reply = decode_login(&body)?;
