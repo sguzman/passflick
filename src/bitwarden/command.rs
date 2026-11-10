@@ -46,6 +46,8 @@ pub enum PreviewError {
     RemoteService(u16, AuthStage),
     #[error("complete authenticated Vaultwarden sync failed; local snapshot unchanged")]
     RemoteSync,
+    #[error("another Passflick projection update is in progress; snapshot unchanged")]
+    Busy,
     #[error("local projection directory or certificate is inaccessible or unsafe")]
     Storage,
     #[error("local encrypted projection authentication or update failed")]
@@ -63,7 +65,7 @@ impl PreviewError {
             | Self::RateLimited
             | Self::RemoteService(_, _)
             | Self::RemoteSync => Outcome::Sync,
-            Self::Storage | Self::Local => Outcome::Local,
+            Self::Busy | Self::Storage | Self::Local => Outcome::Local,
         }
     }
 }
@@ -297,6 +299,44 @@ fn private_parent(snapshot_path: &Path) -> Result<(), PreviewError> {
     Ok(())
 }
 
+/// Serialize the *whole* explicit remote update, including authentication,
+/// publication and refresh-status reporting. cache_store has a separate inner
+/// writer lock for AEAD replacement, but it cannot prevent two simultaneous
+/// network sessions or out-of-order refresh-status sidecars.
+fn acquire_update_lock(snapshot_path: &Path) -> Result<fs::File, PreviewError> {
+    private_parent(snapshot_path)?;
+    // This inode must persist across runs: deleting and recreating a lock
+    // file would let different processes hold locks on unrelated inodes.
+    let path = snapshot_path.with_file_name(".passflick.projection-update-lock");
+    let file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .mode(0o600)
+        // A substituted FIFO cannot block open; symlinks cannot redirect it.
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path)
+        .map_err(|_| PreviewError::Storage)?;
+    let meta = file.metadata().map_err(|_| PreviewError::Storage)?;
+    if !meta.is_file()
+        || !crate::vault::owned_by_current_user(&meta)
+        || meta.permissions().mode() & 0o777 != 0o600
+        || meta.nlink() != 1
+    {
+        return Err(PreviewError::Storage);
+    }
+    // SAFETY: file owns a live descriptor; flock releases when it is dropped.
+    let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+    if rc != 0 {
+        return if std::io::Error::last_os_error().kind() == std::io::ErrorKind::WouldBlock {
+            Err(PreviewError::Busy)
+        } else {
+            Err(PreviewError::Storage)
+        };
+    }
+    Ok(file)
+}
+
 fn snapshot_exists(path: &Path) -> Result<bool, PreviewError> {
     match fs::symlink_metadata(path) {
         Ok(meta) if meta.is_file() => Ok(true),
@@ -410,12 +450,16 @@ fn prompt_new_projection_passphrase(
 /// during normal picker/search/copy. Login is performed for each update;
 /// remote tokens are never cached or serialized.
 pub fn run() -> Result<(), PreviewError> {
-    let result = run_explicit();
-    // This non-secret record is advisory only. Never create it for a missing
-    // projection, and never let a reporting error change the update result.
+    let path = crate::paths::projection_path().map_err(|_| PreviewError::Storage)?;
+    // Acquiring before the first prompt prevents a competing process from
+    // requesting a second master password or initiating duplicate HTTPS work.
+    // A busy invocation must NOT overwrite the active updater's status record.
+    let _update_lock = acquire_update_lock(&path)?;
+    let result = run_explicit(&path);
+    // Hold the SAME guard through status reporting, so an older process
+    // cannot clobber a newer updater's success/failure hint after publication.
     // The encrypted snapshot remains the sole authority for offline data.
-    if let Ok(path) = crate::paths::projection_path()
-        && snapshot_exists(&path) == Ok(true)
+    if snapshot_exists(&path) == Ok(true)
         && let Ok(at) = SystemTime::now().duration_since(UNIX_EPOCH)
     {
         let outcome = match &result {
@@ -439,15 +483,13 @@ pub fn run() -> Result<(), PreviewError> {
     result
 }
 
-fn run_explicit() -> Result<(), PreviewError> {
+fn run_explicit(path: &Path) -> Result<(), PreviewError> {
     let server = visible("Vaultwarden HTTPS server URL: ")?;
     let endpoint = ServerEndpoint::parse(&server).map_err(|_| PreviewError::Endpoint)?;
     // Reject a different server before accepting remote account credentials.
     // This preflight never authorizes publication: the encrypted identity,
     // keywrap and snapshot are checked again after a full remote sync.
-    let path = crate::paths::projection_path().map_err(|_| PreviewError::Storage)?;
-    private_parent(&path)?;
-    preflight_server_scope(&path, &endpoint)?;
+    preflight_server_scope(path, &endpoint)?;
     let email = visible("Vaultwarden login email: ")?;
     let master = masked("Vaultwarden master password: ")?;
     let ca_path = visible("Custom trusted CA PEM path (empty for system trust): ")?;
@@ -627,6 +669,7 @@ mod tests {
             sync_failure(update::UpdateError::Auth(AuthError::Rejected)),
             PreviewError::Authentication
         );
+        assert_eq!(PreviewError::Busy.refresh_outcome(), Outcome::Local);
         assert_eq!(PreviewError::Storage.refresh_outcome(), Outcome::Local);
         assert_eq!(PreviewError::Local.refresh_outcome(), Outcome::Local);
     }
