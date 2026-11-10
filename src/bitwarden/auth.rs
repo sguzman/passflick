@@ -31,8 +31,8 @@ pub enum AuthError {
     Transport,
     #[error("Vaultwarden authentication service rate limited the request")]
     RateLimited,
-    #[error("Vaultwarden authentication service returned an unexpected response: HTTP {0}")]
-    RemoteService(u16),
+    #[error("Vaultwarden {1} returned unexpected HTTP {0}")]
+    RemoteService(u16, AuthStage),
     #[error("authentication rejected")]
     Rejected,
     #[error("server requires an MFA challenge")]
@@ -45,6 +45,25 @@ pub enum AuthError {
     UnsupportedKdf,
     #[error("could not unlock the returned personal vault key")]
     UnlockFailed,
+}
+
+/// Only fixed route phases are exposed, never the server URL, account or
+/// response body. Makes temporary identity-service failures actionable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthStage {
+    Prelogin,
+    PasswordGrant,
+    RefreshGrant,
+}
+
+impl std::fmt::Display for AuthStage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Prelogin => "prelogin",
+            Self::PasswordGrant => "token grant",
+            Self::RefreshGrant => "token refresh",
+        })
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -216,11 +235,11 @@ fn valid_device_id(id: &str) -> bool {
 /// A rejected password or MFA grant is not the same as a broken, throttled,
 /// redirected or unavailable identity service. Never include its response
 /// body or private endpoint in the resulting error.
-fn auth_status_error(status: reqwest::StatusCode) -> AuthError {
+fn auth_status_error(status: reqwest::StatusCode, stage: AuthStage) -> AuthError {
     match status.as_u16() {
         400 | 401 | 403 => AuthError::Rejected,
         429 => AuthError::RateLimited,
-        other => AuthError::RemoteService(other),
+        other => AuthError::RemoteService(other, stage),
     }
 }
 
@@ -315,7 +334,7 @@ impl ReadOnlySyncTransport {
             .identity_prelogin(endpoint, email)
             .map_err(|_| AuthError::Transport)?;
         if response.status() != reqwest::StatusCode::OK {
-            return Err(auth_status_error(response.status()));
+            return Err(auth_status_error(response.status(), AuthStage::Prelogin));
         }
         let body = read_response(response)?;
         let settings: KdfSettings =
@@ -364,7 +383,7 @@ impl ReadOnlySyncTransport {
                     return Err(AuthError::MfaRequired);
                 }
             }
-            return Err(auth_status_error(status));
+            return Err(auth_status_error(status, AuthStage::PasswordGrant));
         }
         let body = read_response(response)?;
         let mut reply = decode_login(&body)?;
@@ -403,7 +422,10 @@ impl ReadOnlySyncTransport {
             .identity_token_grant(endpoint, None, &grant)
             .map_err(|_| AuthError::Transport)?;
         if response.status() != reqwest::StatusCode::OK {
-            return Err(auth_status_error(response.status()));
+            return Err(auth_status_error(
+                response.status(),
+                AuthStage::RefreshGrant,
+            ));
         }
         let body = read_response(response)?;
         let mut reply = decode_refresh(&body)?;
@@ -419,19 +441,31 @@ mod tests {
     fn identity_service_throttling_and_failures_do_not_implicate_credentials() {
         for code in [400, 401, 403] {
             assert_eq!(
-                auth_status_error(reqwest::StatusCode::from_u16(code).unwrap()),
+                auth_status_error(
+                    reqwest::StatusCode::from_u16(code).unwrap(),
+                    AuthStage::Prelogin
+                ),
                 AuthError::Rejected
             );
         }
         assert_eq!(
-            auth_status_error(reqwest::StatusCode::TOO_MANY_REQUESTS),
+            auth_status_error(
+                reqwest::StatusCode::TOO_MANY_REQUESTS,
+                AuthStage::PasswordGrant
+            ),
             AuthError::RateLimited
         );
         for code in [302, 404, 408, 500, 502, 503, 504] {
-            assert_eq!(
-                auth_status_error(reqwest::StatusCode::from_u16(code).unwrap()),
-                AuthError::RemoteService(code)
-            );
+            for stage in [
+                AuthStage::Prelogin,
+                AuthStage::PasswordGrant,
+                AuthStage::RefreshGrant,
+            ] {
+                assert_eq!(
+                    auth_status_error(reqwest::StatusCode::from_u16(code).unwrap(), stage),
+                    AuthError::RemoteService(code, stage)
+                );
+            }
         }
     }
 
