@@ -684,6 +684,18 @@ fn disposable_server_auth_sync_encrypted_offline() {
             status.success(),
             "native Wayland populated picker acceptance failed"
         );
+        // The new native Ctrl+L acceptance deliberately ends with a manual
+        // denial in the shared disposable Linux session keyring. Verify that
+        // cross-process effect here, then explicitly re-unlock with the
+        // fictional local passphrase before the following Xvfb GUI stages.
+        // Do not weaken a real user's manual lock or touch host keyring state.
+        invoke("status", &[], true, "Offline projection manually locked.");
+        invoke(
+            "unlock",
+            &[("Independent local projection passphrase: ", local)],
+            true,
+            "Offline projection unlocked: 2 login items.",
+        );
 
         // Read and copy actual fictional remote credentials through a real
         // egui process under Xvfb, then lock that process from another CLI.
