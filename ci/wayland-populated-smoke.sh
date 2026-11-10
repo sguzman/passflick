@@ -356,6 +356,13 @@ sleep 3
 projection_cli status >"$root/lock.status"
 grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
 assert_clipboard locked-enter
+# As with native wrong-then-correct recovery, the failed masked Enter can
+# leave nested Weston's keyboard seat unfocused. Reestablish the native input
+# serial and request the locked editor explicitly before testing Escape.
+xdotool mousemove --window "$weston_window" 430 125 click 1
+sleep 0.3
+xdotool key --clearmodifiers ctrl+space
+sleep 0.4
 xdotool key --clearmodifiers Escape
 await_close after-manual-lock
 assert_clipboard after-manual-lock-escape
