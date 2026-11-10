@@ -724,6 +724,97 @@ mod tests {
     }
 
     #[test]
+    fn explicit_update_lock_rejects_competition_without_touching_ciphertext() {
+        let fixture = Fixture::new();
+        let path = fixture.snapshot();
+        let legacy = fixture.0.join("vault.passvault");
+        fs::write(&legacy, b"fictional legacy data").unwrap();
+        publish_candidate(
+            &candidate(100, "fictional-password"),
+            &path,
+            b"fictional independent local passphrase",
+            true,
+        )
+        .unwrap();
+        let before_snapshot = fs::read(&path).unwrap();
+        let before_keywrap = fs::read(fixture.0.join("projection.pfkey")).unwrap();
+        let before_legacy = fs::read(&legacy).unwrap();
+
+        let first = acquire_update_lock(&path).unwrap();
+        let lock_path = fixture.0.join(".passflick.projection-update-lock");
+        let meta = fs::metadata(&lock_path).unwrap();
+        assert_eq!(meta.permissions().mode() & 0o777, 0o600);
+        assert_eq!(meta.nlink(), 1);
+
+        let competing_path = path.clone();
+        let competing = std::thread::spawn(move || {
+            matches!(acquire_update_lock(&competing_path), Err(PreviewError::Busy))
+        });
+        assert!(competing.join().unwrap(), "second update did not fail fast");
+
+        // Contention must neither replace encrypted data nor create/overwrite
+        // a success/failure report for the in-flight first update.
+        assert_eq!(fs::read(&path).unwrap(), before_snapshot);
+        assert_eq!(
+            fs::read(fixture.0.join("projection.pfkey")).unwrap(),
+            before_keywrap
+        );
+        assert_eq!(fs::read(&legacy).unwrap(), before_legacy);
+        assert!(!fixture.0.join("projection.pfrefresh").exists());
+
+        drop(first);
+        let second = acquire_update_lock(&path).unwrap();
+        drop(second);
+        // Keep the lock inode across runs to prevent split-lock races.
+        assert!(lock_path.is_file());
+    }
+
+    #[test]
+    fn update_lock_rejects_symlink_fifo_hardlink_and_wrong_permissions() {
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::symlink;
+
+        let fixture = Fixture::new();
+        let lock = fixture.0.join(".passflick.projection-update-lock");
+        let other = fixture.0.join("other");
+        fs::write(&other, b"fictional independent marker").unwrap();
+        symlink(&other, &lock).unwrap();
+        assert!(matches!(
+            acquire_update_lock(&fixture.snapshot()),
+            Err(PreviewError::Storage)
+        ));
+        assert_eq!(fs::read(&other).unwrap(), b"fictional independent marker");
+        fs::remove_file(&lock).unwrap();
+
+        let fifo = std::ffi::CString::new(lock.as_os_str().as_bytes()).unwrap();
+        // SAFETY: the C pathname is NUL-terminated and the call retains none
+        // of its memory. O_NONBLOCK makes an attacker-supplied FIFO fail fast.
+        assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+        assert!(matches!(
+            acquire_update_lock(&fixture.snapshot()),
+            Err(PreviewError::Storage)
+        ));
+        fs::remove_file(&lock).unwrap();
+
+        fs::hard_link(&other, &lock).unwrap();
+        assert!(matches!(
+            acquire_update_lock(&fixture.snapshot()),
+            Err(PreviewError::Storage)
+        ));
+        assert_eq!(fs::read(&other).unwrap(), b"fictional independent marker");
+        fs::remove_file(&lock).unwrap();
+
+        fs::write(&lock, b"").unwrap();
+        fs::set_permissions(&lock, fs::Permissions::from_mode(0o644)).unwrap();
+        assert!(matches!(
+            acquire_update_lock(&fixture.snapshot()),
+            Err(PreviewError::Storage)
+        ));
+        fs::remove_file(&lock).unwrap();
+        assert!(acquire_update_lock(&fixture.snapshot()).is_ok());
+    }
+
+    #[test]
     fn preview_first_install_refresh_and_wrong_passphrase_preserve_ciphertext() {
         let fixture = Fixture::new();
         let path = fixture.snapshot();
