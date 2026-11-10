@@ -119,7 +119,6 @@ PASSFLICK_PREVIEW_BINARY="$(pwd)/target/debug/passflick" \
 PASSFLICK_DISPOSABLE_URL=https://localhost:18443/ \
 PASSFLICK_DISPOSABLE_CA="$work/certs/root.pem" \
 PASSFLICK_CI_DISPOSABLE_PROXY="$proxy" \
-PASSFLICK_CI_DISPOSABLE_VAULT="$vault" \
 PASSFLICK_CI_DISPOSABLE_TLS_CERT="$work/certs/server.crt" \
 PASSFLICK_CI_DISPOSABLE_TLS_KEY="$work/certs/server.key" \
 PASSFLICK_CI_DISPOSABLE_CADDYFILE="$work/Caddyfile" \
