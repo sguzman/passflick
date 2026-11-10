@@ -40,7 +40,7 @@ pub enum PreviewError {
         "Vaultwarden HTTPS connection or certificate validation failed; local snapshot unchanged"
     )]
     Network,
-    #[error("Vaultwarden temporarily rate limited authentication; retry later; local snapshot unchanged")]
+    #[error("Vaultwarden authentication rate limited; retry later; local snapshot unchanged")]
     RateLimited,
     #[error(
         "Vaultwarden authentication service unavailable; local snapshot unchanged"
