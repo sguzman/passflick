@@ -35,6 +35,7 @@ const PASSWORD: &str = "fictional-passflick-master-2026";
 const DEVICE_ID: &str = "passflick-disposable-acceptance";
 const ACCOUNT_KEY: [u8; 64] = [71; 64];
 const FIXTURE_URL: &str = "https://localhost:18443/";
+const ARGON_FIXTURE_URL: &str = "https://localhost:18444/";
 const LOCAL_PASSPHRASE: &[u8] = b"fictional offline passphrase independent of remote login";
 // A fictional Bitwarden login TOTP seed, NOT the separate account-level MFA
 // secret. The projection is password-only and must never persist this field.
@@ -1243,10 +1244,23 @@ fn disposable_server_auth_sync_encrypted_offline() {
     // prelogin KDF settings and master-password/key-unwrapping path. A
     // wrong password must be rejected without creating an authenticated
     // session. Its login IDs remain isolated from the PBKDF2 test account.
-    register_argon_account(&client, &url);
-    let (mut argon_session, argon_decoder) = transport
+    // Exercise Argon2id and the complete CLI HTTPS fault suite against a
+    // second independently provisioned fictional Vaultwarden container.
+    // This isolates its database/connection state from the preceding native
+    // Wayland, GUI and primary-account MFA acceptance. Both must pass.
+    #[cfg(feature = "vaultwarden-preview")]
+    let argon_url = std::env::var("PASSFLICK_CI_ARGON_URL").unwrap();
+    #[cfg(not(feature = "vaultwarden-preview"))]
+    let argon_url = argon_url.clone();
+    #[cfg(feature = "vaultwarden-preview")]
+    assert_eq!(argon_url, ARGON_FIXTURE_URL, "Argon fixture must be local");
+    let argon_client = fixture_client(&ca_pem);
+    let argon_transport = ReadOnlySyncTransport::with_additional_root_pem(&ca_pem).unwrap();
+    let argon_endpoint = ServerEndpoint::parse(&argon_url).unwrap();
+    register_argon_account(&argon_client, &argon_url);
+    let (mut argon_session, argon_decoder) = argon_transport
         .authenticate(
-            &endpoint,
+            &argon_endpoint,
             ARGON_EMAIL,
             PASSWORD,
             "passflick-argon-correct-device",
@@ -1254,9 +1268,9 @@ fn disposable_server_auth_sync_encrypted_offline() {
         )
         .expect("real disposable Argon2id password-grant or key-unwrapping failed");
     let argon_empty = update::prepare_initial_sync(
-        &transport,
+        &argon_transport,
         &mut argon_session,
-        &endpoint,
+        &argon_endpoint,
         1_800_000_000,
         &argon_decoder,
     )
@@ -1265,16 +1279,16 @@ fn disposable_server_auth_sync_encrypted_offline() {
     let argon_account = argon_empty.account_id().to_owned();
     assert_ne!(argon_account, account, "distinct KDF accounts shared an ID");
     let argon_id = provision_cipher(
-        &client,
-        &url,
+        &argon_client,
+        &argon_url,
         argon_session.bearer_token().unwrap(),
         &argon_account,
         "fictional Argon2id 🗝️ password",
     );
     let argon_populated = update::prepare_initial_sync(
-        &transport,
+        &argon_transport,
         &mut argon_session,
-        &endpoint,
+        &argon_endpoint,
         1_800_000_001,
         &argon_decoder,
     )
@@ -1304,9 +1318,9 @@ fn disposable_server_auth_sync_encrypted_offline() {
         assert_eq!(std::env::var("GITHUB_ACTIONS").as_deref(), Ok("true"));
         let run_id = std::env::var("GITHUB_RUN_ID").unwrap();
         assert!(!run_id.is_empty() && run_id.bytes().all(|b| b.is_ascii_digit()));
-        let proxy = std::env::var("PASSFLICK_CI_DISPOSABLE_PROXY").unwrap();
-        assert_eq!(proxy, format!("passflick-proxy-{run_id}"));
-        let caddy_path = std::env::var("PASSFLICK_CI_DISPOSABLE_CADDYFILE").unwrap();
+        let proxy = std::env::var("PASSFLICK_CI_ARGON_PROXY").unwrap();
+        assert_eq!(proxy, format!("passflick-argon-proxy-{run_id}"));
+        let caddy_path = std::env::var("PASSFLICK_CI_ARGON_CADDYFILE").unwrap();
         assert!(Path::new(&caddy_path).is_file());
 
         let separate = PrivateDirectory::new();
@@ -1322,7 +1336,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
             data,
             &legacy,
             &[
-                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden HTTPS server URL: ", ARGON_FIXTURE_URL),
                 ("Vaultwarden login email: ", ARGON_EMAIL),
                 ("Vaultwarden master password: ", PASSWORD),
                 (
@@ -1397,7 +1411,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
             let _ = connection.shutdown(std::net::Shutdown::Both);
         });
         let modified_caddy = format!(
-            "{{\n    auto_https off\n    admin off\n}}\nhttps://localhost:18443 {{\n    tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key\n    @cut_sync path /api/sync\n    handle @cut_sync {{\n        reverse_proxy http://host.docker.internal:{port} {{\n            flush_interval -1\n        }}\n    }}\n    handle {{\n        reverse_proxy http://passflick-vault:80\n    }}\n}}\n"
+            "{{\n    auto_https off\n    admin off\n}}\nhttps://localhost:18444 {{\n    tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key\n    @cut_sync path /api/sync\n    handle @cut_sync {{\n        reverse_proxy http://host.docker.internal:{port} {{\n            flush_interval -1\n        }}\n    }}\n    handle {{\n        reverse_proxy http://passflick-argon-vault:80\n    }}\n}}\n"
         );
         fs::write(&caddy_path, &modified_caddy).unwrap();
         let restarted = std::process::Command::new("docker")
@@ -1410,8 +1424,8 @@ fn disposable_server_auth_sync_encrypted_offline() {
         );
         let mut ready = false;
         for _ in 0..40 {
-            if client
-                .get(route(&url, "api/config"))
+            if argon_client
+                .get(route(&argon_url, "api/config"))
                 .send()
                 .is_ok_and(|response| response.status().is_success())
             {
@@ -1433,7 +1447,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
             data,
             &legacy,
             &[
-                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden HTTPS server URL: ", ARGON_FIXTURE_URL),
                 ("Vaultwarden login email: ", ARGON_EMAIL),
                 ("Vaultwarden master password: ", PASSWORD),
                 (
@@ -1516,8 +1530,8 @@ fn disposable_server_auth_sync_encrypted_offline() {
         );
         let mut ready = false;
         for _ in 0..40 {
-            if client
-                .get(route(&url, "api/config"))
+            if argon_client
+                .get(route(&argon_url, "api/config"))
                 .send()
                 .is_ok_and(|response| response.status().is_success())
             {
@@ -1532,7 +1546,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
             data,
             &legacy,
             &[
-                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden HTTPS server URL: ", ARGON_FIXTURE_URL),
                 ("Vaultwarden login email: ", ARGON_EMAIL),
                 ("Vaultwarden master password: ", PASSWORD),
                 (
@@ -1565,7 +1579,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
         // disposable Vaultwarden. This is not a bad master password.
         // The CLI must record a fixed Sync/remote-service outcome and
         // preserve every previously authenticated encrypted local file.
-        let unavailable_caddy = "{\n    auto_https off\n    admin off\n}\nhttps://localhost:18443 {\n    tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key\n    @unavailable_grant path /identity/connect/token\n    handle @unavailable_grant {\n        respond \"\" 503\n    }\n    handle {\n        reverse_proxy http://passflick-vault:80\n    }\n}\n";
+        let unavailable_caddy = "{\n    auto_https off\n    admin off\n}\nhttps://localhost:18444 {\n    tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key\n    @unavailable_grant path /identity/connect/token\n    handle @unavailable_grant {\n        respond \"\" 503\n    }\n    handle {\n        reverse_proxy http://passflick-argon-vault:80\n    }\n}\n";
         fs::write(&caddy_path, unavailable_caddy).unwrap();
         let restarted = std::process::Command::new("docker")
             .args(["restart", &proxy])
@@ -1577,8 +1591,8 @@ fn disposable_server_auth_sync_encrypted_offline() {
         );
         let mut ready = false;
         for _ in 0..40 {
-            if client
-                .get(route(&url, "api/config"))
+            if argon_client
+                .get(route(&argon_url, "api/config"))
                 .send()
                 .is_ok_and(|response| response.status().is_success())
             {
@@ -1589,21 +1603,21 @@ fn disposable_server_auth_sync_encrypted_offline() {
         }
         assert!(ready, "disposable proxy did not reload token-grant route");
         assert_eq!(
-            client
-                .post(route(&url, "identity/connect/token"))
+            argon_client
+                .post(route(&argon_url, "identity/connect/token"))
                 .send()
                 .unwrap()
                 .status()
                 .as_u16(),
             503,
-            "the disposable proxy must intercept only the authentication token endpoint"
+            "the disposable proxy must intercept only the authentication token argon_endpoint"
         );
         super::terminal_acceptance::run_cli(
             Path::new(&binary),
             data,
             &legacy,
             &[
-                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden HTTPS server URL: ", ARGON_FIXTURE_URL),
                 ("Vaultwarden login email: ", ARGON_EMAIL),
                 ("Vaultwarden master password: ", PASSWORD),
                 (
@@ -1629,6 +1643,33 @@ fn disposable_server_auth_sync_encrypted_offline() {
         ] {
             assert_eq!(fs::read(actual).unwrap(), *original);
         }
+
+        // Restore only the isolated Argon2id proxy for the final deliberate
+        // incorrect-password assertion. The main PBKDF2 proxy was never
+        // modified by the separate fault-injection cases above.
+        let healthy_argon_caddy = "{\n    auto_https off\n    admin off\n}\nhttps://localhost:18444 {\n    tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key\n    reverse_proxy http://passflick-argon-vault:80\n}\n";
+        fs::write(&caddy_path, healthy_argon_caddy).unwrap();
+        let restarted = std::process::Command::new("docker")
+            .args(["restart", &proxy])
+            .output()
+            .expect("could not restore independent Argon2id HTTPS proxy");
+        assert!(
+            restarted.status.success(),
+            "isolated Argon2id proxy restore failed"
+        );
+        let mut ready = false;
+        for _ in 0..40 {
+            if argon_client
+                .get(route(&argon_url, "api/config"))
+                .send()
+                .is_ok_and(|response| response.status().is_success())
+            {
+                ready = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert!(ready, "restored fictional Argon2id proxy not healthy");
     }
 
     // Keep deliberate rejected logins at the END of disposable acceptance:
@@ -1715,8 +1756,8 @@ fn disposable_server_auth_sync_encrypted_offline() {
     // Final deliberately rejected login; nothing afterward requires another
     // successful password grant, avoiding false failures from rate limiting.
     assert!(matches!(
-        transport.authenticate(
-            &endpoint,
+        argon_transport.authenticate(
+            &argon_endpoint,
             ARGON_EMAIL,
             "fictional wrong Argon2id master password",
             "passflick-argon-wrong-device",
