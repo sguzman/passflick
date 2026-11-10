@@ -29,6 +29,8 @@ pub enum AuthError {
     InvalidSettings,
     #[error("HTTPS authentication request failed")]
     Transport,
+    #[error("Vaultwarden authentication service returned an unexpected response")]
+    RemoteService,
     #[error("authentication rejected")]
     Rejected,
     #[error("server requires an MFA challenge")]
@@ -209,6 +211,16 @@ fn valid_device_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 128 && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
 }
 
+/// A rejected password or MFA grant is not the same as a broken, throttled,
+/// redirected or unavailable identity service. Never include its response
+/// body or private endpoint in the resulting error.
+fn auth_status_error(status: reqwest::StatusCode) -> AuthError {
+    match status.as_u16() {
+        400 | 401 | 403 => AuthError::Rejected,
+        _ => AuthError::RemoteService,
+    }
+}
+
 fn read_response(response: reqwest::blocking::Response) -> Result<Zeroizing<Vec<u8>>, AuthError> {
     if response.content_length().is_some_and(|len| len > MAX_REPLY) {
         return Err(AuthError::InvalidResponse);
@@ -300,7 +312,7 @@ impl ReadOnlySyncTransport {
             .identity_prelogin(endpoint, email)
             .map_err(|_| AuthError::Transport)?;
         if response.status() != reqwest::StatusCode::OK {
-            return Err(AuthError::Rejected);
+            return Err(auth_status_error(response.status()));
         }
         let body = read_response(response)?;
         let settings: KdfSettings =
@@ -348,7 +360,7 @@ impl ReadOnlySyncTransport {
                     return Err(AuthError::MfaRequired);
                 }
             }
-            return Err(AuthError::Rejected);
+            return Err(auth_status_error(response.status()));
         }
         let body = read_response(response)?;
         let mut reply = decode_login(&body)?;
@@ -387,7 +399,7 @@ impl ReadOnlySyncTransport {
             .identity_token_grant(endpoint, None, &grant)
             .map_err(|_| AuthError::Transport)?;
         if response.status() != reqwest::StatusCode::OK {
-            return Err(AuthError::Rejected);
+            return Err(auth_status_error(response.status()));
         }
         let body = read_response(response)?;
         let mut reply = decode_refresh(&body)?;
@@ -398,6 +410,22 @@ impl ReadOnlySyncTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn identity_service_throttling_and_failures_do_not_implicate_credentials() {
+        for code in [400, 401, 403] {
+            assert_eq!(
+                auth_status_error(reqwest::StatusCode::from_u16(code).unwrap()),
+                AuthError::Rejected
+            );
+        }
+        for code in [302, 404, 408, 429, 500, 502, 503, 504] {
+            assert_eq!(
+                auth_status_error(reqwest::StatusCode::from_u16(code).unwrap()),
+                AuthError::RemoteService
+            );
+        }
+    }
 
     #[test]
     fn parsing_rejects_bad_kdf_cost_before_crypto() {
