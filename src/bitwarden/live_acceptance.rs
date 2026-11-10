@@ -35,6 +35,7 @@ const PASSWORD: &str = "fictional-passflick-master-2026";
 const DEVICE_ID: &str = "passflick-disposable-acceptance";
 const ACCOUNT_KEY: [u8; 64] = [71; 64];
 const FIXTURE_URL: &str = "https://localhost:18443/";
+#[cfg(feature = "vaultwarden-preview")]
 const ARGON_FIXTURE_URL: &str = "https://localhost:18444/";
 const LOCAL_PASSPHRASE: &[u8] = b"fictional offline passphrase independent of remote login";
 // A fictional Bitwarden login TOTP seed, NOT the separate account-level MFA
@@ -1251,7 +1252,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
     #[cfg(feature = "vaultwarden-preview")]
     let argon_url = std::env::var("PASSFLICK_CI_ARGON_URL").unwrap();
     #[cfg(not(feature = "vaultwarden-preview"))]
-    let argon_url = argon_url.clone();
+    let argon_url = url.clone();
     #[cfg(feature = "vaultwarden-preview")]
     assert_eq!(argon_url, ARGON_FIXTURE_URL, "Argon fixture must be local");
     let argon_client = fixture_client(&ca_pem);
@@ -1610,7 +1611,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
                 .status()
                 .as_u16(),
             503,
-            "the disposable proxy must intercept only the authentication token argon_endpoint"
+            "the disposable proxy must intercept only the authentication token endpoint"
         );
         super::terminal_acceptance::run_cli(
             Path::new(&binary),
