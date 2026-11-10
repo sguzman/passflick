@@ -1559,6 +1559,76 @@ fn disposable_server_auth_sync_encrypted_offline() {
         ] {
             assert_eq!(fs::read(actual).unwrap(), *original);
         }
+
+        // The fixed test-only Caddy route now throttles *only* the token
+        // grant, while forwarding prelogin and ordinary reads to real
+        // disposable Vaultwarden. This is not a bad master password.
+        // The CLI must record a fixed Sync/remote-service outcome and
+        // preserve every previously authenticated encrypted local file.
+        let unavailable_caddy = "{\n    auto_https off\n    admin off\n}\nhttps://localhost:18443 {\n    tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key\n    @unavailable_grant path /identity/connect/token\n    handle @unavailable_grant {\n        respond \"\" 503\n    }\n    handle {\n        reverse_proxy http://passflick-vault:80\n    }\n}\n";
+        fs::write(&caddy_path, unavailable_caddy).unwrap();
+        let restarted = std::process::Command::new("docker")
+            .args(["restart", &proxy])
+            .output()
+            .expect("could not restart disposable HTTPS proxy for unavailable token grant");
+        assert!(
+            restarted.status.success(),
+            "disposable proxy restart failed"
+        );
+        let mut ready = false;
+        for _ in 0..40 {
+            if client
+                .get(route(&url, "api/config"))
+                .send()
+                .is_ok_and(|response| response.status().is_success())
+            {
+                ready = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert!(ready, "disposable proxy did not reload token-grant route");
+        assert_eq!(
+            client
+                .post(route(&url, "identity/connect/token"))
+                .send()
+                .unwrap()
+                .status()
+                .as_u16(),
+            503,
+            "the disposable proxy must intercept only the authentication token endpoint"
+        );
+        super::terminal_acceptance::run_cli(
+            Path::new(&binary),
+            data,
+            &legacy,
+            &[
+                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden login email: ", ARGON_EMAIL),
+                ("Vaultwarden master password: ", PASSWORD),
+                (
+                    "Custom trusted CA PEM path (empty for system trust): ",
+                    ca_path.as_str(),
+                ),
+            ],
+            false,
+        );
+        assert_eq!(
+            super::refresh_status::read(&snapshot)
+                .unwrap()
+                .unwrap()
+                .outcome,
+            super::refresh_status::Outcome::Sync
+        );
+        for (actual, original) in [
+            (&snapshot, &before[0]),
+            (&keywrap_path, &before[1]),
+            (&identity, &before[2]),
+            (&device, &before[3]),
+            (&legacy, &before[4]),
+        ] {
+            assert_eq!(fs::read(actual).unwrap(), *original);
+        }
     }
 
     // Keep deliberate rejected logins at the END of disposable acceptance:
