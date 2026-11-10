@@ -316,4 +316,49 @@ fi
 assert_clipboard after-recovery-copy
 env -u DISPLAY wl-copy --clear >/dev/null 2>&1 || true
 
-echo 'Native Wayland populated, fresh unlock and wrong-then-correct recovery passed fictional clipboard checks.'
+# A native Wayland *already-unlocked* picker must honor Ctrl+L without
+# replacing the clipboard or closing its window. Confirm the keyring effect
+# from a separate CLI process rather than assuming the shortcut was delivered.
+# The marker and test projection are fictional disposable CI fixtures only.
+printf 'fictional native manual-lock clipboard marker' >"$root/expected"
+env -u DISPLAY wl-copy --sensitive <"$root/expected"
+assert_clipboard before-manual-lock
+launch
+xdotool key --clearmodifiers ctrl+l
+locked=0
+for _ in $(seq 1 120); do
+  if projection_cli status >"$root/lock.status" &&
+      grep -Fxq 'Offline projection manually locked.' "$root/lock.status"; then
+    locked=1
+    break
+  fi
+  [[ -n "$picker_pid" ]] && kill -0 "$picker_pid" || {
+    echo 'Native Wayland picker exited unexpectedly during Ctrl+L lock.' >&2
+    exit 1
+  }
+  sleep 0.1
+done
+[[ "$locked" == 1 ]] || {
+  echo 'Native Wayland Ctrl+L did not establish the manual keyring lock.' >&2
+  exit 1
+}
+assert_clipboard after-manual-lock
+[[ -n "$picker_pid" ]] && kill -0 "$picker_pid" || {
+  echo 'Native Wayland Ctrl+L unexpectedly closed the picker.' >&2
+  exit 1
+}
+
+# Once the locked view has redrawn, an Enter without the local passphrase
+# must not copy any cached credential or bypass the manual-lock marker.
+sleep 0.5
+xdotool key --clearmodifiers Return
+sleep 3
+projection_cli status >"$root/lock.status"
+grep -Fxq 'Offline projection manually locked.' "$root/lock.status"
+assert_clipboard locked-enter
+xdotool key --clearmodifiers Escape
+await_close after-manual-lock
+assert_clipboard after-manual-lock-escape
+env -u DISPLAY wl-copy --clear >/dev/null 2>&1 || true
+
+echo 'Native Wayland populated, local recovery and manual Ctrl+L lock passed fictional clipboard checks.'
