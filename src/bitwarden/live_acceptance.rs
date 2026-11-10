@@ -1460,6 +1460,102 @@ fn disposable_server_auth_sync_encrypted_offline() {
         ] {
             assert_eq!(fs::read(actual).unwrap(), *original);
         }
+
+        // The same isolated HTTPS proxy now returns an explicit 401 from
+        // GET /api/sync, AFTER real Vaultwarden accepts the fictional login.
+        // This must be an Authentication outcome, not a network/sync error,
+        // and must never prompt for the independent local passphrase or
+        // replace the last authenticated encrypted projection.
+        let denied_listener = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
+        let denied_port = denied_listener.local_addr().unwrap().port();
+        denied_listener.set_nonblocking(true).unwrap();
+        let denied_server = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(20);
+            let (mut connection, _) = loop {
+                match denied_listener.accept() {
+                    Ok(value) => break value,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        assert!(
+                            Instant::now() < deadline,
+                            "no rejected sync request arrived"
+                        );
+                        std::thread::sleep(Duration::from_millis(25));
+                    }
+                    Err(_) => panic!("rejected sync listener failed"),
+                }
+            };
+            connection
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut request = [0_u8; 8192];
+            let count = connection.read(&mut request).unwrap();
+            assert!(
+                request[..count].starts_with(b"GET /api/sync "),
+                "rejected sync request was not read-only"
+            );
+            connection
+                .write_all(
+                    b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .unwrap();
+            connection.flush().unwrap();
+        });
+        let denied_caddy = modified_caddy.replace(
+            &format!("host.docker.internal:{port}"),
+            &format!("host.docker.internal:{denied_port}"),
+        );
+        assert_ne!(denied_caddy, modified_caddy);
+        fs::write(&caddy_path, denied_caddy).unwrap();
+        let restarted = std::process::Command::new("docker")
+            .args(["restart", &proxy])
+            .output()
+            .expect("could not restart disposable HTTPS proxy for rejected sync");
+        assert!(restarted.status.success(), "disposable proxy restart failed");
+        let mut ready = false;
+        for _ in 0..40 {
+            if client
+                .get(route(&url, "api/config"))
+                .send()
+                .is_ok_and(|response| response.status().is_success())
+            {
+                ready = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        assert!(ready, "disposable proxy did not reload rejected sync route");
+        super::terminal_acceptance::run_cli(
+            Path::new(&binary),
+            data,
+            &legacy,
+            &[
+                ("Vaultwarden HTTPS server URL: ", FIXTURE_URL),
+                ("Vaultwarden login email: ", ARGON_EMAIL),
+                ("Vaultwarden master password: ", PASSWORD),
+                (
+                    "Custom trusted CA PEM path (empty for system trust): ",
+                    ca_path.as_str(),
+                ),
+            ],
+            false,
+        );
+        denied_server.join().expect("rejected sync fixture failed");
+        assert_eq!(
+            super::refresh_status::read(&snapshot)
+                .unwrap()
+                .unwrap()
+                .outcome,
+            super::refresh_status::Outcome::Authentication
+        );
+        for (actual, original) in [
+            (&snapshot, &before[0]),
+            (&keywrap_path, &before[1]),
+            (&identity, &before[2]),
+            (&device, &before[3]),
+            (&legacy, &before[4]),
+        ] {
+            assert_eq!(fs::read(actual).unwrap(), *original);
+        }
     }
 
     // Keep deliberate rejected logins at the END of disposable acceptance:
