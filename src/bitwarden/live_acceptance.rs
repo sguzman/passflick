@@ -1399,7 +1399,7 @@ fn disposable_server_auth_sync_encrypted_offline() {
         let modified_caddy = format!(
             "{{\n    auto_https off\n    admin off\n}}\nhttps://localhost:18443 {{\n    tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key\n    @cut_sync path /api/sync\n    handle @cut_sync {{\n        reverse_proxy http://host.docker.internal:{port} {{\n            flush_interval -1\n        }}\n    }}\n    handle {{\n        reverse_proxy http://passflick-vault:80\n    }}\n}}\n"
         );
-        fs::write(&caddy_path, modified_caddy).unwrap();
+        fs::write(&caddy_path, &modified_caddy).unwrap();
         let restarted = std::process::Command::new("docker")
             .args(["restart", &proxy])
             .output()
