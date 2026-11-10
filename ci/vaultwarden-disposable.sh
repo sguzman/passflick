@@ -21,6 +21,16 @@ cleanup() {
     db_pool="$(printf '%s\n' "$lines" | grep -c -F 'Failed to get DB connection' || true)"
     printf 'Disposable server failure markers: db-guard=%s token-503=%s db-pool=%s\n' \
       "$db_guard" "$token_503" "$db_pool" >&2
+    # Caddy's JSON access log is kept only inside this disposable Docker
+    # container. Extract fixed-path HTTP 503 COUNTS; never dump any request
+    # line, origin, account, header or body into CI logs.
+    local proxy_lines proxy_503 prelogin_503 grant_503
+    proxy_lines="$(docker logs --tail 1500 "$proxy" 2>&1 || true)"
+    proxy_503="$(printf '%s\n' "$proxy_lines" | grep -c -F '"status":503' || true)"
+    prelogin_503="$(printf '%s\n' "$proxy_lines" | grep -F '"status":503' | grep -c -F '"uri":"/identity/accounts/prelogin"' || true)"
+    grant_503="$(printf '%s\n' "$proxy_lines" | grep -F '"status":503' | grep -c -F '"uri":"/identity/connect/token"' || true)"
+    printf 'Disposable proxy 503 counts: total=%s prelogin=%s token-grant=%s\n' \
+      "$proxy_503" "$prelogin_503" "$grant_503" >&2
   fi
   docker rm -f "$proxy" "$vault" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
@@ -55,6 +65,12 @@ cat > "$work/Caddyfile" <<'EOF'
 }
 https://localhost:18443 {
     tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key
+    # Log only inside the disposable proxy. CI output must contain aggregate
+    # status/route counters, never the full access log or client headers.
+    log {
+        output stdout
+        format json
+    }
     reverse_proxy http://passflick-vault:80
 }
 EOF
