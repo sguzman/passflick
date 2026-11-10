@@ -255,7 +255,11 @@ fn run_arguments(
         .iter()
         .find_map(|prefix| {
             transcript.windows(prefix.len() + 3).find_map(|window| {
-                let digits = window.strip_prefix(prefix)?;
+                let prefix = *prefix;
+                if !window.starts_with(prefix) {
+                    return None;
+                }
+                let digits = &window[prefix.len()..];
                 if digits.iter().all(|digit| digit.is_ascii_digit()) {
                     Some(
                         u16::from(digits[0] - b'0') * 100
