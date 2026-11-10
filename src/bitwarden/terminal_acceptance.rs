@@ -196,6 +196,50 @@ fn run_arguments(
     let exit = child
         .wait()
         .expect("preview process could not be collected");
+    if next != answers.len() {
+        // Diagnostic contains ONLY a fixed, nonsecret CLI error category.
+        // Never dump the PTY transcript: it contains echoed configuration
+        // and potentially fictional or real-looking credential input.
+        let categories = [
+            ("Vaultwarden authentication or MFA failed", "authentication"),
+            (
+                "Vaultwarden authentication service unavailable or throttled",
+                "identity-service",
+            ),
+            (
+                "Vaultwarden HTTPS connection or certificate validation failed",
+                "network",
+            ),
+            (
+                "complete authenticated Vaultwarden sync failed",
+                "sync",
+            ),
+            (
+                "local encrypted projection authentication or update failed",
+                "local",
+            ),
+            (
+                "local projection directory or certificate is inaccessible",
+                "storage",
+            ),
+            ("trusted HTTPS transport could not be initialized", "transport"),
+            ("server differs from the existing offline projection", "server-mismatch"),
+            ("unsupported or invalid HTTPS endpoint", "endpoint"),
+        ];
+        let outcome = categories
+            .iter()
+            .find(|(message, _)| {
+                transcript
+                    .windows(message.len())
+                    .any(|bytes| bytes == message.as_bytes())
+            })
+            .map_or("unclassified", |(_, outcome)| *outcome);
+        eprintln!(
+            "Synthetic CLI stopped before prompt {next}/{}; fixed error category: {outcome}; exited successfully: {}",
+            answers.len(),
+            exit.success()
+        );
+    }
     assert_eq!(
         next,
         answers.len(),
