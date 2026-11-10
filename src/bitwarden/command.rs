@@ -503,7 +503,7 @@ fn run_explicit(path: &Path) -> Result<(), PreviewError> {
 
     // Keep the device identifier outside the historical encrypted vault.
     // Validate the local destination before any login request is transmitted.
-    let identifier = device_id(&path)?;
+    let identifier = device_id(path)?;
     let (mut session, decoder) =
         match transport.authenticate(&endpoint, &email, &master, &identifier, None) {
             Ok(result) => result,
@@ -539,13 +539,13 @@ fn run_explicit(path: &Path) -> Result<(), PreviewError> {
         update::prepare_initial_sync(&transport, &mut session, &endpoint, timestamp, &decoder)
             .map_err(sync_failure)?;
     // Do not touch the historical PASSFLICK_VAULT override or original file.
-    let first_install = !snapshot_exists(&path)?;
+    let first_install = !snapshot_exists(path)?;
     let local = if first_install {
         prompt_new_projection_passphrase(masked)?
     } else {
         masked("Local projection passphrase: ")?
     };
-    let count = publish_candidate(&candidate, &path, local.as_bytes(), first_install)?;
+    let count = publish_candidate(&candidate, path, local.as_bytes(), first_install)?;
     println!("Encrypted offline projection updated ({count} login items).");
     println!("Normal picker remains on the historical vault in this preview.");
     Ok(())
