@@ -31,8 +31,8 @@ pub enum AuthError {
     Transport,
     #[error("Vaultwarden authentication service rate limited the request")]
     RateLimited,
-    #[error("Vaultwarden authentication service returned an unexpected response")]
-    RemoteService,
+    #[error("Vaultwarden authentication service returned an unexpected response: HTTP {0}")]
+    RemoteService(u16),
     #[error("authentication rejected")]
     Rejected,
     #[error("server requires an MFA challenge")]
@@ -220,7 +220,7 @@ fn auth_status_error(status: reqwest::StatusCode) -> AuthError {
     match status.as_u16() {
         400 | 401 | 403 => AuthError::Rejected,
         429 => AuthError::RateLimited,
-        _ => AuthError::RemoteService,
+        other => AuthError::RemoteService(other),
     }
 }
 
@@ -430,7 +430,7 @@ mod tests {
         for code in [302, 404, 408, 500, 502, 503, 504] {
             assert_eq!(
                 auth_status_error(reqwest::StatusCode::from_u16(code).unwrap()),
-                AuthError::RemoteService
+                AuthError::RemoteService(code)
             );
         }
     }
