@@ -7,6 +7,8 @@ work="$(mktemp -d)"
 network="passflick-ci-$GITHUB_RUN_ID"
 vault="passflick-vault-$GITHUB_RUN_ID"
 proxy="passflick-proxy-$GITHUB_RUN_ID"
+argon_vault="passflick-argon-vault-$GITHUB_RUN_ID"
+argon_proxy="passflick-argon-proxy-$GITHUB_RUN_ID"
 cleanup() {
   local exit_status=$?
   if (( exit_status != 0 )); then
@@ -24,7 +26,7 @@ cleanup() {
     printf 'Disposable server failure markers: db-guard=%s token-503=%s db-pool=%s db-timeout=%s\n' \
       "$db_guard" "$token_503" "$db_pool" "$db_timeout" >&2
   fi
-  docker rm -f "$proxy" "$vault" >/dev/null 2>&1 || true
+  docker rm -f "$argon_proxy" "$argon_vault" "$proxy" "$vault" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   rm -rf "$work"
 }
@@ -61,6 +63,20 @@ https://localhost:18443 {
 }
 EOF
 
+# Separate fictional Argon2id account/server: no MFA/login load, keyring,
+# SQLite state, or mutated Caddy route from the main acceptance fixture.
+# The same private CA covers localhost on both distinct HTTPS ports.
+cat > "$work/ArgonCaddyfile" <<'EOF'
+{
+    auto_https off
+    admin off
+}
+https://localhost:18444 {
+    tls /etc/caddy/certs/server.crt /etc/caddy/certs/server.key
+    reverse_proxy http://passflick-argon-vault:80
+}
+EOF
+
 docker network create "$network" >/dev/null
 # This is exclusively a throwaway CI server: rate limiting is not the
 # subject of this acceptance suite, and earlier login/MFA cases must not
@@ -79,6 +95,25 @@ docker run -d --name "$proxy" --network "$network" \
   --add-host host.docker.internal:host-gateway \
   --publish 127.0.0.1:18443:18443 \
   --mount "type=bind,source=$work/Caddyfile,target=/etc/caddy/Caddyfile,readonly" \
+  --mount "type=bind,source=$work/certs,target=/etc/caddy/certs,readonly" \
+  caddy:2.10.2-alpine >/dev/null
+
+# Independent disposable backend and proxy for the second-account CLI
+# fault-injection suite. The first-account GUI/MFA backend stays untouched.
+docker run -d --name "$argon_vault" --network "$network" \
+  --network-alias passflick-argon-vault \
+  -e DOMAIN=https://localhost:18444 \
+  -e SIGNUPS_ALLOWED=true \
+  -e SIGNUPS_VERIFY=false \
+  -e LOGIN_RATELIMIT_SECONDS=1 \
+  -e LOGIN_RATELIMIT_MAX_BURST=128 \
+  -e I_REALLY_WANT_VOLATILE_STORAGE=true \
+  -e ROCKET_PORT=80 \
+  vaultwarden/server:1.37.5 >/dev/null
+docker run -d --name "$argon_proxy" --network "$network" \
+  --add-host host.docker.internal:host-gateway \
+  --publish 127.0.0.1:18444:18444 \
+  --mount "type=bind,source=$work/ArgonCaddyfile,target=/etc/caddy/Caddyfile,readonly" \
   --mount "type=bind,source=$work/certs,target=/etc/caddy/certs,readonly" \
   caddy:2.10.2-alpine >/dev/null
 
@@ -112,6 +147,28 @@ if [[ "$ready" != 1 ]]; then
   exit 1
 fi
 
+argon_ready=0
+for _ in $(seq 1 45); do
+  if ! docker inspect "$argon_vault" --format '{{.State.Running}}' 2>/dev/null | grep -qx true; then
+    echo 'Isolated Argon2id Vaultwarden container exited unexpectedly' >&2
+    exit 1
+  fi
+  if ! docker inspect "$argon_proxy" --format '{{.State.Running}}' 2>/dev/null | grep -qx true; then
+    echo 'Isolated Argon2id HTTPS proxy exited unexpectedly' >&2
+    exit 1
+  fi
+  if curl -fsS --max-time 2 --cacert "$work/certs/root.pem" \
+      https://localhost:18444/api/config >/dev/null 2>&1; then
+    argon_ready=1
+    break
+  fi
+  sleep 2
+done
+if [[ "$argon_ready" != 1 ]]; then
+  echo 'Independent fictional Argon2id HTTPS server did not become healthy' >&2
+  exit 1
+fi
+
 cargo build --locked --features vaultwarden-preview
 # A real virtual X display is used solely for fictional populated-picker
 # tests. No desktop session or user clipboard is mounted into the runner.
@@ -119,6 +176,9 @@ PASSFLICK_PREVIEW_BINARY="$(pwd)/target/debug/passflick" \
 PASSFLICK_DISPOSABLE_URL=https://localhost:18443/ \
 PASSFLICK_DISPOSABLE_CA="$work/certs/root.pem" \
 PASSFLICK_CI_DISPOSABLE_PROXY="$proxy" \
+PASSFLICK_CI_ARGON_URL=https://localhost:18444/ \
+PASSFLICK_CI_ARGON_PROXY="$argon_proxy" \
+PASSFLICK_CI_ARGON_CADDYFILE="$work/ArgonCaddyfile" \
 PASSFLICK_CI_DISPOSABLE_TLS_CERT="$work/certs/server.crt" \
 PASSFLICK_CI_DISPOSABLE_TLS_KEY="$work/certs/server.key" \
 PASSFLICK_CI_DISPOSABLE_CADDYFILE="$work/Caddyfile" \
