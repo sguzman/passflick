@@ -61,7 +61,7 @@ impl PreviewError {
             Self::Transport
             | Self::Network
             | Self::RateLimited
-            | Self::RemoteService
+            | Self::RemoteService(_)
             | Self::RemoteSync => Outcome::Sync,
             Self::Storage | Self::Local => Outcome::Local,
         }
@@ -574,7 +574,10 @@ mod tests {
         );
         assert_eq!(PreviewError::Network.refresh_outcome(), Outcome::Sync);
         assert_eq!(PreviewError::RateLimited.refresh_outcome(), Outcome::Sync);
-        assert_eq!(PreviewError::RemoteService(503).refresh_outcome(), Outcome::Sync);
+        assert_eq!(
+            PreviewError::RemoteService(503).refresh_outcome(),
+            Outcome::Sync
+        );
         assert_eq!(PreviewError::Transport.refresh_outcome(), Outcome::Sync);
         assert_eq!(auth_failure(AuthError::Transport), PreviewError::Network);
         assert_eq!(
