@@ -8,6 +8,20 @@ network="passflick-ci-$GITHUB_RUN_ID"
 vault="passflick-vault-$GITHUB_RUN_ID"
 proxy="passflick-proxy-$GITHUB_RUN_ID"
 cleanup() {
+  local exit_status=$?
+  if (( exit_status != 0 )); then
+    # Summarize ONLY known fixed error markers from the disposable Docker
+    # fixture; never print logs, URLs, email addresses, JWTs or credentials.
+    # This distinguishes an upstream database-guard 503 from a Passflick
+    # protocol rejection without exposing the test server's raw log lines.
+    local lines db_guard token_503 db_pool
+    lines="$(docker logs --tail 400 "$vault" 2>&1 || true)"
+    db_guard="$(printf '%s\n' "$lines" | grep -c -F 'Request guard `DbConn` failed' || true)"
+    token_503="$(printf '%s\n' "$lines" | grep -c -F 'POST /identity/connect/token => 503' || true)"
+    db_pool="$(printf '%s\n' "$lines" | grep -c -F 'Failed to get DB connection' || true)"
+    printf 'Disposable server failure markers: db-guard=%s token-503=%s db-pool=%s\n' \
+      "$db_guard" "$token_503" "$db_pool" >&2
+  fi
   docker rm -f "$proxy" "$vault" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   rm -rf "$work"
