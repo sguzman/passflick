@@ -34,6 +34,20 @@ pub(super) fn run_cli(
     );
 }
 
+/// The parent disposable test holds the actual private update-lock inode.
+/// This second real CLI must report Busy before even its first visible prompt.
+pub(super) fn assert_update_lock_busy(binary: &Path, data_dir: &Path, legacy: &Path) {
+    run_arguments(
+        binary,
+        data_dir,
+        legacy,
+        &["update"],
+        &[],
+        false,
+        Some("another Passflick projection update is in progress; snapshot unchanged"),
+    );
+}
+
 /// Exercise a *new* process per offline action, with the same synthetic
 /// data directory and inherited kernel session keyring as its parent.
 /// No credential or protected identity is supplied through argv.
@@ -293,6 +307,22 @@ fn run_arguments(
                 .any(|part| part == expected.as_bytes()),
             "projection CLI did not report expected safe status"
         );
+        if expected == "another Passflick projection update is in progress; snapshot unchanged" {
+            for forbidden in [
+                "Vaultwarden HTTPS server URL: ",
+                "Vaultwarden login email: ",
+                "Vaultwarden master password: ",
+                "Custom trusted CA PEM path (empty for system trust): ",
+                "Local projection passphrase: ",
+            ] {
+                assert!(
+                    !transcript
+                        .windows(forbidden.len())
+                        .any(|part| part == forbidden.as_bytes()),
+                    "competing CLI requested user input before refusing the lock"
+                );
+            }
+        }
     }
     // Synthetic configuration is expected to echo. Secrets must not.
     // Never include the captured terminal transcript in test logs.
