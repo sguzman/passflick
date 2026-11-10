@@ -204,7 +204,7 @@ fn run_arguments(
             ("Vaultwarden authentication or MFA failed", "authentication"),
             ("Vaultwarden authentication rate limited", "rate-limit"),
             (
-                "Vaultwarden authentication service unavailable",
+                "Vaultwarden authentication service returned HTTP ",
                 "identity-service",
             ),
             (
@@ -243,6 +243,27 @@ fn run_arguments(
             answers.len(),
             exit.success()
         );
+        // Keep only the three-digit HTTP status, never any transcript text.
+        // The prefix is a fixed CLI message, not arbitrary upstream content.
+        let prefix = b"Vaultwarden authentication service returned HTTP ";
+        let http_status = transcript
+            .windows(prefix.len() + 3)
+            .find_map(|window| {
+                let digits = window.strip_prefix(prefix)?;
+                if digits.iter().all(|digit| digit.is_ascii_digit()) {
+                    Some(
+                        u16::from(digits[0] - b'0') * 100
+                            + u16::from(digits[1] - b'0') * 10
+                            + u16::from(digits[2] - b'0'),
+                    )
+                } else {
+                    None
+                }
+            })
+            .filter(|status| (100..=599).contains(status));
+        if let Some(status) = http_status {
+            eprintln!("Synthetic CLI upstream response status: HTTP {status}");
+        }
     }
     assert_eq!(
         next,
