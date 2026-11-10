@@ -1510,7 +1510,10 @@ fn disposable_server_auth_sync_encrypted_offline() {
             .args(["restart", &proxy])
             .output()
             .expect("could not restart disposable HTTPS proxy for rejected sync");
-        assert!(restarted.status.success(), "disposable proxy restart failed");
+        assert!(
+            restarted.status.success(),
+            "disposable proxy restart failed"
+        );
         let mut ready = false;
         for _ in 0..40 {
             if client
